@@ -1,0 +1,7 @@
+if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
+    include("${CMAKE_CURRENT_LIST_DIR}/toolchain_machine_arm_cm7.cmake")
+elseif(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
+    include("${CMAKE_CURRENT_LIST_DIR}/toolchain_machine_arm_cm4f.cmake")
+else()
+    include("${CMAKE_CURRENT_LIST_DIR}/toolchain_machine_x86.cmake")
+endif()

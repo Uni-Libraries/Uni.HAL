@@ -1,0 +1,6 @@
+.idea/*
+~build/
+~temp/
+cmake-build-*/
+
+*.i
