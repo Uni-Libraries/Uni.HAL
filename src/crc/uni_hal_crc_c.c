@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 // uni_hal
-#include "crc/uni_hal_hal_crc.h"
+#include "crc/uni_hal_crc.h"
 
 
 

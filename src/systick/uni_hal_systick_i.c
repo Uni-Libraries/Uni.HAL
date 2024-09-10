@@ -1,10 +1,11 @@
+#if !defined(UNI_HAL_TARGET_MCU_PC)
+
 //
 // Includes
 //
 
 // uni_hal
 #include "systick/uni_hal_systick.h"
-
 
 
 //
@@ -23,7 +24,6 @@ extern volatile uint32_t g_uni_hal_systick_counter;
 // Handlers
 //
 
-
 __attribute__((unused)) void SysTick_Handler(void) {
     g_uni_hal_systick_counter++;
 
@@ -31,3 +31,5 @@ __attribute__((unused)) void SysTick_Handler(void) {
         xPortSysTickHandler();
     }
 }
+
+#endif
