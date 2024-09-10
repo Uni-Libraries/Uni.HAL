@@ -153,7 +153,7 @@ uint32_t uni_hal_crc_get_value(const uni_hal_crc_context_t *ctx) {
             case UNI_HAL_CRC_POLYSIZE_16B:
                 result = LL_CRC_ReadData16(CRC);
                 break;
-            case UNI_HALфдшу_CRC_POLYSIZE_32B:
+            case UNI_HAL_CRC_POLYSIZE_32B:
                 result = LL_CRC_ReadData32(CRC);
                 break;
             default:
