@@ -63,6 +63,28 @@ function Get-DFP-STM32H7(){
 
 }
 
+function Get-USB-STM-Device() {
+    Remove-Item -Path "./st_usb_device/include_core" -Recurse -ErrorAction SilentlyContinue
+    Remove-Item -Path "./st_usb_device/include_cdc"  -Recurse -ErrorAction SilentlyContinue
+    Remove-Item -Path "./st_usb_device/src_core"     -Recurse -ErrorAction SilentlyContinue
+    Remove-Item -Path "./st_usb_device/src_cdc"      -Recurse -ErrorAction SilentlyContinue
+
+    Remove-Item -Path "./st_usb_device/License.md"  -ErrorAction SilentlyContinue
+
+    Invoke-WebRequest -Uri "https://github.com/STMicroelectronics/stm32_mw_usb_device/archive/refs/heads/master.zip" -OutFile "./~temp/stm32_mw_usb_device.zip"
+
+    Expand-Archive -Path "./~temp/stm32_mw_usb_device.zip" -DestinationPath "./~temp/"
+
+    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Core/Inc/"      -Destination "./st_usb_device/include_core/" -Recurse
+    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Core/Src/"      -Destination "./st_usb_device/src_core/"     -Recurse
+
+    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Class/CDC/Inc/" -Destination "./st_usb_device/include_cdc/"  -Recurse
+    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Class/CDC/Src/" -Destination "./st_usb_device/src_cdc/"      -Recurse
+
+
+    Copy-Item   -Path "./~temp/stm32_mw_usb_device-master/LICENSE.md" -Destination "./st_usb_device"
+}
+
 
 function Get-FreeRTOS-Kernel(){
     Invoke-WebRequest -Uri "https://codeload.github.com/FreeRTOS/FreeRTOS-Kernel/zip/refs/heads/main"      -OutFile "./~temp/freertos_kernel.zip"
@@ -167,6 +189,7 @@ New-Item -ItemType Directory -Path "./~temp/" -ErrorAction SilentlyContinue
 Get-CMSIS-Core
 Get-DFP-STM32L4
 Get-DFP-STM32H7
+Get-USB-STM-Device
 Get-FreeRTOS-Kernel
 Get-FreeRTOS-TCP
 Get-FreeRTOS-FAT

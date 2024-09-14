@@ -71,6 +71,7 @@ add_subdirectory(3rdparty/freertos_tcp)
 
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     add_subdirectory(3rdparty/st_stm32h7)
+    add_subdirectory(3rdparty/st_usb_device)
     set(UNI_HAL_DFP_LIBRARY st_stm32h7)
     set(UNI_HAL_DFP_SUFFIX  "*_cm.c" "*_cm7.c" "*_stm32.c" "*_stm32h7.c")
 elseif(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
