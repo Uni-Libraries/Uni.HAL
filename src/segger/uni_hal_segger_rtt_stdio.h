@@ -13,7 +13,8 @@ extern "C" {
 
 // uni_hal
 #include "uni_common.h"
-
+#include "io/uni_hal_io.h"
+#include "tim/uni_hal_tim.h"
 
 
 
