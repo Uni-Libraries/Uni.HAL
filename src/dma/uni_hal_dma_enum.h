@@ -8,6 +8,7 @@
  * DMA channel
  */
 typedef enum {
+    UNI_HAL_DMA_CHANNEL_0 = 0,
     UNI_HAL_DMA_CHANNEL_1 = 1,
     UNI_HAL_DMA_CHANNEL_2 = 2,
     UNI_HAL_DMA_CHANNEL_3 = 3,
