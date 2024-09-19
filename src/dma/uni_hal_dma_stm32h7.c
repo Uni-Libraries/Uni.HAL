@@ -171,6 +171,9 @@ uint32_t _uni_hal_dma_get_interrupt(uni_hal_core_periph_e module, uni_hal_dma_ch
     switch (module) {
         case UNI_HAL_CORE_PERIPH_DMA_1:
             switch (channel) {
+                case UNI_HAL_DMA_CHANNEL_0:
+                    result = DMA1_Stream0_IRQn;
+                break;
                 case UNI_HAL_DMA_CHANNEL_1:
                     result = DMA1_Stream1_IRQn;
                     break;
@@ -198,6 +201,9 @@ uint32_t _uni_hal_dma_get_interrupt(uni_hal_core_periph_e module, uni_hal_dma_ch
             break;
         case UNI_HAL_CORE_PERIPH_DMA_2:
             switch (channel) {
+                case UNI_HAL_DMA_CHANNEL_0:
+                    result = DMA2_Stream0_IRQn;
+                break;
                 case UNI_HAL_DMA_CHANNEL_1:
                     result = DMA2_Stream1_IRQn;
                     break;
