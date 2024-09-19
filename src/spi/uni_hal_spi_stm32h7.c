@@ -75,6 +75,75 @@ void SPI6_IRQHandler() {
 // Private
 //
 
+static void _uni_hal_spi_gpio_set_alternate(uni_hal_core_periph_e spi, uni_hal_gpio_pin_context_t *gpio) {
+    uni_hal_gpio_alternate_e result = UNI_HAL_GPIO_ALTERNATE_0;
+
+    if (spi == UNI_HAL_CORE_PERIPH_SPI_3) {
+        if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_A) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_4:
+                case UNI_HAL_GPIO_PIN_15:
+                    result = UNI_HAL_GPIO_ALTERNATE_6;
+                    break;
+                default:
+                    break;
+            }
+        } else if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_B) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_3:
+                case UNI_HAL_GPIO_PIN_4:
+                    result = UNI_HAL_GPIO_ALTERNATE_6;
+                    break;
+                case UNI_HAL_GPIO_PIN_2:
+                case UNI_HAL_GPIO_PIN_5:
+                    result = UNI_HAL_GPIO_ALTERNATE_7;
+                    break;
+                default:
+                    break;
+            }
+        } else if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_C) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_10:
+                case UNI_HAL_GPIO_PIN_11:
+                case UNI_HAL_GPIO_PIN_12:
+                    result = UNI_HAL_GPIO_ALTERNATE_6;
+                    break;
+                default:
+                    break;
+            }
+        } else if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_D) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_6:
+                    result = UNI_HAL_GPIO_ALTERNATE_5;
+                    break;
+                default:
+                    break;
+            }
+        }
+    } else if (spi == UNI_HAL_CORE_PERIPH_SPI_4) {
+        if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_E) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_2:
+                case UNI_HAL_GPIO_PIN_4:
+                case UNI_HAL_GPIO_PIN_5:
+                case UNI_HAL_GPIO_PIN_6:
+                case UNI_HAL_GPIO_PIN_11:
+                case UNI_HAL_GPIO_PIN_12:
+                case UNI_HAL_GPIO_PIN_13:
+                case UNI_HAL_GPIO_PIN_14:
+                    result = UNI_HAL_GPIO_ALTERNATE_5;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    if (result != UNI_HAL_GPIO_ALTERNATE_0) {
+        gpio->alternate = result;
+    }
+}
+
 static uint32_t _uni_hal_spi_dma_request_rx_get(uni_hal_core_periph_e instance) {
     size_t result = SIZE_MAX;
     switch (instance) {
@@ -299,30 +368,30 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
 
             // gpio
             if (ctx->config.pin_sck != nullptr) {
-                ctx->config.pin_sck->alternate = UNI_HAL_GPIO_ALTERNATE_5;
                 ctx->config.pin_sck->gpio_pull = UNI_HAL_GPIO_PULL_NO;
                 ctx->config.pin_sck->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
+                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_sck);
                 result = uni_hal_gpio_pin_init(ctx->config.pin_sck) && result;
             }
             if (ctx->config.pin_miso != nullptr) {
-                ctx->config.pin_miso->alternate = UNI_HAL_GPIO_ALTERNATE_5;
                 ctx->config.pin_miso->gpio_pull = UNI_HAL_GPIO_PULL_NO;
                 ctx->config.pin_miso->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
+                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_miso);
                 result = uni_hal_gpio_pin_init(ctx->config.pin_miso) && result;
             }
             if (ctx->config.pin_mosi != nullptr) {
-                ctx->config.pin_mosi->alternate = UNI_HAL_GPIO_ALTERNATE_5;
                 ctx->config.pin_mosi->gpio_pull = UNI_HAL_GPIO_PULL_NO;
                 ctx->config.pin_mosi->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
+                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_mosi);
                 result = uni_hal_gpio_pin_init(ctx->config.pin_mosi) && result;
             }
             if (ctx->config.pin_nss != nullptr) {
-                ctx->config.pin_nss->alternate = UNI_HAL_GPIO_ALTERNATE_5;
                 ctx->config.pin_nss->gpio_pull = UNI_HAL_GPIO_PULL_NO;
                 ctx->config.pin_nss->gpio_init = true;
                 ctx->config.pin_nss->gpio_type = ctx->config.nss_hard
                                                      ? UNI_HAL_GPIO_TYPE_ALTERNATE_PP
                                                      : UNI_HAL_GPIO_TYPE_OUT_PP;
+                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_nss);
                 result = uni_hal_gpio_pin_init(ctx->config.pin_nss) && result;
             }
 
@@ -406,8 +475,10 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
             SPI_InitStruct.ClockPolarity = _uni_hal_spi_polarity(ctx->config.polarity);
             SPI_InitStruct.ClockPhase = _uni_hal_spi_phase(ctx->config.phase);
             SPI_InitStruct.NSS = LL_SPI_NSS_SOFT;
-            if(ctx->config.nss_hard && ctx->config.pin_nss) {
-                SPI_InitStruct.NSS = ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE  ? LL_SPI_NSS_HARD_INPUT : LL_SPI_NSS_HARD_OUTPUT;
+            if (ctx->config.nss_hard && ctx->config.pin_nss) {
+                SPI_InitStruct.NSS = ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE
+                                         ? LL_SPI_NSS_HARD_INPUT
+                                         : LL_SPI_NSS_HARD_OUTPUT;
             }
             SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV2;
             SPI_InitStruct.BitOrder = LL_SPI_MSB_FIRST;
@@ -451,7 +522,6 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 }
 
 
-
 bool uni_hal_spi_receive_async(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len) {
     bool result = false;
     if (uni_hal_spi_is_inited(ctx) && data && len > 0U) {
@@ -485,7 +555,8 @@ bool uni_hal_spi_receive_async(uni_hal_spi_context_t *ctx, const uint8_t *data, 
 }
 
 
-bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx, uint32_t len) {
+bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx,
+                                  uint32_t len) {
     bool result = false;
     if (uni_hal_spi_is_inited(ctx) && len > 0U && (data_rx || data_tx)) {
         ctx->status.in_process = true;
@@ -496,19 +567,19 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
 
         // set DMA source and destination
-        if(data_rx != NULL) {
+        if (data_rx != NULL) {
             DMA_TypeDef *dma_rx_module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_rx->config.instance);
             uint32_t dma_rx_stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_rx->config.channel);
 
-            LL_DMA_ConfigAddresses(dma_rx_module, dma_rx_stream, LL_SPI_DMA_GetRxRegAddr(instance), (uint32_t)data_rx,
-                                      LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+            LL_DMA_ConfigAddresses(dma_rx_module, dma_rx_stream, LL_SPI_DMA_GetRxRegAddr(instance), (uint32_t) data_rx,
+                                   LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
             LL_DMA_SetDataLength(dma_rx_module, dma_rx_stream, len);
             LL_DMA_EnableStream(dma_rx_module, dma_rx_stream);
 
             LL_SPI_EnableDMAReq_RX(instance);
         }
 
-        if(data_tx != NULL) {
+        if (data_tx != NULL) {
             DMA_TypeDef *dma_tx_module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_tx->config.instance);
             uint32_t dma_tx_stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_tx->config.channel);
 
@@ -524,7 +595,7 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         LL_SPI_SetTransferSize(instance, len);
         LL_SPI_EnableIT_EOT(instance);
         LL_SPI_Enable(instance);
-        if(ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
+        if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
             LL_SPI_StartMasterTransfer(instance);
         }
 
