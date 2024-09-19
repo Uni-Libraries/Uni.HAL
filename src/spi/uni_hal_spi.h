@@ -33,6 +33,13 @@ typedef enum {
     UNI_HAL_SPI_PRESCALER_256,
 } uni_hal_spi_prescaler_e;
 
+/**
+ * SPI mode
+ */
+typedef enum {
+    UNI_HAL_SPI_MODE_MASTER,
+    UNI_HAL_SPI_MODE_SLAVE,
+} uni_hal_spi_mode_e;
 
 /**
  * SPI polarity
@@ -58,6 +65,11 @@ typedef struct {
      * SPI instance
      */
     uni_hal_core_periph_e instance;
+
+    /**
+     * SPI mode
+     */
+    uni_hal_spi_mode_e mode;
 
     /**
      * SPI clock source
@@ -197,7 +209,8 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len);
 
 
-bool uni_hal_spi_transmit_async(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len);
+bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx, uint32_t len);
+
 
 
 /**
