@@ -187,7 +187,7 @@ bool uni_hal_spi_is_inited(const uni_hal_spi_context_t* ctx);
 bool uni_hal_spi_is_busy(const uni_hal_spi_context_t* ctx);
 
 
-bool uni_hal_spi_set_prescaler(const uni_hal_spi_context_t* ctx, uni_hal_spi_prescaler_e  prescaler);
+bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t* ctx, uni_hal_spi_prescaler_e  prescaler);
 
 /**
  * Receive data from SPI bus

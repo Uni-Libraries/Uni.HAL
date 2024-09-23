@@ -490,30 +490,32 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
 
     SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
     if (instance != nullptr) {
-        LL_SPI_SetTransferDirection(instance, UNI_HAL_SPI_MODE_SLAVE ? LL_SPI_SIMPLEX_RX : LL_SPI_FULL_DUPLEX);
-        LL_SPI_SetMode(instance, ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE ? LL_SPI_MODE_SLAVE : LL_SPI_MODE_MASTER);
-        LL_SPI_SetDataWidth(instance, LL_SPI_DATAWIDTH_8BIT);
-        LL_SPI_SetClockPolarity(instance, _uni_hal_spi_polarity(ctx->config.polarity));
-        LL_SPI_SetClockPhase(instance, _uni_hal_spi_phase(ctx->config.phase));
-        LL_SPI_SetBaudRatePrescaler(instance, LL_SPI_BAUDRATEPRESCALER_DIV2);
-        LL_SPI_SetTransferBitOrder(instance,LL_SPI_MSB_FIRST);
-        LL_SPI_DisableCRC(instance);
-        LL_SPI_SetFIFOThreshold(instance, LL_SPI_FIFO_TH_01DATA);
-        LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
-        LL_SPI_SetNSSPolarity(instance, LL_SPI_NSS_POLARITY_LOW);
-
-        uint32_t nss = LL_SPI_NSS_SOFT;
+        LL_SPI_InitTypeDef init_struct;
+        LL_SPI_StructInit(&init_struct);
+        init_struct.TransferDirection = UNI_HAL_SPI_MODE_SLAVE ? LL_SPI_SIMPLEX_RX : LL_SPI_FULL_DUPLEX;
+        init_struct.Mode =  (ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE) ? LL_SPI_MODE_SLAVE : LL_SPI_MODE_MASTER;
+        init_struct.DataWidth =LL_SPI_DATAWIDTH_8BIT;
+        init_struct.ClockPolarity =  _uni_hal_spi_polarity(ctx->config.polarity);
+        init_struct.ClockPhase =  _uni_hal_spi_phase(ctx->config.phase);
+        init_struct.NSS = LL_SPI_NSS_SOFT;
         if (ctx->config.nss_hard && ctx->config.pin_nss) {
             if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
-                nss = LL_SPI_NSS_HARD_OUTPUT;
-                LL_SPI_EnableNSSPulseMgt(instance);
+                init_struct.NSS = LL_SPI_NSS_HARD_OUTPUT;
             } else {
-                nss = LL_SPI_NSS_HARD_INPUT;
-                LL_SPI_DisableNSSPulseMgt(instance);
+                init_struct.NSS = LL_SPI_NSS_HARD_INPUT;
             }
         }
-        LL_SPI_SetNSSMode(instance, nss);
-        result = true;
+        init_struct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV2;
+        init_struct.BitOrder = LL_SPI_MSB_FIRST;
+        init_struct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
+        init_struct.CRCPoly = 0;
+
+        result = LL_SPI_Init(instance, &init_struct);
+        if(result) {
+            LL_SPI_SetFIFOThreshold(instance, LL_SPI_FIFO_TH_01DATA);
+            LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
+            LL_SPI_SetNSSPolarity(instance, LL_SPI_NSS_POLARITY_LOW);
+        }
     }
 
     return result;
@@ -674,9 +676,10 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
 }
 
 
-bool uni_hal_spi_set_prescaler(const uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler_e prescaler) {
+bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler_e prescaler) {
     bool result = false;
-    if (uni_hal_spi_is_inited(ctx)) {
+    if (uni_hal_spi_is_inited(ctx) && ctx->config.prescaler != prescaler) {
+        ctx->config.prescaler = prescaler;
         LL_SPI_SetBaudRatePrescaler(_uni_hal_spi_handle_get(ctx->config.instance), _uni_hal_spi_prescaler(prescaler));
         result = true;
     }
