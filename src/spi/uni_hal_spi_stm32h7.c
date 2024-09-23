@@ -505,12 +505,12 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
                 init_struct.NSS = LL_SPI_NSS_HARD_INPUT;
             }
         }
-        init_struct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV2;
+        init_struct.BaudRate = _uni_hal_spi_prescaler(ctx->config.prescaler);
         init_struct.BitOrder = LL_SPI_MSB_FIRST;
         init_struct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
         init_struct.CRCPoly = 0;
 
-        result = LL_SPI_Init(instance, &init_struct);
+        result = LL_SPI_Init(instance, &init_struct) == SUCCESS;
         if(result) {
             LL_SPI_SetFIFOThreshold(instance, LL_SPI_FIFO_TH_01DATA);
             LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
