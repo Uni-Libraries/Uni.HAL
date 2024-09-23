@@ -79,7 +79,7 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, uint32_t data_len) {
     size_t result = 0;
 
-    if (ctx != NULL && data != NULL) {
+    if (ctx != NULL && ctx->buf_tx.handle != NULL && data != NULL) {
         // push to buffer
         result = xStreamBufferSend(ctx->buf_tx.handle, data, data_len, 0U);
 
