@@ -26,7 +26,12 @@
 //
 
 void DMA1_Stream0_IRQHandler(void) {
-    // transfer complete
+    // transfer complete 0
+    if (LL_DMA_IsActiveFlag_TC0(DMA1)) {
+        LL_DMA_ClearFlag_TC0(DMA1);
+    }
+
+    // transfer complete 1
     if (LL_DMA_IsActiveFlag_TC1(DMA1)) {
         LL_DMA_ClearFlag_TC1(DMA1);
     }

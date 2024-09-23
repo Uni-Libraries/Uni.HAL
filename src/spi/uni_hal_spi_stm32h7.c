@@ -34,11 +34,10 @@ void SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
         uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
     }
 
-    LL_SPI_Disable(instance);
-
     LL_SPI_ClearFlag_EOT(instance);
     LL_SPI_ClearFlag_TXTF(instance);
 
+    LL_SPI_Disable(instance);
     LL_SPI_DisableDMAReq_RX(instance);
     LL_SPI_DisableDMAReq_TX(instance);
 
@@ -313,6 +312,7 @@ uint32_t _uni_hal_spi_polarity(uni_hal_spi_cpol_e polarity) {
     return result;
 }
 
+
 uint32_t _uni_hal_spi_prescaler(uni_hal_spi_prescaler_e prescaler) {
     uint32_t result = 0;
     switch (prescaler) {
@@ -347,170 +347,206 @@ uint32_t _uni_hal_spi_prescaler(uni_hal_spi_prescaler_e prescaler) {
     return result;
 }
 
+
+//
+// Private/init
+//
+
+static bool _uni_hal_spi_init_rcc(uni_hal_spi_context_t *ctx) {
+    return uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source)
+           && uni_hal_rcc_clk_set(ctx->config.instance, true);
+}
+
+static bool _uni_hal_spi_init_gpio(uni_hal_spi_context_t *ctx) {
+    bool result = true;
+
+    if (ctx->config.pin_sck != nullptr) {
+        ctx->config.pin_sck->gpio_pull = UNI_HAL_GPIO_PULL_NO;
+        ctx->config.pin_sck->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
+        _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_sck);
+        result = uni_hal_gpio_pin_init(ctx->config.pin_sck) && result;
+    }
+
+    if (ctx->config.pin_miso != nullptr) {
+        ctx->config.pin_miso->gpio_pull = UNI_HAL_GPIO_PULL_NO;
+        ctx->config.pin_miso->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
+        _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_miso);
+        result = uni_hal_gpio_pin_init(ctx->config.pin_miso) && result;
+    }
+
+    if (ctx->config.pin_mosi != nullptr) {
+        ctx->config.pin_mosi->gpio_pull = UNI_HAL_GPIO_PULL_NO;
+        ctx->config.pin_mosi->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
+        _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_mosi);
+        result = uni_hal_gpio_pin_init(ctx->config.pin_mosi) && result;
+    }
+
+    if (ctx->config.pin_nss != nullptr) {
+        ctx->config.pin_nss->gpio_pull = UNI_HAL_GPIO_PULL_NO;
+        ctx->config.pin_nss->gpio_init = true;
+        ctx->config.pin_nss->gpio_type = ctx->config.nss_hard
+                                             ? UNI_HAL_GPIO_TYPE_ALTERNATE_PP
+                                             : UNI_HAL_GPIO_TYPE_OUT_PP;
+        _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_nss);
+        result = uni_hal_gpio_pin_init(ctx->config.pin_nss) && result;
+    }
+
+    return result;
+}
+
+
+static bool _uni_hal_spi_init_irq(uni_hal_spi_context_t *ctx) {
+    bool result = false;
+    IRQn_Type irq = WWDG_IRQn;
+
+    switch (ctx->config.instance) {
+        case UNI_HAL_CORE_PERIPH_SPI_1:
+            irq = SPI1_IRQn;
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_2:
+            irq = SPI2_IRQn;
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_3:
+            irq = SPI3_IRQn;
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_4:
+            irq = SPI4_IRQn;
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_5:
+            irq = SPI5_IRQn;
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_6:
+            irq = SPI6_IRQn;
+            break;
+        default:
+            break;
+    }
+
+    if (irq != WWDG_IRQn) {
+        NVIC_SetPriority(irq, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
+        NVIC_EnableIRQ(irq);
+        result = true;
+    }
+
+    return result;
+}
+
+
+static bool _uni_hal_spi_init_dma(uni_hal_spi_context_t *ctx) {
+    bool result = true;
+
+    if (ctx->config.dma_tx != nullptr) {
+        result = result && uni_hal_dma_init(ctx->config.dma_tx);
+
+        if (result) {
+            uni_hal_dma_set_fifo_mode(ctx->config.dma_tx, false);
+            uni_hal_dma_set_mode(ctx->config.dma_tx, UNI_HAL_DMA_MODE_NORMAL);
+            uni_hal_dma_set_priority(ctx->config.dma_tx, UNI_HAL_DMA_PRIORITY_LOW);
+
+            DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_tx->config.instance);
+            uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_tx->config.channel);
+
+            LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_MEMORY_TO_PERIPH);
+            LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
+            LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
+            LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_BYTE);
+            LL_DMA_SetMemorySize(module, stream, LL_DMA_PDATAALIGN_BYTE);
+            LL_DMA_SetPeriphRequest(module, stream, _uni_hal_spi_dma_request_tx_get(ctx->config.instance));
+
+            LL_DMA_EnableIT_TC(module, stream);
+            LL_DMA_EnableIT_TE(module, stream);
+        }
+    }
+
+    if (ctx->config.dma_rx != nullptr) {
+        result = result && uni_hal_dma_init(ctx->config.dma_rx);
+
+        if (result) {
+            uni_hal_dma_set_fifo_mode(ctx->config.dma_rx, false);
+            uni_hal_dma_set_mode(ctx->config.dma_rx, UNI_HAL_DMA_MODE_NORMAL);
+            uni_hal_dma_set_priority(ctx->config.dma_rx, UNI_HAL_DMA_PRIORITY_LOW);
+
+            DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_rx->config.instance);
+            uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_rx->config.channel);
+
+            LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+            LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
+            LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
+            LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_BYTE);
+            LL_DMA_SetMemorySize(module, stream, LL_DMA_PDATAALIGN_BYTE);
+            LL_DMA_SetPeriphRequest(module, stream, _uni_hal_spi_dma_request_rx_get(ctx->config.instance));
+
+            LL_DMA_EnableIT_TC(module, stream);
+            LL_DMA_EnableIT_TE(module, stream);
+        }
+    }
+
+    return result;
+}
+
+
+static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
+    bool result = false;
+
+    SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+    if (instance != nullptr) {
+        LL_SPI_SetTransferDirection(instance, UNI_HAL_SPI_MODE_SLAVE ? LL_SPI_SIMPLEX_RX : LL_SPI_FULL_DUPLEX);
+        LL_SPI_SetMode(instance, ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE ? LL_SPI_MODE_SLAVE : LL_SPI_MODE_MASTER);
+        LL_SPI_SetDataWidth(instance, LL_SPI_DATAWIDTH_8BIT);
+        LL_SPI_SetClockPolarity(instance, _uni_hal_spi_polarity(ctx->config.polarity));
+        LL_SPI_SetClockPhase(instance, _uni_hal_spi_phase(ctx->config.phase));
+        LL_SPI_SetBaudRatePrescaler(instance, LL_SPI_BAUDRATEPRESCALER_DIV2);
+        LL_SPI_SetTransferBitOrder(instance,LL_SPI_MSB_FIRST);
+        LL_SPI_DisableCRC(instance);
+        LL_SPI_SetFIFOThreshold(instance, LL_SPI_FIFO_TH_01DATA);
+        LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
+        LL_SPI_SetNSSPolarity(instance, LL_SPI_NSS_POLARITY_LOW);
+
+        uint32_t nss = LL_SPI_NSS_SOFT;
+        if (ctx->config.nss_hard && ctx->config.pin_nss) {
+            if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
+                nss = LL_SPI_NSS_HARD_OUTPUT;
+                LL_SPI_EnableNSSPulseMgt(instance);
+            } else {
+                nss = LL_SPI_NSS_HARD_INPUT;
+                LL_SPI_DisableNSSPulseMgt(instance);
+            }
+        }
+        LL_SPI_SetNSSMode(instance, nss);
+        result = true;
+    }
+
+    return result;
+}
+
+
 //
 // Public
 //
 
 bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
-    bool result = false;
-
     if (ctx != nullptr && !uni_hal_spi_is_inited(ctx)) {
+        bool result = _uni_hal_spi_init_rcc(ctx);
+        result = result && _uni_hal_spi_init_gpio(ctx);
+        result = result && _uni_hal_spi_init_irq(ctx);
+        result = result && _uni_hal_spi_init_dma(ctx);
+        result = result && _uni_hal_spi_init_spi(ctx);
+
         size_t index = _uni_hal_spi_index_get(ctx->config.instance);
-        if (index != SIZE_MAX) {
+        if (result && index != SIZE_MAX) {
             g_uni_hal_spi_ctx[index] = ctx;
-        }
-
-        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-        if (instance != nullptr) {
-            // clock
-            result = uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source);
-            result = uni_hal_rcc_clk_set(ctx->config.instance, true) && result;
-
-            // gpio
-            if (ctx->config.pin_sck != nullptr) {
-                ctx->config.pin_sck->gpio_pull = UNI_HAL_GPIO_PULL_NO;
-                ctx->config.pin_sck->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
-                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_sck);
-                result = uni_hal_gpio_pin_init(ctx->config.pin_sck) && result;
-            }
-            if (ctx->config.pin_miso != nullptr) {
-                ctx->config.pin_miso->gpio_pull = UNI_HAL_GPIO_PULL_NO;
-                ctx->config.pin_miso->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
-                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_miso);
-                result = uni_hal_gpio_pin_init(ctx->config.pin_miso) && result;
-            }
-            if (ctx->config.pin_mosi != nullptr) {
-                ctx->config.pin_mosi->gpio_pull = UNI_HAL_GPIO_PULL_NO;
-                ctx->config.pin_mosi->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
-                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_mosi);
-                result = uni_hal_gpio_pin_init(ctx->config.pin_mosi) && result;
-            }
-            if (ctx->config.pin_nss != nullptr) {
-                ctx->config.pin_nss->gpio_pull = UNI_HAL_GPIO_PULL_NO;
-                ctx->config.pin_nss->gpio_init = true;
-                ctx->config.pin_nss->gpio_type = ctx->config.nss_hard
-                                                     ? UNI_HAL_GPIO_TYPE_ALTERNATE_PP
-                                                     : UNI_HAL_GPIO_TYPE_OUT_PP;
-                _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_nss);
-                result = uni_hal_gpio_pin_init(ctx->config.pin_nss) && result;
-            }
-
-            // irq
-            IRQn_Type irq;
-            switch (ctx->config.instance) {
-                case UNI_HAL_CORE_PERIPH_SPI_1:
-                    irq = SPI1_IRQn;
-                    break;
-                case UNI_HAL_CORE_PERIPH_SPI_2:
-                    irq = SPI2_IRQn;
-                    break;
-                case UNI_HAL_CORE_PERIPH_SPI_3:
-                    irq = SPI3_IRQn;
-                    break;
-                case UNI_HAL_CORE_PERIPH_SPI_4:
-                    irq = SPI4_IRQn;
-                    break;
-                case UNI_HAL_CORE_PERIPH_SPI_5:
-                    irq = SPI5_IRQn;
-                    break;
-                case UNI_HAL_CORE_PERIPH_SPI_6:
-                    irq = SPI6_IRQn;
-                    break;
-                default:
-                    irq = SPI1_IRQn;
-                    break;
-            }
-            NVIC_SetPriority(irq, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
-            NVIC_EnableIRQ(irq);
-
-            // dma
-            if (ctx->config.dma_tx != nullptr) {
-                result = uni_hal_dma_init(ctx->config.dma_tx) && result;
-
-                uni_hal_dma_set_fifo_mode(ctx->config.dma_tx, false);
-                uni_hal_dma_set_mode(ctx->config.dma_tx, UNI_HAL_DMA_MODE_NORMAL);
-                uni_hal_dma_set_priority(ctx->config.dma_tx, UNI_HAL_DMA_PRIORITY_LOW);
-
-                DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_tx->config.instance);
-                uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_tx->config.channel);
-
-                LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_MEMORY_TO_PERIPH);
-                LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
-                LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
-                LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-                LL_DMA_SetMemorySize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-                LL_DMA_SetPeriphRequest(module, stream, _uni_hal_spi_dma_request_tx_get(ctx->config.instance));
-
-                LL_DMA_EnableIT_TC(module, stream);
-                LL_DMA_EnableIT_TE(module, stream);
-            }
-            if (ctx->config.dma_rx != nullptr) {
-                result = uni_hal_dma_init(ctx->config.dma_rx) && result;
-
-                uni_hal_dma_set_fifo_mode(ctx->config.dma_rx, false);
-                uni_hal_dma_set_mode(ctx->config.dma_rx, UNI_HAL_DMA_MODE_NORMAL);
-                uni_hal_dma_set_priority(ctx->config.dma_rx, UNI_HAL_DMA_PRIORITY_LOW);
-
-                DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_rx->config.instance);
-                uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_rx->config.channel);
-
-                LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
-                LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
-                LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
-                LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-                LL_DMA_SetMemorySize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-                LL_DMA_SetPeriphRequest(module, stream, _uni_hal_spi_dma_request_rx_get(ctx->config.instance));
-
-                LL_DMA_EnableIT_TC(module, stream);
-                LL_DMA_EnableIT_TE(module, stream);
-            }
-
-            // spi
-            LL_SPI_InitTypeDef SPI_InitStruct = {0};
-            LL_SPI_StructInit(&SPI_InitStruct);
-
-            SPI_InitStruct.TransferDirection = LL_SPI_FULL_DUPLEX; //-V1048
-            SPI_InitStruct.Mode = ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE ? LL_SPI_MODE_SLAVE : LL_SPI_MODE_MASTER;
-            SPI_InitStruct.DataWidth = LL_SPI_DATAWIDTH_8BIT;
-            SPI_InitStruct.ClockPolarity = _uni_hal_spi_polarity(ctx->config.polarity);
-            SPI_InitStruct.ClockPhase = _uni_hal_spi_phase(ctx->config.phase);
-            SPI_InitStruct.NSS = LL_SPI_NSS_SOFT;
-            if (ctx->config.nss_hard && ctx->config.pin_nss) {
-                SPI_InitStruct.NSS = ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE
-                                         ? LL_SPI_NSS_HARD_INPUT
-                                         : LL_SPI_NSS_HARD_OUTPUT;
-            }
-            SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV2;
-            SPI_InitStruct.BitOrder = LL_SPI_MSB_FIRST;
-            SPI_InitStruct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
-
-            LL_SPI_SetFIFOThreshold(instance, LL_SPI_FIFO_TH_01DATA);
-            result = (LL_SPI_Init(instance, &SPI_InitStruct) == SUCCESS) && result;
-            if (result != false) {
-                LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
-                if (ctx->config.pin_nss != nullptr) {
-                    LL_SPI_EnableNSSPulseMgt(instance);
-                    LL_SPI_SetNSSPolarity(instance, LL_SPI_NSS_POLARITY_LOW);
-                } else {
-                    LL_SPI_DisableNSSPulseMgt(instance);
-                }
-            }
-
             ctx->status.inited = true;
         }
     }
 
-    return result;
+    return ctx->status.inited;
 }
 
 
 bool uni_hal_spi_is_inited(const uni_hal_spi_context_t *ctx) {
-    bool result = false;
-    if (ctx != NULL) {
-        result = ctx->status.inited;
-    }
-    return result;
+    return ctx != nullptr && ctx->status.inited;
 }
+
 
 bool uni_hal_spi_is_busy(const uni_hal_spi_context_t *ctx) {
     return uni_hal_spi_is_inited(ctx) && ctx->status.in_process;
@@ -519,39 +555,6 @@ bool uni_hal_spi_is_busy(const uni_hal_spi_context_t *ctx) {
 
 bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len) {
     return uni_hal_spi_transmitreceive(ctx, NULL, data, len);
-}
-
-
-bool uni_hal_spi_receive_async(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len) {
-    bool result = false;
-    if (uni_hal_spi_is_inited(ctx) && data && len > 0U) {
-        ctx->status.in_process = true;
-        if (!ctx->config.nss_hard) {
-            uni_hal_gpio_pin_set(ctx->config.pin_nss, false);
-        }
-
-        // get instances
-        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-        DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_rx->config.instance);
-        uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_rx->config.channel);
-
-        // set DMA source and destination
-        LL_DMA_ConfigAddresses(module, stream, LL_SPI_DMA_GetRxRegAddr(instance), (uint32_t) data,
-                               LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
-        LL_DMA_SetDataLength(module, stream, len);
-        LL_DMA_EnableStream(module, stream);
-
-        // set SPI size
-        LL_SPI_SetTransferSize(instance, len);
-
-        // enable transfer
-        LL_SPI_EnableDMAReq_RX(instance);
-        LL_SPI_EnableIT_EOT(instance);
-        LL_SPI_Enable(instance);
-
-        result = true;
-    }
-    return result;
 }
 
 
@@ -637,7 +640,9 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
             LL_SPI_SetTransferSize(instance, len);
 
             LL_SPI_Enable(instance);
-            LL_SPI_StartMasterTransfer(instance);
+            if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
+                LL_SPI_StartMasterTransfer(instance);
+            }
 
 
             size_t idx_tx = 0U;
