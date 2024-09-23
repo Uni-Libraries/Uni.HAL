@@ -523,6 +523,15 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) { //-V2008
         case UNI_HAL_CORE_PERIPH_SPI_3:
             result = LL_APB1_GRP1_IsEnabledClock(LL_APB1_GRP1_PERIPH_SPI3);
             break;
+        case UNI_HAL_CORE_PERIPH_SPI_4:
+            result = LL_APB2_GRP1_IsEnabledClock(LL_APB2_GRP1_PERIPH_SPI4);
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_5:
+            result = LL_APB2_GRP1_IsEnabledClock(LL_APB2_GRP1_PERIPH_SPI5);
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_6:
+            result = LL_APB4_GRP1_IsEnabledClock(LL_APB4_GRP1_PERIPH_SPI6);
+            break;
         case UNI_HAL_CORE_PERIPH_TIM_1:
             result = LL_APB2_GRP1_IsEnabledClock(LL_APB2_GRP1_PERIPH_TIM1);
             break;
