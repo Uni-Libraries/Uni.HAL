@@ -492,7 +492,7 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
     if (instance != nullptr) {
         LL_SPI_InitTypeDef init_struct;
         LL_SPI_StructInit(&init_struct);
-        init_struct.TransferDirection = UNI_HAL_SPI_MODE_SLAVE ? LL_SPI_SIMPLEX_RX : LL_SPI_FULL_DUPLEX;
+        init_struct.TransferDirection =  (ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE) ? LL_SPI_SIMPLEX_RX : LL_SPI_FULL_DUPLEX;
         init_struct.Mode =  (ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE) ? LL_SPI_MODE_SLAVE : LL_SPI_MODE_MASTER;
         init_struct.DataWidth =LL_SPI_DATAWIDTH_8BIT;
         init_struct.ClockPolarity =  _uni_hal_spi_polarity(ctx->config.polarity);
