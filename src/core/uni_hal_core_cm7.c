@@ -16,6 +16,10 @@
 // Functions
 //
 
+bool uni_hal_core_cm7_dcache_get() {
+    return SCB->CCR & SCB_CCR_DC_Msk;
+}
+
 void uni_hal_core_cm7_dcache_set(bool enable) {
     if (enable) {
         SCB_EnableDCache();
