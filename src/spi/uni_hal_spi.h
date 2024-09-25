@@ -131,7 +131,7 @@ typedef struct {
 /**
  * SPI callback
  */
-typedef void (*uni_hal_spi_callback_t)(void *cookie);
+typedef bool (*uni_hal_spi_callback_t)(void *cookie);
 
 
 /**

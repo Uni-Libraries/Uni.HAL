@@ -13,6 +13,8 @@
 #include <stm32h7xx_ll_spi.h>
 #pragma GCC diagnostic pop
 
+#include <FreeRTOS.h>
+
 // uni_hal
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
@@ -29,7 +31,9 @@ uni_hal_spi_context_t *g_uni_hal_spi_ctx[6] = {nullptr};
 // IRQ
 //
 
-void SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
+bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
+    bool high_priority_woken = false;
+
     if (!ctx->config.nss_hard) {
         uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
     }
@@ -43,33 +47,35 @@ void SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
 
     ctx->status.in_process = false;
     if(ctx->status.callback) {
-        ctx->status.callback(ctx->status.callback_cookie);
+        high_priority_woken = ctx->status.callback(ctx->status.callback_cookie);
     }
+
+    return high_priority_woken;
 }
 
 
 void SPI1_IRQHandler() {
-    SPIx_IRQHandler(g_uni_hal_spi_ctx[0], SPI1);
+   portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[0], SPI1));
 }
 
 void SPI2_IRQHandler() {
-    SPIx_IRQHandler(g_uni_hal_spi_ctx[1], SPI2);
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[1], SPI2));
 }
 
 void SPI3_IRQHandler() {
-    SPIx_IRQHandler(g_uni_hal_spi_ctx[2], SPI3);
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[2], SPI3));
 }
 
 void SPI4_IRQHandler() {
-    SPIx_IRQHandler(g_uni_hal_spi_ctx[3], SPI4);
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[3], SPI4));
 }
 
 void SPI5_IRQHandler() {
-    SPIx_IRQHandler(g_uni_hal_spi_ctx[4], SPI5);
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[4], SPI5));
 }
 
 void SPI6_IRQHandler() {
-    SPIx_IRQHandler(g_uni_hal_spi_ctx[5], SPI6);
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[5], SPI6));
 }
 
 
