@@ -79,12 +79,12 @@ typedef struct {
     /**
      * DMA TX context
      */
-    uni_hal_dma_context_t* dma_tx;
+    uni_hal_dma_context_t *dma_tx;
 
     /**
      * DMA RX context
      */
-    uni_hal_dma_context_t* dma_rx;
+    uni_hal_dma_context_t *dma_rx;
 
     /**
      * MISO pin
@@ -129,6 +129,12 @@ typedef struct {
 
 
 /**
+ * SPI callback
+ */
+typedef void (*uni_hal_spi_callback_t)(void *cookie);
+
+
+/**
  * SPI status
  */
 typedef struct {
@@ -141,6 +147,10 @@ typedef struct {
      * SPI transmission is in progress
      */
     bool in_process;
+
+    uni_hal_spi_callback_t callback;
+
+    void *callback_cookie;
 } uni_hal_spi_status_t;
 
 
@@ -156,7 +166,7 @@ typedef struct {
     /**
      * SPI status
      */
-     uni_hal_spi_status_t status;
+    uni_hal_spi_status_t status;
 } uni_hal_spi_context_t;
 
 
@@ -177,17 +187,17 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx);
  * @param ctx SPI context
  * @return true on success
  */
-bool uni_hal_spi_is_inited(const uni_hal_spi_context_t* ctx);
+bool uni_hal_spi_is_inited(const uni_hal_spi_context_t *ctx);
 
 /**
  * Check that SPI is busy
  * @param ctx SPI context
  * @return true in case it is busy
  */
-bool uni_hal_spi_is_busy(const uni_hal_spi_context_t* ctx);
+bool uni_hal_spi_is_busy(const uni_hal_spi_context_t *ctx);
 
 
-bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t* ctx, uni_hal_spi_prescaler_e  prescaler);
+bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler_e prescaler);
 
 /**
  * Receive data from SPI bus
@@ -209,8 +219,11 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len);
 
 
-bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx, uint32_t len);
+bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx,
+                                  uint32_t len);
 
+
+bool uni_hal_spi_set_callback(uni_hal_spi_context_t *ctx, uni_hal_spi_callback_t callback, void *cookie);
 
 
 /**
