@@ -60,6 +60,7 @@ target_compile_definitions(uni.hal PUBLIC UNI_HAL_TARGET_MCU_${UNI_HAL_TARGET_MC
 target_link_libraries(uni.hal PUBLIC freertos_kernel)
 target_link_libraries(uni.hal PUBLIC freertos_tcp)
 target_link_libraries(uni.hal PUBLIC uni.common)
+target_link_libraries(uni.hal PUBLIC nanoprintf)
 if(DEFINED UNI_HAL_DFP_LIBRARY)
     target_link_libraries(uni.hal PUBLIC ${UNI_HAL_DFP_LIBRARY})
 endif()

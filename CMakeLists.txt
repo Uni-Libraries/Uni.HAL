@@ -23,6 +23,7 @@ option(UNI_HAL_RTOS_HEAP_APP ""           1 )
 
 include(cmake/cpm/cpm.cmake)
 include(cmake/cpm/cpm-uni.common.cmake)
+include(cmake/cpm/cpm-nanoprintf.cmake)
 if(UNI_HAL_TARGET_MCU STREQUAL "PC")
     include(cmake/cpm/cpm-catch2.cmake)
 endif()
