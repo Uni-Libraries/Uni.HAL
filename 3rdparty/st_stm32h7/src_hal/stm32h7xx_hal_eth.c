@@ -1429,7 +1429,7 @@ HAL_StatusTypeDef HAL_ETH_ReleaseTxPacket(ETH_HandleTypeDef *heth)
 #ifdef HAL_ETH_USE_PTP
 
         /* Disable Ptp transmission */
-        CLEAR_BIT(heth->Init.TxDesc[idx].DESC3, (0x40000000U));
+        CLEAR_BIT(heth->Init.TxDesc[idx].DESC2, ETH_DMATXNDESCRF_TTSE);
 
         if ((heth->Init.TxDesc[idx].DESC3 & ETH_DMATXNDESCWBF_LD)
             && (heth->Init.TxDesc[idx].DESC3 & ETH_DMATXNDESCWBF_TTSS))
@@ -1506,6 +1506,9 @@ HAL_StatusTypeDef HAL_ETH_PTP_SetConfig(ETH_HandleTypeDef *heth, ETH_PTP_ConfigT
     return HAL_ERROR;
   }
 
+  /* Mask the Timestamp Trigger interrupt */
+  CLEAR_BIT(heth->Instance->MACIER, ETH_MACIER_TSIE);
+
   tmpTSCR = ptpconfig->Timestamp |
             ((uint32_t)ptpconfig->TimestampUpdate << ETH_MACTSCR_TSUPDT_Pos) |
             ((uint32_t)ptpconfig->TimestampAll << ETH_MACTSCR_TSENALL_Pos) |
@@ -1539,8 +1542,11 @@ HAL_StatusTypeDef HAL_ETH_PTP_SetConfig(ETH_HandleTypeDef *heth, ETH_PTP_ConfigT
     }
   }
 
-  /* Ptp Init */
-  SET_BIT(heth->Instance->MACTSCR, ETH_MACTSCR_TSINIT);
+  /* Enable Update mode */
+  if (ptpconfig->TimestampUpdateMode == ENABLE)
+  {
+    SET_BIT(heth->Instance->MACTSCR, ETH_MACTSCR_TSCFUPDT);
+  }
 
   /* Set PTP Configuration done */
   heth->IsPtpConfigured = HAL_ETH_PTP_CONFIGURED;
@@ -1551,6 +1557,9 @@ HAL_StatusTypeDef HAL_ETH_PTP_SetConfig(ETH_HandleTypeDef *heth, ETH_PTP_ConfigT
   time.NanoSeconds = heth->Instance->MACSTNR;
 
   HAL_ETH_PTP_SetTime(heth, &time);
+
+  /* Ptp Init */
+  SET_BIT(heth->Instance->MACTSCR, ETH_MACTSCR_TSINIT);
 
   /* Return function status */
   return HAL_OK;
