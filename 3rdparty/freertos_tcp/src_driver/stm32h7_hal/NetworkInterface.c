@@ -1704,12 +1704,12 @@ static BaseType_t prvAcceptPacket( const NetworkBufferDescriptor_t * const pxDes
 
         #if ipconfigIS_ENABLED( ipconfigETHERNET_DRIVER_FILTERS_PACKETS )
         {
-            const ETH_DMADescTypeDef * const ulRxDesc = ( const ETH_DMADescTypeDef * const ) pxEthHandle->RxDescList.RxDesc[ pxEthHandle->RxDescList.RxDescIdx ];
+            const ETH_DMADescTypeDef * const pxRxDesc = ( const ETH_DMADescTypeDef * const ) pxEthHandle->RxDescList.RxDesc[ pxEthHandle->RxDescList.RxDescIdx ];
             uint32_t ulRxDesc;
             #ifdef niEMAC_STM32HX
-                ulRxDesc = ulRxDesc->DESC1;
+                ulRxDesc = pxRxDesc->DESC1;
             #elif defined( niEMAC_STM32FX )
-                ulRxDesc = ulRxDesc->DESC4;
+                ulRxDesc = pxRxDesc->DESC4;
             #endif
 
             if( ( ulRxDesc & ETH_IP_HEADER_IPV4 ) != 0 )
