@@ -30,13 +30,13 @@ function Get-DFP-STM32L4(){
     Expand-Archive -Path "./~temp/cmsis_device_l4.zip" -DestinationPath "./~temp/"
     Expand-Archive -Path "./~temp/stm32l4xx_hal_driver.zip" -DestinationPath "./~temp/"
     
-    Copy-Item -Path "./~temp/cmsis_device_l4-master/Include/"   -Destination "./st_stm32l4/include_device/" -Recurse
-    Copy-Item -Path "./~temp/cmsis_device_l4-master/Source/Templates/gcc/" -Destination "./st_stm32l4/src_device/" -Recurse
-    Copy-Item -Path "./~temp/cmsis_device_l4-master/Source/Templates/system_stm32l4xx.c" -Destination "./st_stm32l4/src_device/system_stm32l4xx.c"
+    Copy-Item -Path "./~temp/cmsis-device-l4-master/Include/"   -Destination "./st_stm32l4/include_device/" -Recurse
+    Copy-Item -Path "./~temp/cmsis-device-l4-master/Source/Templates/gcc/" -Destination "./st_stm32l4/src_device/" -Recurse
+    Copy-Item -Path "./~temp/cmsis-device-l4-master/Source/Templates/system_stm32l4xx.c" -Destination "./st_stm32l4/src_device/system_stm32l4xx.c"
 
-    Copy-Item -Path "./~temp/stm32l4xx_hal_driver-master/Inc/"        -Destination "./st_stm32l4/include_hal/"        -Recurse
-    Copy-Item -Path "./~temp/stm32l4xx_hal_driver-master/Src/"        -Destination "./st_stm32l4/src_hal/"            -Recurse
-    Copy-Item -Path "./~temp/stm32l4xx_hal_driver-master/LICENSE.md"   -Destination "./st_stm32l4/" -Recurse
+    Copy-Item -Path "./~temp/stm32l4xx-hal-driver-master/Inc/"        -Destination "./st_stm32l4/include_hal/"        -Recurse
+    Copy-Item -Path "./~temp/stm32l4xx-hal-driver-master/Src/"        -Destination "./st_stm32l4/src_hal/"            -Recurse
+    Copy-Item -Path "./~temp/stm32l4xx-hal-driver-master/LICENSE.md"   -Destination "./st_stm32l4/" -Recurse
 }
 
 
@@ -53,12 +53,12 @@ function Get-DFP-STM32H7(){
     Expand-Archive -Path "./~temp/cmsis_device_h7.zip" -DestinationPath "./~temp/"
     Expand-Archive -Path "./~temp/stm32h7xx_hal_driver.zip" -DestinationPath "./~temp/"
     
-    Copy-Item -Path "./~temp/cmsis_device_h7-master/Include/"                            -Destination "./st_stm32h7/include_device/" -Recurse
-    Copy-Item -Path "./~temp/stm32h7xx_hal_driver-master/Inc/"                           -Destination "./st_stm32h7/include_hal/" -Recurse
-    Copy-Item -Path "./~temp/cmsis_device_h7-master/Source/Templates/gcc/"               -Destination "./st_stm32h7/src_device/" -Recurse
-    Copy-Item -Path "./~temp/cmsis_device_h7-master/Source/Templates/system_stm32h7xx.c" -Destination "./st_stm32h7/src_device/system_stm32h7xx.c"
-    Copy-Item -Path "./~temp/stm32h7xx_hal_driver-master/Src/"                           -Destination "./st_stm32h7/src_hal/" -Recurse
-    Copy-Item -Path "./~temp/stm32h7xx_hal_driver-master/LICENSE.md"                     -Destination "./st_stm32h7/" -Recurse    
+    Copy-Item -Path "./~temp/cmsis-device-h7-master/Include/"                            -Destination "./st_stm32h7/include_device/" -Recurse
+    Copy-Item -Path "./~temp/stm32h7xx-hal-driver-master/Inc/"                           -Destination "./st_stm32h7/include_hal/" -Recurse
+    Copy-Item -Path "./~temp/cmsis-device-h7-master/Source/Templates/gcc/"               -Destination "./st_stm32h7/src_device/" -Recurse
+    Copy-Item -Path "./~temp/cmsis-device-h7-master/Source/Templates/system_stm32h7xx.c" -Destination "./st_stm32h7/src_device/system_stm32h7xx.c"
+    Copy-Item -Path "./~temp/stm32h7xx-hal-driver-master/Src/"                           -Destination "./st_stm32h7/src_hal/" -Recurse
+    Copy-Item -Path "./~temp/stm32h7xx-hal-driver-master/LICENSE.md"                     -Destination "./st_stm32h7/" -Recurse
 
 
 }
@@ -75,14 +75,13 @@ function Get-USB-STM-Device() {
 
     Expand-Archive -Path "./~temp/stm32_mw_usb_device.zip" -DestinationPath "./~temp/"
 
-    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Core/Inc/"      -Destination "./st_usb_device/include_core/" -Recurse
-    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Core/Src/"      -Destination "./st_usb_device/src_core/"     -Recurse
+    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Core/Inc/"      -Destination "./st_usb_device/include_core/" -Recurse
+    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Core/Src/"      -Destination "./st_usb_device/src_core/"     -Recurse
 
-    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Class/CDC/Inc/" -Destination "./st_usb_device/include_cdc/"  -Recurse
-    Copy-Item -Path "./~temp/stm32_mw_usb_device-master/Class/CDC/Src/" -Destination "./st_usb_device/src_cdc/"      -Recurse
+    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Class/CDC/Inc/" -Destination "./st_usb_device/include_cdc/"  -Recurse
+    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Class/CDC/Src/" -Destination "./st_usb_device/src_cdc/"      -Recurse
 
-
-    Copy-Item   -Path "./~temp/stm32_mw_usb_device-master/LICENSE.md" -Destination "./st_usb_device"
+    Copy-Item   -Path "./~temp/stm32-mw-usb-device-master/LICENSE.md" -Destination "./st_usb_device"
 }
 
 
@@ -146,7 +145,7 @@ function Get-FreeRTOS-TCP(){
 
     New-Item    -Path "./freertos_tcp/src_driver/stm32h7_hal/"                           -ItemType Directory -ErrorAction SilentlyContinue
     Remove-Item -Path "./freertos_tcp/src_driver/stm32h7_hal/NetworkInterface.c"         -ErrorAction SilentlyContinue
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/holden-zenith/FreeRTOS-Plus-TCP/dev-stm32/source/portable/NetworkInterface/STM32/NetworkInterface.c" -OutFile "./freertos_tcp/src_driver/stm32h7_hal/NetworkInterface.c"
+    Copy-Item   -Path "./~temp/FreeRTOS-Plus-TCP-main/source/portable/NetworkInterface/STM32/NetworkInterface.c" -Destination "./freertos_tcp/src_driver/stm32h7_hal/NetworkInterface.c" -Recurse
 
     Remove-Item -Path "./freertos_tcp/include_driver/"                            -Recurse -ErrorAction SilentlyContinue
     New-Item    -Path "./freertos_tcp/include_driver/"                           -ItemType Directory
