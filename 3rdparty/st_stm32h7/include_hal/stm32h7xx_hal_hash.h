@@ -577,8 +577,8 @@ HAL_StatusTypeDef HAL_HMAC_MD5_Start_DMA(HASH_HandleTypeDef *hhash, const uint8_
 /* Peripheral State methods  **************************************************/
 HAL_HASH_StateTypeDef HAL_HASH_GetState(const HASH_HandleTypeDef *hhash);
 HAL_StatusTypeDef HAL_HASH_GetStatus(const HASH_HandleTypeDef *hhash);
-void HAL_HASH_ContextSaving(HASH_HandleTypeDef *hhash, uint8_t *pMemBuffer);
-void HAL_HASH_ContextRestoring(HASH_HandleTypeDef *hhash, uint8_t *pMemBuffer);
+void HAL_HASH_ContextSaving(const HASH_HandleTypeDef *hhash, const uint8_t *pMemBuffer);
+void HAL_HASH_ContextRestoring(HASH_HandleTypeDef *hhash, const uint8_t *pMemBuffer);
 void HAL_HASH_SwFeed_ProcessSuspend(HASH_HandleTypeDef *hhash);
 HAL_StatusTypeDef HAL_HASH_DMAFeed_ProcessSuspend(HASH_HandleTypeDef *hhash);
 uint32_t HAL_HASH_GetError(const HASH_HandleTypeDef *hhash);

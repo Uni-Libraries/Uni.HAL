@@ -1403,7 +1403,7 @@ HAL_StatusTypeDef HAL_HASH_GetStatus(const HASH_HandleTypeDef *hhash)
   *         must be at least (HASH_NUMBER_OF_CSR_REGISTERS + 3) * 4 uint8 long.
   * @retval None
   */
-void HAL_HASH_ContextSaving(HASH_HandleTypeDef *hhash, uint8_t *pMemBuffer)
+void HAL_HASH_ContextSaving(const HASH_HandleTypeDef *hhash, const uint8_t *pMemBuffer)
 {
   uint32_t mem_ptr = (uint32_t)pMemBuffer;
   uint32_t csr_ptr = (uint32_t)HASH->CSR;
@@ -1444,7 +1444,7 @@ void HAL_HASH_ContextSaving(HASH_HandleTypeDef *hhash, uint8_t *pMemBuffer)
   *         beforehand).
   * @retval None
   */
-void HAL_HASH_ContextRestoring(HASH_HandleTypeDef *hhash, uint8_t *pMemBuffer)
+void HAL_HASH_ContextRestoring(HASH_HandleTypeDef *hhash, const uint8_t *pMemBuffer)
 {
   uint32_t mem_ptr = (uint32_t)pMemBuffer;
   uint32_t csr_ptr = (uint32_t)HASH->CSR;
@@ -1930,7 +1930,6 @@ static HAL_StatusTypeDef HASH_WriteData(HASH_HandleTypeDef *hhash, const uint8_t
     {
       HASH->DIN = *(uint32_t *)inputaddr;
     }
-    /*hhash->HashInCount += 4U;*/
   }
 
 
@@ -2497,7 +2496,7 @@ HAL_StatusTypeDef HASH_Start(HASH_HandleTypeDef *hhash, const uint8_t *const pIn
                              uint8_t *pOutBuffer,
                              uint32_t Timeout, uint32_t Algorithm)
 {
-  uint8_t *pInBuffer_tmp;  /* input data address, input parameter of HASH_WriteData()         */
+  const uint8_t *pInBuffer_tmp;  /* input data address, input parameter of HASH_WriteData()         */
   uint32_t Size_tmp; /* input data size (in bytes), input parameter of HASH_WriteData() */
   HAL_HASH_StateTypeDef State_tmp = hhash->State;
 
@@ -2529,7 +2528,7 @@ HAL_StatusTypeDef HASH_Start(HASH_HandleTypeDef *hhash, const uint8_t *const pIn
 
       /* pInBuffer_tmp and Size_tmp are initialized to be used afterwards as
       input parameters of HASH_WriteData() */
-      pInBuffer_tmp = (uint8_t *)pInBuffer;   /* pInBuffer_tmp is set to the input data address */
+      pInBuffer_tmp = (const uint8_t *)pInBuffer;   /* pInBuffer_tmp is set to the input data address */
       Size_tmp = Size;             /* Size_tmp contains the input data size in bytes */
 
       /* Set the phase */
@@ -2545,7 +2544,7 @@ HAL_StatusTypeDef HASH_Start(HASH_HandleTypeDef *hhash, const uint8_t *const pIn
         /* Since this is resumption, pInBuffer_tmp and Size_tmp are not set
         to the API input parameters but to those saved beforehand by HASH_WriteData()
         when the processing was suspended */
-        pInBuffer_tmp = (uint8_t *)hhash->pHashInBuffPtr;
+        pInBuffer_tmp = (const uint8_t *)hhash->pHashInBuffPtr;
         Size_tmp = hhash->HashInCount;
       }
       /* ... or multi-buffer HASH processing end */
@@ -2553,7 +2552,7 @@ HAL_StatusTypeDef HASH_Start(HASH_HandleTypeDef *hhash, const uint8_t *const pIn
       {
         /* pInBuffer_tmp and Size_tmp are initialized to be used afterwards as
         input parameters of HASH_WriteData() */
-        pInBuffer_tmp = (uint8_t *)pInBuffer;
+        pInBuffer_tmp = (const uint8_t *)pInBuffer;
         Size_tmp = Size;
         /* Configure the number of valid bits in last word of the message */
         __HAL_HASH_SET_NBVALIDBITS(Size);
@@ -2634,7 +2633,7 @@ HAL_StatusTypeDef HASH_Start(HASH_HandleTypeDef *hhash, const uint8_t *const pIn
 HAL_StatusTypeDef HASH_Accumulate(HASH_HandleTypeDef *hhash, const uint8_t *const pInBuffer, uint32_t Size,
                                   uint32_t Algorithm)
 {
-  uint8_t *pInBuffer_tmp;   /* input data address, input parameter of HASH_WriteData()         */
+  const uint8_t *pInBuffer_tmp;   /* input data address, input parameter of HASH_WriteData()         */
   uint32_t Size_tmp;  /* input data size (in bytes), input parameter of HASH_WriteData() */
   HAL_HASH_StateTypeDef State_tmp = hhash->State;
 
@@ -2666,7 +2665,7 @@ HAL_StatusTypeDef HASH_Accumulate(HASH_HandleTypeDef *hhash, const uint8_t *cons
       /* Since this is resumption, pInBuffer_tmp and Size_tmp are not set
          to the API input parameters but to those saved beforehand by HASH_WriteData()
          when the processing was suspended */
-      pInBuffer_tmp = (uint8_t *)hhash->pHashInBuffPtr;  /* pInBuffer_tmp is set to the input data address */
+      pInBuffer_tmp = (const uint8_t *)hhash->pHashInBuffPtr;  /* pInBuffer_tmp is set to the input data address */
       Size_tmp = hhash->HashInCount;          /* Size_tmp contains the input data size in bytes */
 
     }
@@ -2677,7 +2676,7 @@ HAL_StatusTypeDef HASH_Accumulate(HASH_HandleTypeDef *hhash, const uint8_t *cons
 
       /* pInBuffer_tmp and Size_tmp are initialized to be used afterwards as
          input parameters of HASH_WriteData() */
-      pInBuffer_tmp = (uint8_t *)pInBuffer;    /* pInBuffer_tmp is set to the input data address */
+      pInBuffer_tmp = (const uint8_t *)pInBuffer;    /* pInBuffer_tmp is set to the input data address */
       Size_tmp = Size;              /* Size_tmp contains the input data size in bytes */
 
       /* Check if initialization phase has already be performed */

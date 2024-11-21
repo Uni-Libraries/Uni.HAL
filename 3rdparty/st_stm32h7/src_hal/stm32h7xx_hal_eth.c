@@ -1081,7 +1081,7 @@ HAL_StatusTypeDef HAL_ETH_ReadData(ETH_HandleTypeDef *heth, void **pAppBuff)
         heth->RxDescList.RxDataLength = 0;
       }
 
-      /* Get the Frame Length of the received packet: substruct 4 bytes of the CRC */
+      /* Get the Frame Length of the received packet */
       bufflength = READ_BIT(dmarxdesc->DESC3, ETH_DMARXNDESCWBF_PL) - heth->RxDescList.RxDataLength;
 
       /* Check if last descriptor */
@@ -2500,7 +2500,7 @@ HAL_StatusTypeDef HAL_ETH_SetMACFilterConfig(ETH_HandleTypeDef *heth, const ETH_
                   ((uint32_t)pFilterConfig->HashMulticast << 2)  |
                   ((uint32_t)pFilterConfig->DestAddrInverseFiltering << 3) |
                   ((uint32_t)pFilterConfig->PassAllMulticast << 4) |
-                  ((uint32_t)((pFilterConfig->BroadcastFilter == DISABLE) ? 1U : 0U) << 5) |
+                  ((uint32_t)((pFilterConfig->BroadcastFilter == ENABLE) ? 1U : 0U) << 5) |
                   ((uint32_t)pFilterConfig->SrcAddrInverseFiltering << 8) |
                   ((uint32_t)pFilterConfig->SrcAddrFiltering << 9) |
                   ((uint32_t)pFilterConfig->HachOrPerfectFilter << 10) |
@@ -2533,7 +2533,7 @@ HAL_StatusTypeDef HAL_ETH_GetMACFilterConfig(const ETH_HandleTypeDef *heth, ETH_
   pFilterConfig->DestAddrInverseFiltering = ((READ_BIT(heth->Instance->MACPFR,
                                                        ETH_MACPFR_DAIF) >> 3) > 0U) ? ENABLE : DISABLE;
   pFilterConfig->PassAllMulticast = ((READ_BIT(heth->Instance->MACPFR, ETH_MACPFR_PM) >> 4) > 0U) ? ENABLE : DISABLE;
-  pFilterConfig->BroadcastFilter = ((READ_BIT(heth->Instance->MACPFR, ETH_MACPFR_DBF) >> 5) == 0U) ? ENABLE : DISABLE;
+  pFilterConfig->BroadcastFilter = ((READ_BIT(heth->Instance->MACPFR, ETH_MACPFR_DBF) >> 5) > 0U) ? ENABLE : DISABLE;
   pFilterConfig->ControlPacketsFilter = READ_BIT(heth->Instance->MACPFR, ETH_MACPFR_PCF);
   pFilterConfig->SrcAddrInverseFiltering = ((READ_BIT(heth->Instance->MACPFR,
                                                       ETH_MACPFR_SAIF) >> 8) > 0U) ? ENABLE : DISABLE;
@@ -2781,6 +2781,16 @@ uint32_t HAL_ETH_GetMACWakeUpSource(const ETH_HandleTypeDef *heth)
   return heth->MACWakeUpEvent;
 }
 
+/**
+  * @brief  Returns the ETH Tx Buffers in use number
+  * @param  heth: pointer to a ETH_HandleTypeDef structure that contains
+  *         the configuration information for ETHERNET module
+  * @retval ETH Tx Buffers in use number
+  */
+uint32_t HAL_ETH_GetTxBuffersNumber(const ETH_HandleTypeDef *heth)
+{
+  return heth->TxDescList.BuffersInUse;
+}
 /**
   * @}
   */
@@ -3065,7 +3075,7 @@ static void ETH_DMARxDescListInit(ETH_HandleTypeDef *heth)
   * @param  heth: pointer to a ETH_HandleTypeDef structure that contains
   *         the configuration information for ETHERNET module
   * @param  pTxConfig: Tx packet configuration
-  * @param  ItMode: Enable or disable Tx EOT interrept
+  * @param  ItMode: Enable or disable Tx EOT interrupt
   * @retval Status
   */
 static uint32_t ETH_Prepare_Tx_Descriptors(ETH_HandleTypeDef *heth, const ETH_TxPacketConfigTypeDef *pTxConfig,
