@@ -1,5 +1,5 @@
 /*
- * FreeRTOS+TCP V2.3.1
+ * FreeRTOS+TCP <DEVELOPMENT BRANCH>
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -99,6 +99,9 @@
 
 /** @brief  The time at which the last unsolicited ND was sent. Unsolicited NDs are used
  * to ensure ND tables are up to date and to detect IP address conflicts. */
+/* MISRA Ref 8.9.1 [File scoped variables] */
+/* More details at: https://github.com/FreeRTOS/FreeRTOS-Plus-TCP/blob/main/MISRA.md#rule-89 */
+/* coverity[misra_c_2012_rule_8_9_violation] */
     static TickType_t xLastUnsolicitedNDTime = 0U;
 
 /*-----------------------------------------------------------*/

@@ -44,9 +44,9 @@
 
 /* Constants defining the current version of the FreeRTOS+TCP
  * network stack. */
-#define ipFR_TCP_VERSION_NUMBER    "V4.2.999"
+#define ipFR_TCP_VERSION_NUMBER    "V4.3.999"
 #define ipFR_TCP_VERSION_MAJOR     4
-#define ipFR_TCP_VERSION_MINOR     2
+#define ipFR_TCP_VERSION_MINOR     3
 /* Development builds are always version 999. */
 #define ipFR_TCP_VERSION_BUILD     999
 
@@ -61,10 +61,10 @@
 #define ipSIZE_OF_TCP_HEADER     20U
 
 /* The maximum of int32 value. */
-#define ipINT32_MAX_VALUE        ( ( int32_t ) 0x7FFFFFFF )
+#define ipINT32_MAX_VALUE        ( ( int32_t ) 0x7FFFFFFFU )
 
 /* The minimum of int32 value. */
-#define ipINT32_MIN_VALUE        ( ( int32_t ) 0x80000000 )
+#define ipINT32_MIN_VALUE        ( ( int32_t ) 0x80000000U )
 
 /*
  * Generate a randomized TCP Initial Sequence Number per RFC.
