@@ -402,7 +402,7 @@
 
                     if( prvSendDHCPDiscover( pxEndPoint ) == pdPASS )
                     {
-                        FreeRTOS_debug_printf( ( "vDHCPProcess: timeout %lu ticks\n", EP_DHCPData.xDHCPTxPeriod ) );
+                        FreeRTOS_debug_printf( ( "vDHCPProcess: timeout %lu ticks\n", ( unsigned long ) EP_DHCPData.xDHCPTxPeriod ) );
                     }
                     else
                     {
@@ -419,7 +419,7 @@
             }
             else
             {
-                FreeRTOS_debug_printf( ( "vDHCPProcess: giving up %lu > %lu ticks\n", EP_DHCPData.xDHCPTxPeriod, ipconfigMAXIMUM_DISCOVER_TX_PERIOD ) );
+                FreeRTOS_debug_printf( ( "vDHCPProcess: giving up %lu > %lu ticks\n", ( unsigned long ) EP_DHCPData.xDHCPTxPeriod, ( unsigned long ) ipconfigMAXIMUM_DISCOVER_TX_PERIOD ) );
 
                 #if ( ipconfigDHCP_FALL_BACK_AUTO_IP != 0 )
                 {
@@ -950,7 +950,7 @@
 
             /* Create the DHCP socket if it has not already been created. */
             prvCreateDHCPSocket( pxEndPoint );
-            FreeRTOS_debug_printf( ( "prvInitialiseDHCP: start after %lu ticks\n", dhcpINITIAL_TIMER_PERIOD ) );
+            FreeRTOS_debug_printf( ( "prvInitialiseDHCP: start after %lu ticks\n", ( unsigned long ) dhcpINITIAL_TIMER_PERIOD ) );
             vDHCP_RATimerReload( pxEndPoint, dhcpINITIAL_TIMER_PERIOD );
         }
         else
@@ -1047,7 +1047,7 @@
                         const void * pvCopySource = &( pxSet->pucByte[ uxByteIndex ] );
                         ( void ) memcpy( pvCopyDest, pvCopySource, sizeof( pxSet->ulParameter ) );
 
-                        if( ( pxSet->ulParameter != FREERTOS_INADDR_ANY ) && ( pxSet->ulParameter != ipBROADCAST_IP_ADDRESS ) )
+                        if( ( pxSet->ulParameter != FREERTOS_INADDR_ANY ) && ( pxSet->ulParameter != FREERTOS_INADDR_BROADCAST ) )
                         {
                             EP_IPv4_SETTINGS.ulDNSServerAddresses[ uxTargetIndex ] = pxSet->ulParameter;
                             uxTargetIndex++;
@@ -1470,7 +1470,7 @@
                              pxEndPoint->xMACAddress.ucBytes, sizeof( MACAddress_t ) );
 
             /* Set the addressing. */
-            pxAddress->sin_address.ulIP_IPv4 = ipBROADCAST_IP_ADDRESS;
+            pxAddress->sin_address.ulIP_IPv4 = FREERTOS_INADDR_BROADCAST;
             pxAddress->sin_port = ( uint16_t ) dhcpSERVER_PORT_IPv4;
             pxAddress->sin_family = FREERTOS_AF_INET4;
         }
@@ -1676,7 +1676,7 @@
             EP_IPv4_SETTINGS.ulIPAddress = EP_DHCPData.ulOfferedIPAddress;
 
             /* Setting the 'local' broadcast address, something like 192.168.1.255' */
-            EP_IPv4_SETTINGS.ulBroadcastAddress = ( EP_DHCPData.ulOfferedIPAddress & EP_IPv4_SETTINGS.ulNetMask ) | ~EP_IPv4_SETTINGS.ulNetMask;
+            EP_IPv4_SETTINGS.ulBroadcastAddress = ( EP_DHCPData.ulOfferedIPAddress | ( ~EP_IPv4_SETTINGS.ulNetMask ) );
 
             /* Close socket to ensure packets don't queue on it. not needed anymore as DHCP failed. but still need timer for ARP testing. */
             prvCloseDHCPSocket( pxEndPoint );
