@@ -48,6 +48,11 @@
 * stdio (printf() and friends) should be called from a single task
 * only or serialized with a FreeRTOS primitive such as a binary
 * semaphore or mutex.
+*
+* Note: When using LLDB (the default debugger on macOS) with this port,
+* suppress SIGUSR1 to prevent debugger interference. This can be
+* done by adding the following line to ~/.lldbinit:
+* `process handle SIGUSR1 -n true -p false -s false`
 *----------------------------------------------------------*/
 #ifdef __linux__
     #define _GNU_SOURCE
@@ -319,17 +324,23 @@ BaseType_t xPortStartScheduler( void )
 void vPortEndScheduler( void )
 {
     Thread_t * pxCurrentThread;
+    BaseType_t xIsFreeRTOSThread;
 
     /* Stop the timer tick thread. */
     xTimerTickThreadShouldRun = false;
     pthread_join( hTimerTickThread, NULL );
+
+    /* Check whether the current thread is a FreeRTOS thread.
+     * This has to happen before the scheduler is signaled to exit
+     * its loop to prevent data races on the thread key. */
+    xIsFreeRTOSThread = prvIsFreeRTOSThread();
 
     /* Signal the scheduler to exit its loop. */
     xSchedulerEnd = pdTRUE;
     ( void ) pthread_kill( hMainThread, SIG_RESUME );
 
     /* Waiting to be deleted here. */
-    if( prvIsFreeRTOSThread() == pdTRUE )
+    if( xIsFreeRTOSThread == pdTRUE )
     {
         pxCurrentThread = prvGetThreadFromTask( xTaskGetCurrentTaskHandle() );
         event_wait( pxCurrentThread->ev );
@@ -379,6 +390,10 @@ static void prvPortYieldFromISR( void )
 
 void vPortYield( void )
 {
+    /* This must never be called from outside of a FreeRTOS-owned thread, or
+     * the thread could get stuck in a suspended state. */
+    configASSERT( prvIsFreeRTOSThread() == pdTRUE );
+
     vPortEnterCritical();
 
     prvPortYieldFromISR();
