@@ -789,7 +789,8 @@ static void vIPerfTCPWork( TcpClient_t * pxClient )
 
         #if ( ipconfigIPERF_USE_ZERO_COPY != 0 )
         {
-            xRecvResult = FreeRTOS_recvfrom( xSocket, ( void * ) &pcRecvBuffer, sizeof( pcRecvBuffer ),
+			const BaseType_t xRecvSize = 0x10000;
+            xRecvResult = FreeRTOS_recvfrom( xSocket, ( void * ) &pcRecvBuffer, xRecvSize,
                                              FREERTOS_ZERO_COPY, &xAddress, &xAddressLength );
         }
         #else
@@ -873,10 +874,10 @@ static void vIPerfTCPWork( TcpClient_t * pxClient )
 
             FreeRTOS_setsockopt( xTCPServerSocket, 0, FREERTOS_SO_WIN_PROPERTIES, ( void * ) &xWinProperties, sizeof( xWinProperties ) );
             FreeRTOS_printf( ( "vIPerfTask: buffers %u, %u WIN %u x %u, %u x %u\n",
-                               xWinProperties.lTxBufSize,
-                               xWinProperties.lRxBufSize,
-                               xWinProperties.lTxWinSize, ipconfigTCP_MSS,
-                               xWinProperties.lRxWinSize, ipconfigTCP_MSS ) );
+                               ( unsigned ) xWinProperties.lTxBufSize,
+                               ( unsigned ) xWinProperties.lRxBufSize,
+                               ( unsigned ) xWinProperties.lTxWinSize, ipconfigTCP_MSS,
+                               ( unsigned ) xWinProperties.lRxWinSize, ipconfigTCP_MSS ) );
         }
         #endif /* ( ipconfigUSE_TCP_WIN == 1 ) */
 
