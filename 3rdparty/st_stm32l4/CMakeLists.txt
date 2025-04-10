@@ -112,4 +112,4 @@ endif()
 # Linker
 #
 
-set_property(GLOBAL PROPERTY UNI_HAL_LINKER_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src_linker/stm32_h743_zit.ld")
+set_property(GLOBAL PROPERTY UNI_HAL_LINKER_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src_linker/stm32_l496_rgt.ld")
