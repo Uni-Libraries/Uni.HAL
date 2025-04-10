@@ -10,6 +10,7 @@ add_library(st_stm32l4 STATIC)
 #
 target_sources(st_stm32l4 PRIVATE
     "src_hal/stm32l4xx_hal.c"
+    "src_hal/stm32l4xx_hal_can.c"
     "src_hal/stm32l4xx_hal_cortex.c"
     "src_hal/stm32l4xx_hal_gpio.c"
     "src_hal/stm32l4xx_hal_i2c.c"
@@ -80,6 +81,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/stm32l4xx_hal_conf.h"
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/stm32l4xx_hal_conf.h"
         "#include \"stm32l4xx.h\"                             \n"
+        "#define HAL_CAN_MODULE_ENABLED         (1)           \n"
         "#define HAL_CORTEX_MODULE_ENABLED      (1)           \n"
         "#define HAL_DMA_MODULE_ENABLED         (1)           \n"
         "#define HAL_GPIO_MODULE_ENABLED        (1)           \n"
@@ -94,6 +96,7 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
         "#include \"stm32l4xx_ll_rcc.h\"                      \n"
         "                                                     \n"
         "#define assert_param(expr) ((void)0U)                \n"
+        "#include \"stm32l4xx_hal_can.h\"                     \n"
         "#include \"stm32l4xx_hal_pwr.h\"                     \n"
         "#include \"stm32l4xx_hal_pwr_ex.h\"                  \n"
         "#include \"stm32l4xx_hal_cortex.h\"                  \n"

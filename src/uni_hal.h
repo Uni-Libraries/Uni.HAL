@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 #include "adc/uni_hal_adc.h"
+#include "can/uni_hal_can.h"
 #include "core/uni_hal_core.h"
 #include "crc/uni_hal_crc.h"
 #include "dma/uni_hal_dma.h"
