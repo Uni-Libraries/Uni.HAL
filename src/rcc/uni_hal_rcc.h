@@ -15,8 +15,13 @@ extern "C" {
 // uni_hal
 #include "core/uni_hal_core.h"
 #include "rcc/uni_hal_rcc_enum.h"
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+
+#if defined(UNI_HAL_TARGET_MCU_STM32L496)
+    #include "rcc/uni_hal_rcc_stm32l4.h"
+#elif defined(UNI_HAL_TARGET_MCU_STM32H743)
     #include "rcc/uni_hal_rcc_stm32h7.h"
+#else
+    #error "unknown target"
 #endif
 
 

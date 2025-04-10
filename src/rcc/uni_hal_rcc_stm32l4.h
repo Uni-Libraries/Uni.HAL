@@ -142,3 +142,5 @@ typedef struct {
 //
 // Functions
 //
+
+bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config);

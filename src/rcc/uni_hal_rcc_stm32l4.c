@@ -934,3 +934,13 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_fro
     return result;
 }
 #endif
+
+bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config)
+{
+    bool result = false;
+    if (config != nullptr) {
+        g_uni_hal_rcc_config = config;
+        result = true;
+    }
+    return result;
+}
