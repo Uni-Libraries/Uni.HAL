@@ -9,6 +9,7 @@
 #include <stm32l496xx.h>
 #include <stm32l4xx_ll_adc.h>
 #include <stm32l4xx_ll_bus.h>
+#include <stm32l4xx_ll_dma.h>
 
 // Uni.Common
 #include <uni_common.h>
@@ -18,6 +19,7 @@
 #include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
+
 
 
 //
@@ -35,13 +37,6 @@
 #define UNI_HAL_ADC_DELAY_STARTUP (1U)
 
 
-//
-// Global
-//
-
-static volatile uint16_t _uni_hal_adc_data_1[UNI_HAL_ADC_CHANNELS_MAX] = {0};
-static volatile uint16_t _uni_hal_adc_data_2[UNI_HAL_ADC_CHANNELS_MAX] = {0};
-static volatile uint16_t _uni_hal_adc_data_3[UNI_HAL_ADC_CHANNELS_MAX] = {0};
 
 
 //
@@ -82,6 +77,7 @@ void ADC3_IRQHandler(void) {
         LL_ADC_ClearFlag_OVR(ADC3);
     }
 }
+
 
 
 //
@@ -315,32 +311,6 @@ static uint32_t _uni_hal_adc_get_rank(uint32_t rank_idx) {
 
 
 /**
- * Get pointer to the ADC data array
- * @param instance ADC instance
- * @return pointer to the start of data array
- */
-static volatile uint16_t *_uni_hal_adc_get_data(uni_hal_core_periph_e instance) {
-    volatile uint16_t *result = NULL;
-
-    switch (instance) {
-    case UNI_HAL_CORE_PERIPH_ADC_1:
-        result = _uni_hal_adc_data_1;
-        break;
-    case UNI_HAL_CORE_PERIPH_ADC_2:
-        result = _uni_hal_adc_data_2;
-        break;
-    case UNI_HAL_CORE_PERIPH_ADC_3:
-        result = _uni_hal_adc_data_3;
-        break;
-    default:
-        break;
-    }
-
-    return result;
-}
-
-
-/**
  * Get ADC instance handle from instance enum
  * @param instance ADC instance
  * @return pointer to ADC handle
@@ -436,7 +406,42 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
 }
 
 
-bool _uni_hal_adc_start(uni_hal_adc_context_t *ctx) {
+bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
+    DMA_TypeDef* module = uni_hal_dma_stm32l4_get_module(ctx->config.dma->config.instance);
+    uint32_t stream = uni_hal_dma_stm32l4_get_channel(ctx->config.dma->config.channel);
+
+    uint32_t request = 0;
+    switch(ctx->config.instance){
+        case UNI_HAL_CORE_PERIPH_ADC_3:
+            request = UNI_HAL_DMA_REQUEST_0;
+            break;
+        default:
+            break;
+    }
+    LL_DMA_SetPeriphRequest(module, stream, request);
+    LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+
+    uni_hal_dma_set_priority(ctx->config.dma, UNI_HAL_DMA_PRIORITY_LOW);
+    uni_hal_dma_set_mode(ctx->config.dma, UNI_HAL_DMA_MODE_CIRCULAR);
+
+    LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
+    LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
+    LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_HALFWORD);
+    LL_DMA_SetMemorySize(module, stream, LL_DMA_MDATAALIGN_HALFWORD);
+
+    uni_hal_dma_set_fifo_mode(ctx->config.dma, false);
+
+    LL_DMA_ConfigAddresses(module, stream, LL_ADC_DMA_GetRegAddr(_uni_hal_adc_get_instance(ctx->config.instance), LL_ADC_DMA_REG_REGULAR_DATA),
+                           (uint32_t) ctx->config.data, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+    LL_DMA_SetDataLength(module, stream, ctx->config.channels_count);
+
+    LL_DMA_EnableIT_TC(module, stream);
+    LL_DMA_EnableIT_TE(module, stream);
+
+    return true;
+}
+
+bool _uni_hal_adc_powerup(uni_hal_adc_context_t *ctx) {
     bool result = false;
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
     if (instance != NULL) {
@@ -457,12 +462,31 @@ bool _uni_hal_adc_start(uni_hal_adc_context_t *ctx) {
         }
         uni_hal_dwt_delay_ms(1U);
 
-        // Enable ADC
-        LL_ADC_Enable(instance);
-        while (!LL_ADC_IsActiveFlag_ADRDY(instance)) {
-        }
-
         result = true;
+    }
+
+    return result;
+}
+
+
+void _uni_hal_adc_enable(uni_hal_adc_context_t *ctx) {
+    ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
+    LL_ADC_Enable(instance);
+    while (!LL_ADC_IsActiveFlag_ADRDY(instance)) {
+    }
+}
+
+
+static bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
+    bool result = false;
+    if (uni_hal_adc_is_inited(ctx)) {
+        ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
+        if (instance != NULL) {
+            if (!LL_ADC_REG_IsConversionOngoing(instance)) {
+                LL_ADC_REG_StartConversion(instance);
+                result = true;
+            }
+        }
     }
 
     return result;
@@ -482,12 +506,6 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
 
         result = adc_instance != NULL;
 
-        // configure DMA
-        if (ctx->config.dma) {
-            result = uni_hal_dma_init(ctx->config.dma) && result;
-            //TODO: , LL_ADC_DMA_GetRegAddr(adc_instance, LL_ADC_DMA_REG_REGULAR_DATA), (uint32_t) _uni_hal_adc_get_data(ctx->config.instance), ctx->config.channels_count
-        }
-
         // configure pins
         for (size_t idx = 0; idx < ctx->config.channels_count; idx++) {
             if (ctx->config.pins[idx] != NULL && !uni_hal_gpio_pin_is_inited(ctx->config.pins[idx])) {
@@ -495,74 +513,41 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
             }
         }
 
-        // enable clock
+        // clk
+        result = uni_hal_rcc_clksrc_set(ctx->config.instance, UNI_HAL_RCC_CLKSRC_PLL2P) && result;
         result = uni_hal_rcc_clk_set(ctx->config.instance, true) && result;
 
-        // enable interrupts
+        // irq
         NVIC_SetPriority(adc_interrupt, UNI_HAL_ADC_INT_PRIO); /* ADC IRQ greater priority than DMA IRQ */
         NVIC_EnableIRQ(adc_interrupt);
 
+        // dma
+        if (ctx->config.dma) {
+            result = result && uni_hal_dma_init(ctx->config.dma);
+            result = result && _uni_hal_adc_configure_dma(ctx);
+            result = result && uni_hal_dma_enable(ctx->config.dma, true);
+        }
+
+        // common
         result = _uni_hal_adc_configure_common(ctx) && result;
+
+        // module
         result = _uni_hal_adc_configure(ctx) && result;
-        result = _uni_hal_adc_start(ctx) && result;
+
+        // powerup
+        result = _uni_hal_adc_powerup(ctx) && result;
+
+        // enable
         ctx->state.initialized = result;
-
         if (result) {
-            //TODO uni_hal_adc_trigger(ctx);
+            _uni_hal_adc_enable(ctx);
+            _uni_hal_adc_trigger(ctx);
         }
     }
 
     return result;
 }
 
-
-bool uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
-    bool result = false;
-    if (uni_hal_adc_is_inited(ctx)) {
-        ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
-        if (instance != NULL) {
-            if (!LL_ADC_REG_IsConversionOngoing(instance)) {
-                LL_ADC_REG_StartConversion(instance);
-                result = true;
-            }
-        }
-    }
-
-    return result;
-}
-
-uint16_t uni_hal_adc_get_rank_raw(const uni_hal_adc_context_t *ctx, uint32_t rank) {
-    uint16_t result = 0U;
-
-    if (uni_hal_adc_is_inited(ctx) && rank < ctx->config.channels_count) {
-        const volatile uint16_t *array = _uni_hal_adc_get_data(ctx->config.instance);
-        if (array != NULL) {
-            result = array[rank];
-        }
-    }
-
-    return result;
-}
-
-
-uint16_t uni_hal_adc_get_channel_raw(const uni_hal_adc_context_t *ctx, uint32_t channel_idx) {
-    uint16_t result = 0U;
-
-    if (uni_hal_adc_is_inited(ctx)) {
-        for (size_t rank_idx = 0; rank_idx < uni_common_math_min(ctx->config.channels_count, UNI_HAL_ADC_CHANNELS_MAX);
-             rank_idx++) {
-            if (ctx->config.channels[rank_idx] == channel_idx) {
-                const volatile uint16_t *array = _uni_hal_adc_get_data(ctx->config.instance);
-                if (array != NULL) {
-                    result = array[rank_idx];
-                    break;
-                }
-            }
-        }
-    }
-
-    return result;
-}
 
 uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t channel) {
     uint32_t result = 0U;
@@ -572,6 +557,7 @@ uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t c
 
     return result;
 }
+
 
 float uni_hal_adc_get_channel_voltage(const uni_hal_adc_context_t *ctx, uint32_t channel) {
     return uni_hal_adc_get_channel_mv(ctx, channel) / 1000.0f;
