@@ -14,6 +14,12 @@
 #include "can/uni_hal_can.h"
 #include "rcc/uni_hal_rcc.h"
 
+//
+// Defines
+//
+
+#define UNI_HAL_CAN_QUEUE_SIZE (32U)
+
 
 
 //
@@ -26,6 +32,7 @@ static CAN_HandleTypeDef _uni_hal_can_2_handle = {};
 static uni_hal_can_context_t *_uni_hal_can_1_ctx = NULL;
 static uni_hal_can_context_t *_uni_hal_can_2_ctx = NULL;
 
+static BaseType_t _uni_hal_can_irq_wake = false;
 
 
 //
@@ -34,22 +41,58 @@ static uni_hal_can_context_t *_uni_hal_can_2_ctx = NULL;
 
 void CAN1_RX0_IRQHandler(void)
 {
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    traceISR_ENTER();
+    _uni_hal_can_irq_wake = pdFALSE;
+#endif
+
     HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
+
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+#endif
 }
 
 void CAN1_RX1_IRQHandler(void)
 {
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    traceISR_ENTER();
+    _uni_hal_can_irq_wake = pdFALSE;
+#endif
+
     HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
+
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+#endif
 }
 
 void CAN2_RX0_IRQHandler(void)
 {
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    traceISR_ENTER();
+    _uni_hal_can_irq_wake = pdFALSE;
+#endif
+
     HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
+
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+#endif
 }
 
 void CAN2_RX1_IRQHandler(void)
 {
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    traceISR_ENTER();
+    _uni_hal_can_irq_wake = pdFALSE;
+#endif
+
     HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
+
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+#endif
 }
 
 
@@ -163,12 +206,19 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
         result = _uni_hal_can_set_context(ctx);
+
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+        ctx->status.queue_rx = xQueueCreate(UNI_HAL_CAN_QUEUE_SIZE, sizeof(uni_hal_can_msg_t));
+        result = result && ctx->status.queue_rx != nullptr;
+#else
         result =
             result && uni_common_ringbuffer_init(ctx->config.buffer_rx, ctx->config.buffer_rx->data, ctx->config.buffer_rx->size_object, ctx->config.buffer_rx->size_total);
+#endif
+
         result = result && uni_hal_rcc_clk_set(ctx->config.instance, true);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_rx);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_tx);
-        result = result && _uni_hal_can_interrupt_enable(ctx->config.instance, 0U);
+        result = result && _uni_hal_can_interrupt_enable(ctx->config.instance, 4U);
 
         CAN_HandleTypeDef *instance_hal = _uni_hal_can_get_handle_hal(ctx->config.instance);
         CAN_TypeDef *instance = _uni_hal_can_get_handle(ctx->config.instance);
@@ -218,23 +268,25 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
                            uint32_t filter_mask) {
     bool result = false;
 
-    if (uni_hal_can_is_inited(ctx)) {
-        HAL_CAN_ActivateNotification(_uni_hal_can_get_handle_hal(ctx->config.instance),
-                                     fifo_num == 1 ? CAN_IT_RX_FIFO1_MSG_PENDING : CAN_IT_RX_FIFO0_MSG_PENDING);
+    if (uni_hal_can_is_inited(ctx) && fifo_num < 2)
+    {
+        void* handle = _uni_hal_can_get_handle_hal(ctx->config.instance);
+        HAL_CAN_ActivateNotification(handle, fifo_num == 1 ? CAN_IT_RX_FIFO1_MSG_PENDING : CAN_IT_RX_FIFO0_MSG_PENDING);
 
-        CAN_FilterTypeDef rx_can_flt = {.FilterIdHigh = filter_id >> 16,
-                .FilterIdLow = filter_id & UINT16_MAX,
-                .FilterMaskIdHigh = filter_mask >> 16,
-                .FilterMaskIdLow = filter_mask & UINT16_MAX,
-                .FilterFIFOAssignment = fifo_num == 1 ? CAN_FILTER_FIFO1 : CAN_FILTER_FIFO0,
-                .FilterBank = slot_idx, // TODO: clamp
-                .FilterMode = CAN_FILTERMODE_IDMASK,
-                .FilterScale = CAN_FILTERSCALE_32BIT,
-                .FilterActivation = CAN_FILTER_ENABLE,
-                .SlaveStartFilterBank = 0
+        CAN_FilterTypeDef rx_can_flt = {
+            .FilterIdHigh = filter_id >> 16,
+            .FilterIdLow = filter_id & UINT16_MAX,
+            .FilterMaskIdHigh = filter_mask >> 16,
+            .FilterMaskIdLow = filter_mask & UINT16_MAX,
+            .FilterFIFOAssignment = fifo_num == 1 ? CAN_FILTER_FIFO1 : CAN_FILTER_FIFO0,
+            .FilterBank = slot_idx, // TODO: clamp
+            .FilterMode = CAN_FILTERMODE_IDMASK,
+            .FilterScale = CAN_FILTERSCALE_32BIT,
+            .FilterActivation = CAN_FILTER_ENABLE,
+            .SlaveStartFilterBank = 14
         };
 
-        result = HAL_CAN_ConfigFilter(_uni_hal_can_get_handle_hal(ctx->config.instance), &rx_can_flt) == HAL_OK;
+        result = HAL_CAN_ConfigFilter(handle, &rx_can_flt) == HAL_OK;
     }
 
     return result;
@@ -274,15 +326,19 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
 static void _uni_hal_can_callback_msgpending(uni_hal_can_context_t *ctx, uint32_t fifo) {
     (void)fifo; // TODO: support two separate queues for different FIFOs?
 
-    if (uni_hal_can_is_inited(ctx) && ctx->config.buffer_rx) {
+    if (uni_hal_can_is_inited(ctx)) {
         CAN_RxHeaderTypeDef rx_header;
         uni_hal_can_msg_t msg;
 
-        if (HAL_CAN_GetRxMessage(_uni_hal_can_get_handle_hal(ctx->config.instance), fifo, &rx_header, msg.data) == HAL_OK) {
+        while (HAL_CAN_GetRxMessage(_uni_hal_can_get_handle_hal(ctx->config.instance), fifo, &rx_header, msg.data) == HAL_OK) {
             msg.id = rx_header.IDE ? rx_header.ExtId : rx_header.StdId;
             msg.dlc = rx_header.DLC;
 
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+            xQueueSendFromISR(ctx->status.queue_rx, &msg, &_uni_hal_can_irq_wake);
+#else
             uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U);
+#endif
 
             ctx->status.count_rx++;
         }

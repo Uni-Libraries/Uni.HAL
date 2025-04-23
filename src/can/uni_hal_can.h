@@ -12,10 +12,14 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-// uni_common
+// FreeRTOS
+#include <FreeRTOS.h>
+#include <queue.h>
+
+// Uni.Common
 #include "uni_common.h"
 
-// uni_hal
+// Uni.HAL
 #include "core/uni_hal_core.h"
 #include "gpio/uni_hal_gpio.h"
 
@@ -50,7 +54,9 @@ typedef struct
 
     uni_hal_gpio_pin_context_t* pin_tx;
 
+#if !defined(UNI_HAL_CAN_USE_FREERTOS)
     uni_common_ringbuffer_context_t *buffer_rx;
+#endif
 
 } uni_hal_can_config_t;
 
@@ -67,6 +73,10 @@ typedef struct {
     uint32_t count_err;
 
     bool inited;
+
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    QueueHandle_t queue_rx;
+#endif
 } uni_hal_can_status_t;
 
 /**
@@ -107,7 +117,7 @@ bool uni_hal_can_stop(uni_hal_can_context_t *ctx);
 bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint32_t slot_idx, uint32_t filter_id,
                            uint32_t filter_mask);
 
-bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg);
+bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, uint32_t timeout_ms);
 
 bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg);
 
