@@ -21,6 +21,7 @@ target_sources(st_stm32l4 PRIVATE
     src_hal/stm32l4xx_ll_adc.c
     src_hal/stm32l4xx_ll_dma.c
     src_hal/stm32l4xx_ll_gpio.c
+    src_hal/stm32l4xx_ll_lpuart.c
     src_hal/stm32l4xx_ll_pwr.c
     src_hal/stm32l4xx_ll_rcc.c
     src_hal/stm32l4xx_ll_spi.c
