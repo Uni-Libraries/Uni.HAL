@@ -4,6 +4,18 @@
 // Typedefs
 //
 
+
+/**
+ * DMA alignment
+ */
+typedef enum
+{
+    UNI_HAL_DMA_ALIGNMENT_U8,
+    UNI_HAL_DMA_ALIGNMENT_U16,
+    UNI_HAL_DMA_ALIGNMENT_U32,
+} uni_hal_dma_alignment_e;
+
+
 /**
  * DMA channel
  */
@@ -27,6 +39,15 @@ typedef enum {
     UNI_HAL_DMA_DIRECTION_M2P = 2,
     UNI_HAL_DMA_DIRECTION_M2M = 3,
 } uni_hal_dma_direction_e;
+
+
+/**
+ *  DMA increment
+ */
+typedef enum {
+    UNI_HAL_DMA_INCREMENT_NO,
+    UNI_HAL_DMA_INCREMENT_YES,
+} uni_hal_dma_increment_e;
 
 
 /**
