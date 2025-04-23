@@ -15,6 +15,7 @@ extern "C" {
 #include "io/uni_hal_io.h"
 #include "io/uni_hal_io_stdio.h"
 #include "iwdg/uni_hal_iwdg.h"
+#include "periph/uni_hal_periph.h"
 #include "pwr/uni_hal_pwr.h"
 #include "rcc/uni_hal_rcc.h"
 #include "rng/uni_hal_rng.h"
