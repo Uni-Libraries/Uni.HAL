@@ -43,6 +43,7 @@ typedef enum
 typedef enum
 {
     UNI_HAL_TIM_TYPE_INPUTCAPTURE,
+    UNI_HAL_TIM_TYPE_OUTPUTCOMPARE,
 } uni_hal_tim_type_e;
 
 typedef enum
@@ -137,9 +138,15 @@ bool uni_hal_tim_is_inited(const uni_hal_tim_context_t *ctx);
 
 bool uni_hal_tim_register_callback(uni_hal_tim_context_t *ctx, uni_hal_tim_callback_fn callback, void *callback_ctx);
 
+bool uni_hal_tim_clear(uni_hal_tim_context_t* ctx);
+
 bool uni_hal_tim_start(uni_hal_tim_context_t *ctx);
 
 bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx);
+
+bool uni_hal_tim_set_arrpreload(uni_hal_tim_context_t * ctx, bool val);
+
+bool uni_hal_tim_set_dmarequest(uni_hal_tim_context_t * ctx, bool val);
 
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph);
 

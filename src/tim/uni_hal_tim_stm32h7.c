@@ -13,6 +13,7 @@
 #include <FreeRTOS.h>
 
 // uni_hal
+#include "stm32l4xx_ll_tim.h"
 #include "core/uni_hal_core.h"
 #include "rcc/uni_hal_rcc.h"
 #include "tim/uni_hal_tim.h"
@@ -196,7 +197,6 @@ bool uni_hal_tim_register_callback(uni_hal_tim_context_t *ctx, uni_hal_tim_callb
     return result;
 }
 
-
 bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
     bool result = false;
 
@@ -228,3 +228,4 @@ bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
 
     return result;
 }
+

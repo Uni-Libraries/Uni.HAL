@@ -294,6 +294,20 @@ static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
             };
             result = result && (LL_TIM_IC_Init(_uni_hal_tim_get_handle(ctx->config.instance), _uni_hal_tim_get_channel(channel->channel_number), &ic_config) == SUCCESS);
         }
+        else if (channel->type == UNI_HAL_TIM_TYPE_OUTPUTCOMPARE)
+        {
+            LL_TIM_OC_InitTypeDef oc_config = {
+                .OCMode = LL_TIM_OCMODE_TOGGLE,
+                .OCState = LL_TIM_OCSTATE_DISABLE,
+                .OCNState = LL_TIM_OCSTATE_DISABLE,
+                .CompareValue = 0,
+                .OCPolarity = LL_TIM_OCPOLARITY_HIGH,
+                .OCNPolarity = LL_TIM_OCPOLARITY_HIGH,
+                .OCIdleState = LL_TIM_OCIDLESTATE_LOW,
+                .OCNIdleState = LL_TIM_OCIDLESTATE_LOW
+            };
+            result = result && (LL_TIM_OC_Init(_uni_hal_tim_get_handle(ctx->config.instance), _uni_hal_tim_get_channel(channel->channel_number), &oc_config) == SUCCESS);
+        }
         else
         {
             result = false;
@@ -310,6 +324,10 @@ static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
 
 void TIM1_CC_IRQHandler(void) {
     _uni_hal_tim_irq_cc(TIM1);
+}
+
+void TIM2_IRQHandler(void) {
+
 }
 
 UNI_COMMON_COMPILER_WEAK void TIM7_IRQHandler(void) {
@@ -414,6 +432,22 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
 }
 
 
+bool uni_hal_tim_clear(uni_hal_tim_context_t* ctx)
+{
+    bool result = false;
+
+    if (uni_hal_tim_is_inited(ctx)) {
+        TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
+        if (handle != NULL) {
+            LL_TIM_SetCounter(handle, 0U);
+            result = true;
+        }
+    }
+
+    return result;
+}
+
+
 bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
     bool result = false;
 
@@ -474,3 +508,38 @@ uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t* ctx, uni_hal_tim_channe
     }
     return result;
 }
+
+bool uni_hal_tim_set_arrpreload(uni_hal_tim_context_t* ctx, bool val)
+{
+    bool result = false;
+
+    if (uni_hal_tim_is_inited(ctx))
+    {
+        TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
+        if (handle != NULL)
+        {
+            val ? LL_TIM_EnableARRPreload(handle) : LL_TIM_DisableARRPreload(handle);
+        }
+        result = true;
+    }
+
+    return result;
+}
+
+bool uni_hal_tim_set_dmarequest(uni_hal_tim_context_t * ctx, bool val)
+{
+    bool result = false;
+
+    if (uni_hal_tim_is_inited(ctx))
+    {
+        TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
+        if (handle != NULL)
+        {
+            val ? LL_TIM_EnableDMAReq_UPDATE(handle) : LL_TIM_DisableDMAReq_UPDATE(handle);
+        }
+        result = true;
+    }
+
+    return result;
+}
+
