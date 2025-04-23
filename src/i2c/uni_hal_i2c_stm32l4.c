@@ -126,9 +126,11 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
                 result = uni_hal_rcc_clk_set(ctx->config.instance, true);
 
                 if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sck)) {
+                    ctx->config.pin_sck->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_OD,
                     result = uni_hal_gpio_pin_init(ctx->config.pin_sck) && result;
                 }
                 if(!uni_hal_gpio_pin_is_inited(ctx->config.pin_sda)) {
+                    ctx->config.pin_sda->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_OD,
                     result = uni_hal_gpio_pin_init(ctx->config.pin_sda) && result;
                 }
 
@@ -144,7 +146,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
                         break;
                     case UNI_HAL_I2C_SPEED_100KHZ:
                     default:
-                        handle_hal->Init.Timing = 0x10909CEC;
+                        handle_hal->Init.Timing = 0xC0100F14; //0x10909CEC;
                         break;
                     }
 
