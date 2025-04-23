@@ -262,3 +262,21 @@ bool uni_hal_gpio_pin_set(uni_hal_gpio_pin_context_t *ctx_pin, bool val) {
 
     return result;
 }
+
+
+uint32_t uni_hal_gpio_pin_get_bankaddr(uni_hal_gpio_pin_context_t* ctx_pin)
+{
+    uint32_t result = 0U;
+
+    if (ctx_pin != NULL) {
+        if(ctx_pin->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
+            GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx_pin->gpio_bank);
+            if (bank)
+            {
+                result = (uint32_t)&(bank->BSRR);
+            }
+        }
+    }
+
+    return result;
+}

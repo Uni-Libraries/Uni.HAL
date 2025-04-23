@@ -220,6 +220,8 @@ bool uni_hal_gpio_pin_get(const uni_hal_gpio_pin_context_t* ctx_pin);
  */
 bool uni_hal_gpio_pin_set(uni_hal_gpio_pin_context_t* ctx_pin, bool val);
 
+uint32_t uni_hal_gpio_pin_get_bankaddr(uni_hal_gpio_pin_context_t* ctx_pin);
+
 #if defined(__cplusplus)
 }
 #endif
