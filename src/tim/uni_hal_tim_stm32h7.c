@@ -147,8 +147,6 @@ bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
     return higher_task_woken;
 }
 
-
-
 //
 // Handlers
 //

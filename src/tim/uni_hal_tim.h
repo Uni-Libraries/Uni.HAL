@@ -14,7 +14,16 @@ extern "C" {
 
 // uni_hal
 #include "core/uni_hal_core.h"
+#include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
+
+
+
+//
+// Defines
+//
+
+#define UNI_HAL_TIM_CHANNEL_MAXCOUNT 6U
 
 
 
@@ -24,10 +33,38 @@ extern "C" {
 
 typedef bool (*uni_hal_tim_callback_fn)(void *ctx_timer, void *ctx_fn);
 
+typedef enum
+{
+    UNI_HAL_TIM_POLARITY_RISING,
+    UNI_HAL_TIM_POLARITY_FALLING,
+    UNI_HAL_TIM_POLARITY_BOTH,
+} uni_hal_tim_polarity_e;
 
-//
-// Typedefs
-//
+typedef enum
+{
+    UNI_HAL_TIM_TYPE_INPUTCAPTURE,
+} uni_hal_tim_type_e;
+
+typedef enum
+{
+    UNI_HAL_TIM_CHANNEL_1 = 0,
+    UNI_HAL_TIM_CHANNEL_2 = 1,
+    UNI_HAL_TIM_CHANNEL_3 = 2,
+    UNI_HAL_TIM_CHANNEL_4 = 3,
+    UNI_HAL_TIM_CHANNEL_5 = 4,
+    UNI_HAL_TIM_CHANNEL_6 = 5,
+} uni_hal_tim_channel_num_e;
+
+typedef struct
+{
+    uni_hal_tim_channel_num_e channel_number;
+
+    uni_hal_tim_type_e type;
+
+    uni_hal_tim_polarity_e polarity;
+
+    uni_hal_gpio_pin_context_t* gpio;
+} uni_hal_tim_channel_t;
 
 /**
  * TIM config
@@ -49,9 +86,19 @@ typedef struct {
      uint32_t prescaler;
 
      /**
-      * Period
+      * Reload value
       */
-      uint32_t period;
+    uint32_t reload_value;
+
+    /**
+    * Channels
+    */
+    uni_hal_tim_channel_t** channel;
+
+    /**
+     * Channel count
+     */
+    size_t channel_count;
 } uni_hal_tim_config_t;
 
 /**
@@ -59,6 +106,9 @@ typedef struct {
  */
 typedef struct {
     bool inited;
+    uint32_t chan_cnt[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
+    uint32_t chan_ms[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
+    uint16_t chan_val[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
 } uni_hal_tim_status_t;
 
 /**
@@ -92,6 +142,12 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx);
 bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx);
 
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph);
+
+uint32_t uni_hal_tim_get_period_us(uni_hal_tim_context_t *ctx);
+
+uint32_t uni_hal_tim_get_chan_freq(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+
+uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
 
 #if defined(__cplusplus)
 }
