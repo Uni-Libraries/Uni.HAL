@@ -190,7 +190,10 @@ bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *ctx) {
         if(ctx->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
             GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx->gpio_bank);
             if (bank != NULL) {
-                result = uni_hal_rcc_clk_set(ctx->gpio_bank, true);
+                result = uni_hal_rcc_clk_get(ctx->gpio_bank);
+                if (!result){
+                    result = uni_hal_rcc_clk_set(ctx->gpio_bank, true);
+                }
 
                 ctx->gpio_init ? LL_GPIO_SetOutputPin(bank, ctx->gpio_pin)
                                : LL_GPIO_ResetOutputPin(bank, ctx->gpio_pin);
