@@ -1257,7 +1257,7 @@ uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get() {
 }
 
 
-uint32_t uni_hal_rcc_stm32h7_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e clock_source, uint32_t clock_divider) {
+uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e clock_source, uint32_t clock_divider) {
     bool result = false;
     if (mco_index < 2 && clock_divider >= 1 && clock_divider <= 15) {
         // configure pin

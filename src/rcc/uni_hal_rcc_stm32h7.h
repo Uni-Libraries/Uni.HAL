@@ -149,5 +149,3 @@ uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get();
 
 uint32_t uni_hal_rcc_stm32h7_clk_get_hclk(void);
 
-uint32_t uni_hal_rcc_stm32h7_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e clock_source, uint32_t prescaler);
-

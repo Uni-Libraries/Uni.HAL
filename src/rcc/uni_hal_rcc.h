@@ -16,6 +16,10 @@ extern "C" {
 #include "core/uni_hal_core.h"
 #include "rcc/uni_hal_rcc_enum.h"
 
+#if defined(STM32L4) || defined(STM32H7)
+    #include "rcc/uni_hal_rcc_stm32.h"
+#endif
+
 #if defined(UNI_HAL_TARGET_MCU_STM32L496)
     #include "rcc/uni_hal_rcc_stm32l4.h"
 #elif defined(UNI_HAL_TARGET_MCU_STM32H743)
