@@ -27,6 +27,9 @@ typedef enum {
     UNI_HAL_RCC_CLKSRC_I2S_CKIN    = 19,
     UNI_HAL_RCC_CLKSRC_CLKP        = 20,
     UNI_HAL_RCC_CLKSRC_SYSCLK      = 21,
+    UNI_HAL_RCC_CLKSRC_MSI         = 22,
+    UNI_HAL_RCC_CLKSRC_PLL1R       = 23,
+
 } uni_hal_rcc_clksrc_e;
 
 

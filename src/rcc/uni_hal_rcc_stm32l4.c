@@ -14,6 +14,7 @@
 
 // UNI_HAL
 #include "core/uni_hal_core.h"
+#include "gpio/uni_hal_gpio.h"
 #include "pwr/uni_hal_pwr_stm32.h"
 #include "rcc/uni_hal_rcc.h"
 #include "rcc/uni_hal_rcc_stm32l4.h"
@@ -43,6 +44,77 @@ UNI_COMMON_COMPILER_WEAK const uint32_t MSIRangeTable[12] = {
 // Private
 //
 
+static uint32_t _uni_hal_rcc_pll_get_m(uint32_t val)
+{
+    uint32_t result  = LL_RCC_PLLM_DIV_1;
+    switch (val)
+    {
+    case 1:
+        result = LL_RCC_PLLM_DIV_1;
+        break;
+    case 2:
+        result = LL_RCC_PLLM_DIV_2;
+        break;
+    case 3:
+        result = LL_RCC_PLLM_DIV_3;
+        break;
+    case 4:
+        result = LL_RCC_PLLM_DIV_4;
+        break;
+    case 5:
+        result = LL_RCC_PLLM_DIV_5;
+        break;
+    case 6:
+        result = LL_RCC_PLLM_DIV_6;
+        break;
+    case 7:
+        result = LL_RCC_PLLM_DIV_7;
+        break;
+    case 8:
+        result = LL_RCC_PLLM_DIV_8;
+        break;
+    default:
+        break;
+    }
+    return result;
+}
+
+
+static uint32_t _uni_hal_rcc_pll_get_n(uint32_t val)
+{
+    uint32_t result  = 8;
+    if (val >= 8 && val <= 127)
+    {
+        result = val;
+    }
+    return result;
+}
+
+
+static uint32_t _uni_hal_rcc_pll_get_r(uint32_t val)
+{
+    uint32_t result  = LL_RCC_PLLR_DIV_2;
+    switch (val)
+    {
+    case 2:
+        result = LL_RCC_PLLR_DIV_2;
+        break;
+    case 4:
+        result = LL_RCC_PLLR_DIV_4;
+        break;
+    case 6:
+        result = LL_RCC_PLLR_DIV_6;
+        break;
+    case 8:
+        result = LL_RCC_PLLR_DIV_8;
+        break;
+    default:
+        break;
+    }
+    return result;
+}
+
+
 /**
  * Get HCLK frequency
  * @return HCLK frequency in hertz
@@ -52,6 +124,13 @@ static uint32_t _uni_hal_rcc_get_hclk_freq(void) {
     LL_RCC_ClocksTypeDef clocks;
     LL_RCC_GetSystemClocksFreq(&clocks);
     return clocks.HCLK_Frequency;
+}
+
+static uint32_t _uni_hal_rcc_get_pclk2_freq(void) {
+    // get HCLK freq
+    LL_RCC_ClocksTypeDef clocks;
+    LL_RCC_GetSystemClocksFreq(&clocks);
+    return clocks.PCLK2_Frequency;
 }
 
 /**
@@ -73,6 +152,11 @@ static void _uni_hal_stm_rcc_flash(void) {
 static bool _uni_hal_stm_rcc_hse() {
     bool result = false;
 
+    if (g_uni_hal_rcc_config->hse_bypass)
+    {
+        LL_RCC_HSE_EnableBypass();
+    }
+
     // Enable HSE
     LL_RCC_HSE_Enable();
 
@@ -85,7 +169,7 @@ static bool _uni_hal_stm_rcc_hse() {
     result = g_uni_hal_rcc_status.hse_inited = LL_RCC_HSE_IsReady();
 
     // enable HSE
-    if (result) {
+    if (result && g_uni_hal_rcc_config->hse_css) {
         LL_RCC_HSE_EnableCSS();
     }
 
@@ -123,7 +207,7 @@ static bool _uni_hal_stm_rcc_hsi() {
 static bool _uni_hal_rcc_systick() {
     // setup SysTick
     NVIC_SetPriority(SysTick_IRQn, 0U);
-    LL_Init1msTick(_uni_hal_rcc_get_hclk_freq());
+    LL_InitTick(_uni_hal_rcc_get_hclk_freq(), 1000U);
     LL_SYSTICK_EnableIT();
 
     return true;
@@ -196,17 +280,24 @@ static bool _uni_hal_stm_rcc_pll() {
     bool result = false;
 
     uint32_t clock_source = LL_RCC_PLLSOURCE_NONE;
+    uint32_t pll_division = 1;
+
     if (g_uni_hal_rcc_status.hse_inited) {
         clock_source = LL_RCC_PLLSOURCE_HSE;
+        pll_division = 1;
     } else if (g_uni_hal_rcc_status.hsi_inited) {
         clock_source = LL_RCC_PLLSOURCE_HSI;
+        pll_division = HSI_VALUE / HSE_VALUE;
     }
 
     if (clock_source != LL_RCC_PLLSOURCE_NONE) {
-        LL_RCC_PLL_ConfigDomain_SYS(clock_source, LL_RCC_PLLM_DIV_1, 10, LL_RCC_PLLR_DIV_2);
-        LL_RCC_PLL_ConfigDomain_48M(clock_source, LL_RCC_PLLM_DIV_1, 10, LL_RCC_PLLQ_DIV_4);
-        LL_RCC_PLL_EnableDomain_48M();
+        //PPL1
+        LL_RCC_PLL_ConfigDomain_SYS(clock_source,
+            _uni_hal_rcc_pll_get_m(g_uni_hal_rcc_config->pll[0].m * pll_division),
+            _uni_hal_rcc_pll_get_n(g_uni_hal_rcc_config->pll[0].n),
+            _uni_hal_rcc_pll_get_r(g_uni_hal_rcc_config->pll[0].r));
         LL_RCC_PLL_EnableDomain_SYS();
+
         LL_RCC_PLL_Enable();
 
         /* Wait till PLL is ready */
@@ -228,49 +319,43 @@ static bool _uni_hal_stm_rcc_pll() {
 static bool _uni_hal_stm_rcc_sysclk() {
     bool result = false;
 
-    uint32_t clock_freq = 0;
     uint32_t clock_source = 0;
     uint32_t clock_source_status = 0;
 
     if (g_uni_hal_rcc_status.pll_inited) {
         clock_source = LL_RCC_SYS_CLKSOURCE_PLL;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_PLL;
-        clock_freq = 80000000;
     } else if (g_uni_hal_rcc_status.hse_inited) {
         clock_source = LL_RCC_SYS_CLKSOURCE_HSE;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_HSE;
-        clock_freq = 16000000;
     } else if (g_uni_hal_rcc_status.hsi_inited) {
         clock_source = LL_RCC_SYS_CLKSOURCE_HSI;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_HSI;
-        clock_freq = 16000000;
     }
 
-    if (clock_freq) {
-        // Reconfigure sysclk
-        LL_RCC_SetSysClkSource(clock_source);
+    // Reconfigure sysclk
+    LL_RCC_SetSysClkSource(clock_source);
 
-        /* Wait till System clock is ready */
-        uint32_t ticks = uni_hal_systick_get_ms();
-        while (LL_RCC_GetSysClkSource() != clock_source_status && (uni_hal_systick_get_ms() - ticks) <
-               g_uni_hal_rcc_config->timeout.pll) {
-        }
+    /* Wait till System clock is ready */
+    uint32_t ticks = uni_hal_systick_get_ms();
+    while (LL_RCC_GetSysClkSource() != clock_source_status && (uni_hal_systick_get_ms() - ticks) <
+            g_uni_hal_rcc_config->timeout.pll) {
+    }
 
-        result = LL_RCC_GetSysClkSource() == clock_source_status;
-        g_uni_hal_rcc_status.sys_inited = result;
+    result = LL_RCC_GetSysClkSource() == clock_source_status;
+    g_uni_hal_rcc_status.sys_inited = result;
 
-        if (result) {
-            // Set prescalers
-            LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
-            LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
-            LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
+    if (result) {
+        // Set prescalers
+        LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
+        LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
+        LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
 
-            // Update sysclk value
-            LL_SetSystemCoreClock(clock_freq);
+        // Update sysclk value
+        SystemCoreClockUpdate();
 
-            // Reconfigure systick
-            _uni_hal_rcc_systick();
-        }
+        // Reconfigure systick
+        _uni_hal_rcc_systick();
     }
 
     return result;
@@ -328,7 +413,10 @@ bool uni_hal_rcc_init() {
     // TODO: move to another file
 
     // HSE/HSI
-    _uni_hal_stm_rcc_hse();
+    if (g_uni_hal_rcc_config->hse_enable)
+    {
+        _uni_hal_stm_rcc_hse();
+    }
     if (!g_uni_hal_rcc_status.hse_inited) {
         _uni_hal_stm_rcc_hsi();
     }
@@ -467,6 +555,9 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) {
             break;
         case UNI_HAL_CORE_PERIPH_I2C_4:
             result = LL_APB1_GRP2_IsEnabledClock(LL_APB1_GRP2_PERIPH_I2C4);
+            break;
+        case UNI_HAL_CORE_PERIPH_LPUART_1:
+            result = LL_APB1_GRP2_IsEnabledClock(LL_APB1_GRP2_PERIPH_LPUART1);
             break;
         case UNI_HAL_CORE_PERIPH_PWR:
             result = LL_APB1_GRP1_IsEnabledClock(LL_APB1_GRP1_PERIPH_PWR);
@@ -683,6 +774,12 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) {
                     : LL_APB1_GRP2_DisableClock(LL_APB1_GRP2_PERIPH_I2C4);
             result = true;
             break;
+            case UNI_HAL_CORE_PERIPH_LPUART_1:
+            state
+                ? LL_APB1_GRP2_EnableClock(LL_APB1_GRP2_PERIPH_LPUART1)
+                : LL_APB1_GRP2_DisableClock(LL_APB1_GRP2_PERIPH_LPUART1);
+            result = true;
+            break;
             case UNI_HAL_CORE_PERIPH_PWR:
                 state
                     ? LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR)
@@ -842,6 +939,9 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
             case UNI_HAL_CORE_PERIPH_SYSCLK:
                 result = _uni_hal_rcc_get_hclk_freq();
                 break;
+            case UNI_HAL_CORE_PERIPH_LPUART_1:
+                result = LL_RCC_GetLPUARTClockFreq(LL_RCC_LPUART1_CLKSOURCE);
+                break;
             case UNI_HAL_CORE_PERIPH_UART_1:
                 result = LL_RCC_GetUSARTClockFreq(LL_RCC_USART1_CLKSOURCE);
                 break;
@@ -857,6 +957,9 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
             case UNI_HAL_CORE_PERIPH_UART_5:
                 result = LL_RCC_GetUARTClockFreq(LL_RCC_UART5_CLKSOURCE);
                 break;
+            case UNI_HAL_CORE_PERIPH_TIM_1:
+                result = _uni_hal_rcc_get_pclk2_freq();
+                break;
             default:
                 break;
         }
@@ -870,25 +973,24 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
 // Clock Source
 //
 
-#if 0
-uni_hal_rcc_clksrc_from_e uni_hal_rcc_clksrc_get(uni_hal_rcc_context_t *ctx, uni_hal_core_periph_e target) {
-    uni_hal_rcc_clksrc_from_e result = UNI_HAL_RCC_CLKSRC_FROM_UNKNOWN;
-    if (uni_hal_rcc_is_inited(ctx)) {
+uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
+    uni_hal_rcc_clksrc_e result = UNI_HAL_RCC_CLKSRC_UNKNOWN;
+    if (uni_hal_rcc_is_inited()) {
         switch (target) {
             case UNI_HAL_CORE_PERIPH_RTC:
                 uni_hal_pwr_stm_set_backup_access(true);
                 switch (LL_RCC_GetRTCClockSource()) {
                     case LL_RCC_RTC_CLKSOURCE_NONE:
-                        result = UNI_HAL_RCC_CLKSRC_FROM_NONE;
+                        result = UNI_HAL_RCC_CLKSRC_NONE;
                         break;
                     case LL_RCC_RTC_CLKSOURCE_LSE:
-                        result = UNI_HAL_RCC_CLKSRC_FROM_LSE;
+                        result = UNI_HAL_RCC_CLKSRC_LSE;
                         break;
                     case LL_RCC_RTC_CLKSOURCE_LSI:
-                        result = UNI_HAL_RCC_CLKSRC_FROM_LSI;
+                        result = UNI_HAL_RCC_CLKSRC_LSI;
                         break;
                     case LL_RCC_RTC_CLKSOURCE_HSE_DIV32:
-                        result = UNI_HAL_RCC_CLKSRC_FROM_HSE_DIV_32;
+                        result = UNI_HAL_RCC_CLKSRC_HSE_DIV_32;
                         break;
                     default:
                         break;
@@ -903,18 +1005,18 @@ uni_hal_rcc_clksrc_from_e uni_hal_rcc_clksrc_get(uni_hal_rcc_context_t *ctx, uni
 }
 
 
-bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_from_e source) {
+bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e source) {
     bool result = false;
 
     if (uni_hal_rcc_is_inited()) {
         switch (target) {
             case UNI_HAL_CORE_PERIPH_RTC: {
                 uint32_t src = LL_RCC_RTC_CLKSOURCE_NONE;
-                if (source == UNI_HAL_RCC_CLKSRC_FROM_LSE) {
+                if (source == UNI_HAL_RCC_CLKSRC_LSE) {
                     src = LL_RCC_RTC_CLKSOURCE_LSE;
-                } else if (source == UNI_HAL_RCC_CLKSRC_FROM_LSI) {
+                } else if (source == UNI_HAL_RCC_CLKSRC_LSI) {
                     src = LL_RCC_RTC_CLKSOURCE_LSI;
-                } else if (source == UNI_HAL_RCC_CLKSRC_FROM_HSE_DIV_32) {
+                } else if (source == UNI_HAL_RCC_CLKSRC_HSE_DIV_32) {
                     src = LL_RCC_RTC_CLKSOURCE_HSE_DIV32;
                 } else {
                     src = LL_RCC_RTC_CLKSOURCE_NONE;
@@ -933,7 +1035,6 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_fro
 
     return result;
 }
-#endif
 
 bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config)
 {
@@ -943,4 +1044,96 @@ bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config)
         result = true;
     }
     return result;
+}
+
+
+uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e clock_source, uint32_t clock_divider) {
+    bool result = false;
+    if (mco_index == 0 && (clock_divider == 1 || clock_divider == 2 || clock_divider == 4 || clock_divider == 8 || clock_divider == 16)) {
+        // configure pin
+        uni_hal_gpio_pin_context_t pin = {
+                .gpio_bank = UNI_HAL_CORE_PERIPH_GPIO_A,
+                .gpio_pin = UNI_HAL_GPIO_PIN_8,
+                .gpio_speed = UNI_HAL_GPIO_SPEED_3,
+                .gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP,
+                .alternate = UNI_HAL_GPIO_ALTERNATE_0,
+        };
+        result = uni_hal_gpio_pin_init(&pin);
+
+        uint32_t source = UINT32_MAX;
+        uint32_t prescaler = UINT32_MAX;
+        switch (clock_source) {
+            case UNI_HAL_RCC_CLKSRC_HSI:
+                source = LL_RCC_MCO1SOURCE_HSI;
+                break;
+            case UNI_HAL_RCC_CLKSRC_LSE:
+                source = LL_RCC_MCO1SOURCE_LSE;
+                break;
+            case UNI_HAL_RCC_CLKSRC_HSE:
+                source = LL_RCC_MCO1SOURCE_HSE;
+                break;
+            case UNI_HAL_RCC_CLKSRC_PLL1R:
+                source = LL_RCC_MCO1SOURCE_PLLCLK;
+                break;
+            case UNI_HAL_RCC_CLKSRC_HSI48:
+                source = LL_RCC_MCO1SOURCE_HSI48;
+                break;
+            case UNI_HAL_RCC_CLKSRC_SYSCLK:
+                source = LL_RCC_MCO1SOURCE_SYSCLK;
+                break;
+            case UNI_HAL_RCC_CLKSRC_MSI:
+                source = LL_RCC_MCO1SOURCE_MSI;
+                break;
+            case UNI_HAL_RCC_CLKSRC_LSI:
+                source = LL_RCC_MCO1SOURCE_LSI;
+                break;
+            default:
+                break;
+        }
+
+        switch (clock_divider) {
+            case 1:
+                prescaler = LL_RCC_MCO1_DIV_1;
+                break;
+            case 2:
+                prescaler = LL_RCC_MCO1_DIV_2;
+                break;
+            case 4:
+                prescaler = LL_RCC_MCO1_DIV_4;
+                break;
+            case 8:
+                prescaler = LL_RCC_MCO1_DIV_8;
+                break;
+            case 16:
+                prescaler = LL_RCC_MCO1_DIV_16;
+                break;
+            default:
+                break;
+        }
+
+        if (source != UINT32_MAX && prescaler != UINT32_MAX) {
+            LL_RCC_ConfigMCO(source, prescaler);
+            result = true;
+        }
+    }
+    return result;
+}
+
+
+//
+// STM32L4 - Interrupts
+//
+
+void NMI_Handler(void) {
+    if (LL_RCC_IsActiveFlag_HSECSS()) {
+        LL_RCC_ClearFlag_HSECSS();
+        g_uni_hal_rcc_config->hse_enable = false;
+
+        g_uni_hal_rcc_status.hse_inited = false;
+        g_uni_hal_rcc_status.pll_inited = false;
+        g_uni_hal_rcc_status.sys_inited = false;
+
+        _uni_hal_stm_rcc_pll();
+        _uni_hal_stm_rcc_sysclk();
+    }
 }

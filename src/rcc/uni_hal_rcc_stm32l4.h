@@ -79,12 +79,8 @@ typedef struct {
     bool                                 hse_enable;
     bool                                 hse_bypass;
     bool                                 hse_css;
-
-    bool                                 csi_enable;
-
     bool                                 lse_enable;
-
-    uni_hal_rcc_stm32l4_config_pll_t      pll[3];
+    uni_hal_rcc_stm32l4_config_pll_t      pll[1]; //TODO: add support for PLL2 and PLL3
     uni_hal_rcc_stm32l4_config_timeout_t  timeout;
 } uni_hal_rcc_stm32l4_config_t;
 
