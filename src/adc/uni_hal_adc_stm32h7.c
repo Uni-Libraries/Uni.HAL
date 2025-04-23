@@ -13,10 +13,9 @@
 // Uni.Common
 #include <uni_common.h>
 
-// uni_hal
+// Uni.HAL
 #include "adc/uni_hal_adc.h"
 #include "rcc/uni_hal_rcc.h"
-#include "systick/uni_hal_systick.h"
 
 
 
@@ -564,37 +563,6 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     return result;
 }
 
-
-uint16_t uni_hal_adc_get_rank_raw(const uni_hal_adc_context_t *ctx, uint32_t rank) {
-    uint16_t result = UINT16_MAX;
-    if (uni_hal_adc_is_inited(ctx) && rank < ctx->config.channels_count) {
-        const volatile uint16_t *array = ctx->config.data;
-        if (array != nullptr) {
-            result = array[rank];
-        }
-    }
-    return result;
-}
-
-
-uint16_t uni_hal_adc_get_channel_raw(const uni_hal_adc_context_t *ctx, uint32_t channel_idx) {
-    uint16_t result = INT16_MAX;
-
-    if (uni_hal_adc_is_inited(ctx)) {
-        for (size_t rank_idx = 0; rank_idx < uni_common_math_min(ctx->config.channels_count, UNI_HAL_ADC_CHANNELS_MAX);
-             rank_idx++) {
-            if (ctx->config.channels[rank_idx] == channel_idx) {
-                const volatile uint16_t *array = ctx->config.data;
-                if (array != nullptr) {
-                    result = array[rank_idx];
-                    break;
-                }
-            }
-        }
-    }
-
-    return result;
-}
 
 uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t channel) {
     uint16_t result = UINT16_MAX;
