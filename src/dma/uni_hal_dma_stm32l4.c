@@ -19,7 +19,8 @@
 // Defines
 //
 
-#define UNI_HAL_DMA_INTERRUPT_PRIORITY (2U)
+#define UNI_HAL_DMA_INTERRUPT_PRIORITY (4U)
+
 
 
 //
@@ -80,7 +81,7 @@ void DMA2_Channel5_IRQHandler(void) {}
  * @param module DMA module to retrieve
  * @return module handle
  */
-DMA_TypeDef *_uni_hal_dma_get_module(uni_hal_core_periph_e module) {
+DMA_TypeDef *uni_hal_dma_stm32l4_get_module(uni_hal_core_periph_e module) {
     DMA_TypeDef *result = NULL;
     switch (module) {
     case UNI_HAL_CORE_PERIPH_DMA_1:
@@ -102,7 +103,7 @@ DMA_TypeDef *_uni_hal_dma_get_module(uni_hal_core_periph_e module) {
  * @param channel DMA channel to get
  * @return DMA channel reg value
  */
-uint32_t _uni_hal_dma_get_channel(uni_hal_dma_channel_e channel) {
+uint32_t uni_hal_dma_stm32l4_get_channel(uni_hal_dma_channel_e channel) {
     uint32_t result = 0U;
     switch (channel) {
     case UNI_HAL_DMA_CHANNEL_1:
@@ -277,41 +278,98 @@ uint32_t _uni_hal_dma_get_request(uni_hal_dma_request_e request) {
 
 bool uni_hal_dma_init(uni_hal_dma_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL) {
-        // Parse configuration
-        DMA_TypeDef *dma_module = _uni_hal_dma_get_module(ctx->config.instance);
-        uint32_t dma_interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);
-        uint32_t dma_channel = _uni_hal_dma_get_channel(ctx->config.channel);
-        //TODO uint32_t dma_request = _uni_hal_dma_get_request(ctx->config.request);
-        //TODO uint32_t dma_direction = _uni_hal_dma_get_direction(ctx->config.direction);
 
-
-        // Enable clock
+    if (ctx != nullptr && ctx->state.initialized == false)
+    {
         result = uni_hal_rcc_clk_set(ctx->config.instance, true);
         if (result) {
             // Enable interrupt
+            uint32_t dma_interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);
             NVIC_SetPriority(dma_interrupt, UNI_HAL_DMA_INTERRUPT_PRIORITY);
             NVIC_EnableIRQ(dma_interrupt);
 
-            // configure
-            //TODO LL_DMA_SetPeriphRequest(dma_module, dma_channel, dma_request);
-            //TODO LL_DMA_SetDataTransferDirection(dma_module, dma_channel, dma_direction);
-            LL_DMA_SetChannelPriorityLevel(dma_module, dma_channel, LL_DMA_PRIORITY_LOW);
-            LL_DMA_SetMode(dma_module, dma_channel, LL_DMA_MODE_CIRCULAR);
-            LL_DMA_SetPeriphIncMode(dma_module, dma_channel, LL_DMA_PERIPH_NOINCREMENT);
-            LL_DMA_SetMemoryIncMode(dma_module, dma_channel, LL_DMA_MEMORY_INCREMENT);
-            LL_DMA_SetPeriphSize(dma_module, dma_channel, LL_DMA_PDATAALIGN_HALFWORD);
-            LL_DMA_SetMemorySize(dma_module, dma_channel, LL_DMA_MDATAALIGN_HALFWORD);
-
-            //TODO LL_DMA_ConfigAddresses(dma_module, dma_channel, from, to, dma_direction);
-            //TODO LL_DMA_SetDataLength(dma_module, dma_channel, length);
-
-            LL_DMA_EnableIT_TC(dma_module, dma_channel);
-            LL_DMA_EnableIT_TE(dma_module, dma_channel);
-
-            LL_DMA_EnableChannel(dma_module, dma_channel);
             ctx->state.initialized = true;
         }
+    }
+
+    return result;
+}
+
+
+bool uni_hal_dma_enable(uni_hal_dma_context_t *ctx, bool val) {
+    bool result = false;
+    if (uni_hal_dma_is_inited(ctx)) {
+        DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
+        uint32_t channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
+        val != false ? LL_DMA_EnableChannel(module, channel) : LL_DMA_DisableChannel(module, channel);
+        result = true;
+    }
+    return result;
+}
+
+
+
+//
+// Function/Setters
+//
+
+bool uni_hal_dma_set_fifo_mode(uni_hal_dma_context_t *ctx, bool val) {
+    (void)ctx;
+    (void)val;
+    return false;
+}
+
+
+bool uni_hal_dma_set_mode(uni_hal_dma_context_t *ctx, uni_hal_dma_mode_e val) {
+    bool result = false;
+    if (uni_hal_dma_is_inited(ctx)) {
+        DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
+        uint32_t channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
+
+        uint32_t mode;
+        switch (val) {
+        case UNI_HAL_DMA_MODE_CIRCULAR:
+            mode = LL_DMA_MODE_CIRCULAR;
+            break;
+        case UNI_HAL_DMA_MODE_NORMAL:
+        default:
+            mode = LL_DMA_MODE_NORMAL;
+            break;
+        }
+        LL_DMA_SetMode(module, channel, mode);
+
+        result = true;
+    }
+
+    return result;
+}
+
+
+bool uni_hal_dma_set_priority(uni_hal_dma_context_t *ctx, uni_hal_dma_priority_e val) {
+    bool result = false;
+    if (uni_hal_dma_is_inited(ctx)) {
+        DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
+        uint32_t channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
+
+        uint32_t priority;
+        switch (val) {
+        case UNI_HAL_DMA_PRIORITY_MEDIUM:
+            priority = LL_DMA_PRIORITY_MEDIUM;
+            break;
+        case UNI_HAL_DMA_PRIORITY_HIGH:
+            priority = LL_DMA_PRIORITY_HIGH;
+            break;
+        case UNI_HAL_DMA_PRIORITY_VERYHIGH:
+            priority = LL_DMA_PRIORITY_VERYHIGH;
+            break;
+        case UNI_HAL_DMA_PRIORITY_LOW:
+        default:
+            priority = LL_DMA_PRIORITY_LOW;
+            break;
+        }
+
+        LL_DMA_SetChannelPriorityLevel(module, channel, priority);
+        result = true;
     }
 
     return result;

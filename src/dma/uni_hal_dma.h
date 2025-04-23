@@ -14,8 +14,9 @@
 #include "dma/uni_hal_dma_enum.h"
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
     #include"dma/uni_hal_dma_stm32h7.h"
+#elif defined(UNI_HAL_TARGET_MCU_STM32L496)
+    #include"dma/uni_hal_dma_stm32l4.h"
 #endif
-
 
 //
 // Typedefs
