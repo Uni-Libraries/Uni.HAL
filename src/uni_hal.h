@@ -9,6 +9,7 @@ extern "C" {
 #include "crc/uni_hal_crc.h"
 #include "dma/uni_hal_dma.h"
 #include "dwt/uni_hal_dwt.h"
+#include "flash/uni_hal_flash.h"
 #include "gpio/uni_hal_gpio.h"
 #include "i2c/uni_hal_i2c.h"
 #include "io/uni_hal_io.h"
