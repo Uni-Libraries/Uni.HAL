@@ -1,13 +1,51 @@
-#include "flash/uni_hal_flash.h"
+//
+// Includes
+//
 
+// st
+#include <stm32h7xx_hal.h>
 #include <stm32h7xx_hal_flash.h>
 #include <stm32h7xx_hal_flash_ex.h>
-#include "stm32h7xx_hal.h"
 
-/*size_t uni_hal_flash_get_size()
+// FreeRTOS
+//TODO: guard with define
+#include <FreeRTOS.h>
+#include <task.h>
+
+// Uni.HAL
+#include "flash/uni_hal_flash.h"
+
+
+
+//
+// Private
+//
+
+bool _uni_hal_flash_lock_ob()
 {
+    return HAL_FLASH_OB_Lock() == HAL_OK;
+}
 
-}*/
+
+bool _uni_hal_flash_lock()
+{
+    return HAL_FLASH_Lock() == HAL_OK;
+}
+
+bool _uni_hal_flash_unlock()
+{
+    return HAL_FLASH_Unlock() == HAL_OK;
+}
+
+bool _uni_hal_flash_unlock_ob()
+{
+    return HAL_FLASH_OB_Unlock() == HAL_OK;
+}
+
+
+//
+// Public
+//
 
 size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *dst)
 {
@@ -90,45 +128,40 @@ bool uni_hal_flash_erase(size_t addr, size_t size)
 
 bool uni_hal_flash_swap_banks(void)
 {
-   HAL_StatusTypeDef status;
-   FLASH_OBProgramInitTypeDef OBinit = {0};
+    bool result = false;
 
-    status = HAL_FLASH_Unlock();
-    if (status != HAL_OK)
+    taskENTER_CRITICAL();
+
+    if (_uni_hal_flash_unlock() && _uni_hal_flash_unlock_ob())
     {
-        return 0;
+        FLASH_OBProgramInitTypeDef OBInit = {0};
+
+        HAL_FLASHEx_OBGetConfig(&OBInit);
+        OBInit.Banks = FLASH_BANK_1;
+        HAL_FLASHEx_OBGetConfig(&OBInit);
+
+        OBInit.OptionType = OPTIONBYTE_USER;
+        OBInit.USERType   = OB_USER_SWAP_BANK;
+        if ((OBInit.USERConfig & OB_SWAP_BANK_ENABLE) == OB_SWAP_BANK_DISABLE) {
+            OBInit.USERConfig = OB_SWAP_BANK_ENABLE;
+        } else {
+            OBInit.USERConfig = OB_SWAP_BANK_DISABLE;
+        }
+
+        result = HAL_FLASHEx_OBProgram(&OBInit) == HAL_OK;
+        if (result)
+        {
+            HAL_FLASH_OB_Launch();
+            SCB_InvalidateICache();
+            NVIC_SystemReset();
+        }
     }
 
-    status = HAL_FLASH_OB_Unlock();
-    if (status != HAL_OK)
-    {
-        HAL_FLASH_Lock();
-        return 0;
-    }
+    // unreachable on success
+    _uni_hal_flash_lock_ob();
+    _uni_hal_flash_lock();
+    taskEXIT_CRITICAL();
 
-    HAL_FLASHEx_OBGetConfig(&OBinit);
-
-    bool swap_enabled = (OBinit.USERConfig & OB_SWAP_BANK_ENABLE) == OB_SWAP_BANK_ENABLE;
-
-    OBinit.OptionType = OPTIONBYTE_USER;
-    OBinit.USERType = OB_USER_SWAP_BANK;
-    OBinit.USERConfig = swap_enabled ? OB_SWAP_BANK_DISABLE : OB_SWAP_BANK_ENABLE;
-
-    status = HAL_FLASHEx_OBProgram(&OBinit);
-    if (status != HAL_OK)
-    {
-        HAL_FLASH_OB_Lock();
-        HAL_FLASH_Lock();
-        return 0;
-    }
-
-    HAL_FLASH_OB_Launch();
-    HAL_FLASH_OB_Lock();
-    HAL_FLASH_Lock();
-    NVIC_SystemReset();
-
-    HAL_FLASH_OB_Lock();
-    HAL_FLASH_Lock();
-    return 1;
+    return result;
 }
 
