@@ -20,6 +20,30 @@ IRQn_Type uni_hal_core_irq_getnum(uni_hal_core_irq_e irq)
 
     switch(irq)
     {
+    case UNI_HAL_CORE_IRQ_I2C_1_IRQ1:
+        result = I2C1_EV_IRQn;
+        break;
+    case UNI_HAL_CORE_IRQ_I2C_1_IRQ2:
+        result = I2C1_ER_IRQn;
+        break;
+    case UNI_HAL_CORE_IRQ_I2C_2_IRQ1:
+        result = I2C2_EV_IRQn;
+        break;
+    case UNI_HAL_CORE_IRQ_I2C_2_IRQ2:
+        result = I2C2_ER_IRQn;
+        break;
+    case UNI_HAL_CORE_IRQ_I2C_3_IRQ1:
+        result = I2C3_EV_IRQn;
+        break;
+    case UNI_HAL_CORE_IRQ_I2C_3_IRQ2:
+        result = I2C3_ER_IRQn;
+        break;
+    case UNI_HAL_CORE_IRQ_I2C_4_IRQ1:
+        result = I2C4_EV_IRQn;
+        break;
+    case UNI_HAL_CORE_IRQ_I2C_4_IRQ2:
+        result = I2C4_ER_IRQn;
+        break;
     case UNI_HAL_CORE_IRQ_TIM_1:
         result = TIM1_CC_IRQn;
         break;

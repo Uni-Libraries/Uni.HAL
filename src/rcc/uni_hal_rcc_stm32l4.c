@@ -412,14 +412,14 @@ bool uni_hal_rcc_init() {
     _uni_hal_rcc_update_status_reg();
     // TODO: move to another file
 
-    // HSE/HSI
+    // HSE
     if (g_uni_hal_rcc_config->hse_enable)
     {
         _uni_hal_stm_rcc_hse();
     }
-    if (!g_uni_hal_rcc_status.hse_inited) {
-        _uni_hal_stm_rcc_hsi();
-    }
+
+    // HSI
+    _uni_hal_stm_rcc_hsi();
 
     // LSE/LSI
     _uni_hal_stm_rcc_lse();

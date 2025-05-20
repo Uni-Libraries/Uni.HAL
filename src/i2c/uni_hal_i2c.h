@@ -19,6 +19,14 @@ extern "C" {
 
 
 //
+// Defines
+//
+
+#define UNI_HAL_I2C_MAXINSTANCES (4U)
+
+
+
+//
 // Typedefs
 //
 
@@ -53,6 +61,16 @@ typedef struct {
      * SDA pin
      */
     uni_hal_gpio_pin_context_t *pin_sda;
+
+    /**
+     * Use interrupts
+     */
+    bool irq_enable;
+
+    /**
+     * IRQ priority
+     */
+    uint32_t irq_priority;
 } uni_hal_i2c_config_t;
 
 
@@ -64,6 +82,11 @@ typedef struct {
      * Initialization state
      */
     bool initialized;
+
+    /**
+     * Task to notify
+     */
+    void* irq_task;
 } uni_hal_i2c_state_t;
 
 

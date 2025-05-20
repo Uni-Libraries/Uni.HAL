@@ -12,6 +12,7 @@ target_sources(st_stm32l4 PRIVATE
     "src_hal/stm32l4xx_hal.c"
     "src_hal/stm32l4xx_hal_can.c"
     "src_hal/stm32l4xx_hal_cortex.c"
+    "src_hal/stm32l4xx_hal_dma.c"
     "src_hal/stm32l4xx_hal_gpio.c"
     "src_hal/stm32l4xx_hal_i2c.c"
     "src_hal/stm32l4xx_hal_i2c_ex.c"
