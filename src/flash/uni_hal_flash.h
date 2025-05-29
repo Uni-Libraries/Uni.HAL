@@ -2,7 +2,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <stm32h7xx_hal.h>
 
 size_t uni_hal_flash_get_size();
 
