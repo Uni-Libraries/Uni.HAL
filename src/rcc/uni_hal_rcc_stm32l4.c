@@ -1010,6 +1010,21 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
 
     if (uni_hal_rcc_is_inited()) {
         switch (target) {
+            case UNI_HAL_CORE_PERIPH_LPUART_1: {
+                    uint32_t src = LL_RCC_LPUART1_CLKSOURCE_SYSCLK;
+                    if (source == UNI_HAL_RCC_CLKSRC_PCLK1) {
+                        src = LL_RCC_LPUART1_CLKSOURCE_PCLK1;
+                    } else if (source == UNI_HAL_RCC_CLKSRC_SYSCLK) {
+                        src = LL_RCC_LPUART1_CLKSOURCE_SYSCLK;
+                    } else if (source == UNI_HAL_RCC_CLKSRC_HSI) {
+                        src = LL_RCC_LPUART1_CLKSOURCE_HSI;
+                    } else if (source == UNI_HAL_RCC_CLKSRC_LSE){
+                        src = LL_RCC_LPUART1_CLKSOURCE_LSE;
+                    }
+                    LL_RCC_SetLPUARTClockSource(src);
+                    result = true;
+                    break;
+            }
             case UNI_HAL_CORE_PERIPH_RTC: {
                 uint32_t src = LL_RCC_RTC_CLKSOURCE_NONE;
                 if (source == UNI_HAL_RCC_CLKSRC_LSE) {

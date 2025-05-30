@@ -188,6 +188,7 @@ static bool _uni_hal_usart_irq_tx_enable(uni_hal_usart_context_t *ctx, bool val)
         if (handle == LPUART1)
         {
             if (val) {
+                LL_LPUART_ClearFlag_TC(handle);
                 LL_LPUART_EnableIT_TXE(handle);
                 LL_LPUART_EnableIT_TC(handle);
             } else {
@@ -199,6 +200,7 @@ static bool _uni_hal_usart_irq_tx_enable(uni_hal_usart_context_t *ctx, bool val)
         else
         {
             if (val) {
+                LL_USART_ClearFlag_TC(handle);
                 LL_USART_EnableIT_TXE(handle);
                 LL_USART_EnableIT_TC(handle);
             } else {
@@ -367,11 +369,17 @@ void UART5_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni
 
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL) {
+    if (ctx != NULL && ctx->pin_rx != NULL && ctx->pin_tx != NULL) {
         // clock
+        if (ctx->instance == UNI_HAL_CORE_PERIPH_LPUART_1)
+        {
+            uni_hal_rcc_clksrc_set(ctx->instance, UNI_HAL_RCC_CLKSRC_PCLK1);
+        }
         result = uni_hal_rcc_clk_set(ctx->instance, true);
 
         // pins
+        ctx->pin_rx->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
+        ctx->pin_tx->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
         result = uni_hal_gpio_pin_init(ctx->pin_rx) && result;
         result = uni_hal_gpio_pin_init(ctx->pin_tx) && result;
 

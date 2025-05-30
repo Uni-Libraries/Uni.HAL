@@ -9,8 +9,10 @@
 #include <stm32l4xx_ll_pwr.h>
 
 // Uni.HAL
-#include "pwr/uni_hal_pwr.h"
 #include "core/uni_hal_core.h"
+#include "pwr/uni_hal_pwr.h"
+#include "pwr/uni_hal_pwr_stm32.h"
+#include "pwr/uni_hal_pwr_stm32l4.h"
 #include "rcc/uni_hal_rcc.h"
 
 //
@@ -54,9 +56,20 @@ bool uni_hal_pwr_init() {
 
 
 //
-// STM324
+// STM32
 //
 
 void uni_hal_pwr_stm32l4_set_backup_access(bool val) {
     val ? LL_PWR_EnableBkUpAccess() : LL_PWR_DisableBkUpAccess();
+}
+
+
+
+//
+// STM32 L4
+//
+
+void uni_hal_pwr_stm_l4_set_vddio2(bool val)
+{
+    val ? LL_PWR_EnableVddIO2() : LL_PWR_DisableVddIO2();
 }
