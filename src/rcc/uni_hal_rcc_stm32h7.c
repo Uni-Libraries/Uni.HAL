@@ -28,7 +28,7 @@
 // Globals
 //
 
-uni_hal_rcc_stm32h7_config_t* g_uni_hal_rcc_config = nullptr;
+uni_hal_rcc_stm32h7_config_t* g_uni_hal_rcc_config = NULL;
 uni_hal_rcc_stm32h7_status_t  g_uni_hal_rcc_status = { 0 };
 
 
@@ -342,7 +342,7 @@ static void _uni_hal_stm_rcc_sysclk(void) {
 
 
 bool uni_hal_rcc_init(void) {
-    if (g_uni_hal_rcc_config != nullptr && !g_uni_hal_rcc_status.inited) {
+    if (g_uni_hal_rcc_config != NULL && !g_uni_hal_rcc_status.inited) {
         // clear status
         _uni_hal_stm_rcc_reset();
 
@@ -1245,7 +1245,7 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
 
 bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t *config) {
     bool result = false;
-    if (config != nullptr) {
+    if (config != NULL) {
         g_uni_hal_rcc_config = config;
         result = true;
     }

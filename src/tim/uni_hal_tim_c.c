@@ -15,7 +15,7 @@
 
 bool uni_hal_tim_is_inited(const uni_hal_tim_context_t *ctx) {
     bool result = false;
-    if(ctx != nullptr){
+    if(ctx != NULL){
         result = ctx->status.inited;
     }
     return result;

@@ -5,6 +5,7 @@
 //
 
 // stdlib
+#include <stdbool.h>
 #include <stdint.h>
 
 // uni_hal

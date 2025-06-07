@@ -39,7 +39,7 @@ UNI_COMMON_COMPILER_WEAK I2C_HandleTypeDef hi2c2 = {0};
 UNI_COMMON_COMPILER_WEAK I2C_HandleTypeDef hi2c3 = {0};
 UNI_COMMON_COMPILER_WEAK I2C_HandleTypeDef hi2c4 = {0};
 
-static uni_hal_i2c_context_t *g_uni_hal_i2c_ctx[UNI_HAL_I2C_MAXINSTANCES] = {nullptr};
+static uni_hal_i2c_context_t *g_uni_hal_i2c_ctx[UNI_HAL_I2C_MAXINSTANCES] = {NULL};
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
     static BaseType_t g_uni_hal_i2c_highprio_woken = pdFALSE;

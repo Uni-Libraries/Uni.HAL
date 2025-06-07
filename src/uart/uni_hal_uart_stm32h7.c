@@ -193,7 +193,7 @@ static bool _uni_hal_usart_irq_rx_enable(uni_hal_usart_context_t *ctx, bool val)
 
 static void _uni_hal_usart_tx_trigger(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_io_r), void *ctx_fn_r) {
     USART_TypeDef *instance = _uni_hal_uart_handle_get(((uni_hal_usart_context_t *) ctx_fn_r)->instance);
-    if (instance != nullptr) {
+    if (instance != NULL) {
         LL_USART_ClearFlag_TC(instance);
         LL_USART_ClearFlag_IDLE(instance);
         LL_USART_EnableIT_TXE_TXFNF(instance);

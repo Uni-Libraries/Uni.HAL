@@ -3,6 +3,7 @@
 //
 
 // stdlib
+#include <stddef.h>
 #include <string.h>
 
 // FreeRTOS
@@ -14,8 +15,8 @@
 // Implementation
 //
 
-__attribute__((unused)) void *calloc(size_t num, size_t size) {
-    void *result = nullptr;
+void *calloc(size_t num, size_t size) {
+    void *result = NULL;
     if (num > 0U && size > 0U) {
         result = pvPortCalloc(num, size);
     }
@@ -23,7 +24,7 @@ __attribute__((unused)) void *calloc(size_t num, size_t size) {
 }
 
 void *malloc(size_t size) {
-    void *result = nullptr;
+    void *result = NULL;
     if (size > 0U) {
         result = pvPortMalloc(size);
     }
@@ -31,7 +32,7 @@ void *malloc(size_t size) {
 }
 
 void free(void *ptr) {
-    if (ptr != nullptr) {
+    if (ptr != NULL) {
         vPortFree(ptr);
     }
 }

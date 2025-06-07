@@ -164,7 +164,7 @@ static bool _uni_hal_usart_irq_rx_enable(uni_hal_usart_context_t *ctx, bool val)
     bool result = false;
     void* handle = _uni_hal_uart_handle_get(ctx->instance);
 
-    if (handle != nullptr)
+    if (handle != NULL)
     {
         if (handle == LPUART1)
         {
@@ -474,7 +474,7 @@ bool uni_hal_usart_baudrate_set(uni_hal_usart_context_t *ctx, uint32_t baudrate)
 
     if (uni_hal_uart_is_inited(ctx)) {
         void* instance = _uni_hal_uart_handle_get(ctx->instance);
-        if (instance != nullptr)
+        if (instance != NULL)
         {
             if (instance == LPUART1)
             {

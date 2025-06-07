@@ -138,6 +138,11 @@ function Get-FreeRTOS-TCP(){
     New-Item    -Path "./freertos_tcp/include_gcc/"                           -ItemType Directory
     Copy-Item   -Path "./~temp/FreeRTOS-Plus-TCP-main/source/portable/Compiler/GCC/*.h" -Destination "./freertos_tcp/include_gcc" -Recurse
 
+    Remove-Item -Path "./freertos_tcp/include_msvc"                            -Recurse -ErrorAction SilentlyContinue
+    New-Item    -Path "./freertos_tcp/include_msvc/"                           -ItemType Directory
+    Copy-Item   -Path "./~temp/FreeRTOS-Plus-TCP-main/source/portable/Compiler/MSVC/*.h" -Destination "./freertos_tcp/include_msvc" -Recurse
+
+
     Remove-Item -Path "./freertos_tcp/src_buffer"                            -Recurse -ErrorAction SilentlyContinue
     New-Item    -Path "./freertos_tcp/src_buffer/"                           -ItemType Directory
     Copy-Item   -Path "./~temp/FreeRTOS-Plus-TCP-main/source/portable/BufferManagement/*.c" -Destination "./freertos_tcp/src_buffer" -Recurse
@@ -145,6 +150,10 @@ function Get-FreeRTOS-TCP(){
     Remove-Item -Path "./freertos_tcp/src_driver/linux"                            -Recurse -ErrorAction SilentlyContinue
     New-Item    -Path "./freertos_tcp/src_driver/linux/"                           -ItemType Directory -ErrorAction SilentlyContinue
     Copy-Item   -Path "./~temp/FreeRTOS-Plus-TCP-main/source/portable/NetworkInterface/linux/*.c" -Destination "./freertos_tcp/src_driver/linux" -Recurse
+
+    Remove-Item -Path "./freertos_tcp/src_driver/windows"                            -Recurse -ErrorAction SilentlyContinue
+    New-Item    -Path "./freertos_tcp/src_driver/windows/"                           -ItemType Directory -ErrorAction SilentlyContinue
+    Copy-Item   -Path "./~temp/FreeRTOS-Plus-TCP-main/source/portable/NetworkInterface/WinPCap/*.c" -Destination "./freertos_tcp/src_driver/windows" -Recurse
 
     New-Item    -Path "./freertos_tcp/src_driver/stm32h7_hal/"                           -ItemType Directory -ErrorAction SilentlyContinue
     Remove-Item -Path "./freertos_tcp/src_driver/stm32h7_hal/NetworkInterface.c"         -ErrorAction SilentlyContinue

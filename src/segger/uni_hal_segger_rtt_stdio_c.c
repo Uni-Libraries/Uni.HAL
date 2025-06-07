@@ -97,7 +97,7 @@ bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t *ctx) {
 
 bool uni_hal_segger_rtt_stdio_is_inited(const uni_hal_segger_context_t *ctx) {
     bool result = false;
-    if (ctx != nullptr) {
+    if (ctx != NULL) {
         result = ctx->initialized;
     }
     return result;

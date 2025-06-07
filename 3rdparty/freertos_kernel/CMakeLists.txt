@@ -78,8 +78,9 @@ else()
 endif()
 
 # compile options
-target_compile_options(freertos_kernel PRIVATE -Wno-unused-parameter)
-
+if(NOT MSVC)
+    target_compile_options(freertos_kernel PRIVATE -Wno-unused-parameter)
+endif()
 
 
 #

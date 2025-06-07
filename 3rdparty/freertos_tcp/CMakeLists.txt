@@ -7,6 +7,47 @@ add_library(freertos_tcp STATIC)
 
 
 #
+# Deps
+#
+
+if(WIN32)
+  set(NPCAP_SDK_ROOT "C:/npcap-sdk" CACHE PATH "Path to the Npcap SDK")
+
+  find_path(
+    PCAP_INCLUDE_DIR
+    NAMES pcap.h
+    HINTS ${NPCAP_SDK_ROOT}
+    PATH_SUFFIXES Include
+  )
+
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(NPCAP_LIB_ARCH_PATH "Lib/x64")
+  else()
+    set(NPCAP_LIB_ARCH_PATH "Lib")
+  endif()
+
+  find_library(
+    PCAP_LIBRARY
+    NAMES wpcap
+    HINTS ${NPCAP_SDK_ROOT}
+    PATH_SUFFIXES ${NPCAP_LIB_ARCH_PATH}
+  )
+
+  find_library(
+    PACKET_LIBRARY
+    NAMES Packet
+    HINTS ${NPCAP_SDK_ROOT}
+    PATH_SUFFIXES ${NPCAP_LIB_ARCH_PATH}
+  )
+
+  if(NOT PCAP_INCLUDE_DIR OR NOT PCAP_LIBRARY OR NOT PACKET_LIBRARY)
+    message(FATAL_ERROR "Could not find Npcap SDK components in ${NPCAP_SDK_ROOT}")
+  endif()
+endif()
+
+
+
+#
 # Sources
 #
 target_sources(freertos_tcp PRIVATE
@@ -62,8 +103,12 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     target_sources(freertos_tcp PRIVATE "src_driver/stm32h7_hal/NetworkInterface.c")
     set_source_files_properties("src_driver/stm32h7_hal/NetworkInterface.c" PROPERTIES COMPILE_FLAGS "-Wno-expansion-to-defined -Wno-unused-function -Wno-unused-parameter")
 elseif(UNI_HAL_TARGET_MCU STREQUAL "PC")
-    target_sources(freertos_tcp PRIVATE "src_driver/linux/NetworkInterface.c")
-    set_source_files_properties("src_driver/linux/NetworkInterface.c" PROPERTIES COMPILE_FLAGS -Wno-unused-parameter)
+    if(WIN32)
+        target_sources(freertos_tcp PRIVATE "src_driver/windows/NetworkInterface.c")
+    else()
+        target_sources(freertos_tcp PRIVATE "src_driver/linux/NetworkInterface.c")
+        set_source_files_properties("src_driver/linux/NetworkInterface.c" PROPERTIES COMPILE_FLAGS -Wno-unused-parameter)
+    endif()
 endif()
 
 
@@ -73,10 +118,17 @@ endif()
 #
 
 target_include_directories(freertos_tcp PUBLIC "include")
-target_include_directories(freertos_tcp PUBLIC "include_gcc")
 target_include_directories(freertos_tcp PRIVATE "include_driver")
 target_include_directories(freertos_tcp PUBLIC "include_iperf")
 target_include_directories(freertos_tcp PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/freertos_tcp_config/")
+if(MSVC)
+    target_include_directories(freertos_tcp PUBLIC "include_msvc")
+else()
+    target_include_directories(freertos_tcp PUBLIC "include_gcc")
+endif()
+if(WIN32)
+    target_include_directories(freertos_tcp PUBLIC ${PCAP_INCLUDE_DIR})
+endif()
 
 
 
@@ -86,10 +138,15 @@ target_include_directories(freertos_tcp PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/free
 
 target_link_libraries(freertos_tcp PUBLIC freertos_kernel)
 if(UNI_HAL_TARGET_MCU STREQUAL "PC")
-    target_link_libraries(freertos_tcp PUBLIC pcap)
+    if(WIN32)
+        target_link_libraries(freertos_tcp PRIVATE ${PCAP_LIBRARY})
+    else()
+        target_link_libraries(freertos_tcp PUBLIC pcap)
+    endif()
 elseif(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     target_link_libraries(freertos_tcp PUBLIC st_stm32h7)
 endif()
+
 
 
 #
@@ -103,9 +160,11 @@ else()
     target_compile_features(freertos_tcp PRIVATE c_std_23)
 endif()
 
-target_compile_options(freertos_tcp PRIVATE -Wno-array-bounds)
-target_compile_options(freertos_tcp PRIVATE -Wno-strict-aliasing)
-target_compile_options(freertos_tcp PRIVATE -Wno-unused-but-set-variable)
+if(NOT MSVC)
+    target_compile_options(freertos_tcp PRIVATE -Wno-array-bounds)
+    target_compile_options(freertos_tcp PRIVATE -Wno-strict-aliasing)
+    target_compile_options(freertos_tcp PRIVATE -Wno-unused-but-set-variable)
+endif()
 
 
 

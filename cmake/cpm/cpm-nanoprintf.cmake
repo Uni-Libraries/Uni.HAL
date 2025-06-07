@@ -1,7 +1,9 @@
 CPMAddPackage(
         NAME nanoprintf
         GITHUB_REPOSITORY charlesnicholson/nanoprintf
-        GIT_TAG 43828b53048ab342540e21cf967dc5f81807c698
+        GIT_TAG f02dc69c45a422e9156b11a44f21e5e0fd222076
+        VERSION 2025.05.26
+        DOWNLOAD_ONLY TRUE
 )
 
 if(nanoprintf_ADDED)

@@ -2,7 +2,12 @@
 // Includes
 //
 
+// stdlib
+#include <stddef.h>
+
+// uni.hal
 #include "gpio/uni_hal_gpio.h"
+
 
 
 //
@@ -11,7 +16,7 @@
 
 bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t* ctx_pin) {
     bool result = false;
-    if (ctx_pin != nullptr) {
+    if (ctx_pin != NULL) {
         ctx_pin->inited = true;
         result = true;
     }
@@ -22,7 +27,7 @@ bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t* ctx_pin) {
 
 bool uni_hal_gpio_pin_is_inited(const uni_hal_gpio_pin_context_t* ctx_pin){
     bool result = false;
-    if (ctx_pin != nullptr) {
+    if (ctx_pin != NULL) {
         result = ctx_pin->inited;
     }
 

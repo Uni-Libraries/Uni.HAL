@@ -2,6 +2,9 @@
 // Includes
 //
 
+// stdlib
+#include <stddef.h>
+
 // Uni.HAL
 #include "periph/uni_hal_periph_mcp23017.h"
 
@@ -38,7 +41,7 @@ static bool _uni_hal_mcp23017_write(uni_hal_mcp23017_context_t* ctx, uint8_t add
 
 bool uni_hal_mcp23017_init(uni_hal_mcp23017_context_t* ctx) {
     bool result = false;
-    if (ctx != nullptr && ctx->state.initialized != true) {
+    if (ctx != NULL && ctx->state.initialized != true) {
         result = uni_hal_i2c_is_inited(ctx->config.i2c);
         if (!result) {
             result = uni_hal_i2c_init(ctx->config.i2c);
@@ -51,7 +54,7 @@ bool uni_hal_mcp23017_init(uni_hal_mcp23017_context_t* ctx) {
 
 
 bool uni_hal_mcp23017_is_inited(const uni_hal_mcp23017_context_t* ctx) {
-    return ctx != nullptr && ctx->state.initialized != false;
+    return ctx != NULL && ctx->state.initialized != false;
 }
 
 

@@ -25,7 +25,7 @@ bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
         ctx->buf_rx.handle = xStreamBufferCreateStatic(ctx->buf_rx.size, 1U, ctx->buf_rx.array, &ctx->buf_rx.cb);
         ctx->buf_tx.handle = xStreamBufferCreateStatic(ctx->buf_tx.size, 1U, ctx->buf_tx.array, &ctx->buf_tx.cb);
 
-        if (ctx->buf_rx.handle != nullptr && ctx->buf_tx.handle != nullptr) {
+        if (ctx->buf_rx.handle != NULL && ctx->buf_tx.handle != NULL) {
             result = true;
         }
     }
@@ -40,7 +40,7 @@ bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
 
 size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
     size_t result = 0;
-    if (ctx != nullptr) {
+    if (ctx != NULL) {
         result = xStreamBufferBytesAvailable(ctx->buf_rx.handle);
     }
     return result;
@@ -49,7 +49,7 @@ size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
 
 bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
     bool result = false;
-    if (ctx != nullptr) {
+    if (ctx != NULL) {
         result = xStreamBufferReset(ctx->buf_rx.handle);
     }
     return result;

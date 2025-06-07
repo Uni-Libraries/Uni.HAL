@@ -9,6 +9,7 @@ extern "C" {
 //
 
 // stdlib
+#include <stdbool.h>
 #include <stdint.h>
 
 
