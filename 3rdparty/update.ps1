@@ -114,6 +114,9 @@ function Get-FreeRTOS-Kernel(){
     New-Item    -Path "./freertos_kernel/src_port/pc_posix/utils/" -ItemType Directory
     Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/utils/*.c" -Destination "./freertos_kernel/src_port/pc_posix/utils/" -Recurse
     Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/utils/*.h" -Destination "./freertos_kernel/src_port/pc_posix/utils/" -Recurse
+    New-Item    -Path "./freertos_kernel/src_port/pc_windows/" -ItemType Directory
+    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/MSVC-MingW/*.c" -Destination "./freertos_kernel/src_port/pc_windows/" -Recurse
+    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/MSVC-MingW/*.h" -Destination "./freertos_kernel/src_port/pc_windows/" -Recurse
 
     Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/LICENSE.md" -Destination "./freertos_kernel"
 }

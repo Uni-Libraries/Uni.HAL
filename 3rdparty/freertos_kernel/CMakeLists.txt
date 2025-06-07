@@ -42,6 +42,7 @@ target_include_directories(freertos_kernel PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/f
 if(UNI_HAL_TARGET_MCU STREQUAL "PC")
     if(WIN32)
         target_include_directories(freertos_kernel PUBLIC "src_port/pc_windows")
+        target_sources(freertos_kernel PRIVATE "src_port/pc_windows/port.c")
     else()
         target_include_directories(freertos_kernel PUBLIC "src_port/pc_posix")
         target_sources(freertos_kernel PRIVATE "src_port/pc_posix/port.c")
