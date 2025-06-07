@@ -24,7 +24,7 @@ static IWDG_TypeDef *_uni_hal_iwdg_handle_get(uni_hal_core_periph_e instance) {
             result = IWDG1;
             break;
         default:
-            result = nullptr;
+            result = NULL;
             break;
     }
     return result;
@@ -39,9 +39,9 @@ static IWDG_TypeDef *_uni_hal_iwdg_handle_get(uni_hal_core_periph_e instance) {
 bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx) {
     bool result = false;
 
-    if (ctx != nullptr) {
+    if (ctx != NULL) {
         IWDG_TypeDef *instance = _uni_hal_iwdg_handle_get(ctx->instance);
-        if (instance != nullptr) {
+        if (instance != NULL) {
 
             uint32_t prescaler = LL_IWDG_PRESCALER_4;
             switch (ctx->watchdog_prescaler) {

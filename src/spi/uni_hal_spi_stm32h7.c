@@ -24,7 +24,7 @@
 // Globals
 //
 
-uni_hal_spi_context_t *g_uni_hal_spi_ctx[6] = {nullptr};
+uni_hal_spi_context_t *g_uni_hal_spi_ctx[6] = {NULL};
 
 
 //
@@ -255,7 +255,7 @@ static SPI_TypeDef *_uni_hal_spi_handle_get(uni_hal_core_periph_e instance) {
             result = SPI6; //-V2571
             break;
         default:
-            result = nullptr;
+            result = NULL;
             break;
     }
     return result;
@@ -265,7 +265,7 @@ static bool _uni_hal_spi_clear_flags(uni_hal_core_periph_e instance) {
     bool result = false;
 
     SPI_TypeDef *handle = _uni_hal_spi_handle_get(instance);
-    if (handle != nullptr) {
+    if (handle != NULL) {
         LL_SPI_ClearFlag_OVR(handle);
         LL_SPI_ClearFlag_FRE(handle);
         LL_SPI_ClearFlag_CRCERR(handle);
@@ -369,28 +369,28 @@ static bool _uni_hal_spi_init_rcc(uni_hal_spi_context_t *ctx) {
 static bool _uni_hal_spi_init_gpio(uni_hal_spi_context_t *ctx) {
     bool result = true;
 
-    if (ctx->config.pin_sck != nullptr) {
+    if (ctx->config.pin_sck != NULL) {
         ctx->config.pin_sck->gpio_pull = UNI_HAL_GPIO_PULL_NO;
         ctx->config.pin_sck->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
         _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_sck);
         result = uni_hal_gpio_pin_init(ctx->config.pin_sck) && result;
     }
 
-    if (ctx->config.pin_miso != nullptr) {
+    if (ctx->config.pin_miso != NULL) {
         ctx->config.pin_miso->gpio_pull = UNI_HAL_GPIO_PULL_NO;
         ctx->config.pin_miso->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
         _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_miso);
         result = uni_hal_gpio_pin_init(ctx->config.pin_miso) && result;
     }
 
-    if (ctx->config.pin_mosi != nullptr) {
+    if (ctx->config.pin_mosi != NULL) {
         ctx->config.pin_mosi->gpio_pull = UNI_HAL_GPIO_PULL_NO;
         ctx->config.pin_mosi->gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP;
         _uni_hal_spi_gpio_set_alternate(ctx->config.instance, ctx->config.pin_mosi);
         result = uni_hal_gpio_pin_init(ctx->config.pin_mosi) && result;
     }
 
-    if (ctx->config.pin_nss != nullptr) {
+    if (ctx->config.pin_nss != NULL) {
         ctx->config.pin_nss->gpio_pull = UNI_HAL_GPIO_PULL_NO;
         ctx->config.pin_nss->gpio_init = true;
         ctx->config.pin_nss->gpio_type = ctx->config.nss_hard
@@ -444,7 +444,7 @@ static bool _uni_hal_spi_init_irq(uni_hal_spi_context_t *ctx) {
 static bool _uni_hal_spi_init_dma(uni_hal_spi_context_t *ctx) {
     bool result = true;
 
-    if (ctx->config.dma_tx != nullptr) {
+    if (ctx->config.dma_tx != NULL) {
         result = result && uni_hal_dma_init(ctx->config.dma_tx);
 
         if (result) {
@@ -467,7 +467,7 @@ static bool _uni_hal_spi_init_dma(uni_hal_spi_context_t *ctx) {
         }
     }
 
-    if (ctx->config.dma_rx != nullptr) {
+    if (ctx->config.dma_rx != NULL) {
         result = result && uni_hal_dma_init(ctx->config.dma_rx);
 
         if (result) {
@@ -498,7 +498,7 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
     bool result = false;
 
     SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-    if (instance != nullptr) {
+    if (instance != NULL) {
         LL_SPI_InitTypeDef init_struct;
         LL_SPI_StructInit(&init_struct);
         init_struct.TransferDirection =  (ctx->config.mode == UNI_HAL_SPI_MODE_SLAVE) ? LL_SPI_SIMPLEX_RX : LL_SPI_FULL_DUPLEX;
@@ -536,7 +536,7 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
 //
 
 bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
-    if (ctx != nullptr && !uni_hal_spi_is_inited(ctx)) {
+    if (ctx != NULL && !uni_hal_spi_is_inited(ctx)) {
         bool result = _uni_hal_spi_init_rcc(ctx);
         result = result && _uni_hal_spi_init_gpio(ctx);
         result = result && _uni_hal_spi_init_irq(ctx);
@@ -555,7 +555,7 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
 
 
 bool uni_hal_spi_is_inited(const uni_hal_spi_context_t *ctx) {
-    return ctx != nullptr && ctx->status.inited;
+    return ctx != NULL && ctx->status.inited;
 }
 
 
@@ -671,12 +671,12 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
             size_t idx_rx = 0U;
             while (idx_tx < len) {
                 if (LL_SPI_IsActiveFlag_TXP(instance) != 0U) {
-                    LL_SPI_TransmitData8(instance, (tx_data != nullptr) ? tx_data[idx_tx] : (uint8_t) 0U);
+                    LL_SPI_TransmitData8(instance, (tx_data != NULL) ? tx_data[idx_tx] : (uint8_t) 0U);
                     idx_tx++;
                 }
                 if (idx_rx < len && (LL_SPI_IsActiveFlag_RXP(instance) != 0U)) {
                     data_rx = LL_SPI_ReceiveData8(instance);
-                    if (rx_data != nullptr) {
+                    if (rx_data != NULL) {
                         rx_data[idx_rx] = data_rx;
                     }
                     idx_rx++;

@@ -25,7 +25,7 @@
 // Globals
 //
 
-uni_hal_rcc_stm32l4_config_t *g_uni_hal_rcc_config = nullptr;
+uni_hal_rcc_stm32l4_config_t *g_uni_hal_rcc_config = NULL;
 uni_hal_rcc_stm32l4_status_t g_uni_hal_rcc_status = {0};
 
 UNI_COMMON_COMPILER_WEAK uint32_t SystemCoreClock = 4'000'000U;
@@ -1054,7 +1054,7 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
 bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config)
 {
     bool result = false;
-    if (config != nullptr) {
+    if (config != NULL) {
         g_uni_hal_rcc_config = config;
         result = true;
     }

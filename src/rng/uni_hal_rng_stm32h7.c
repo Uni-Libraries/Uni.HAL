@@ -32,7 +32,7 @@ static RNG_TypeDef *_uni_hal_rng_get_instance(uni_hal_core_periph_e instance) {
             result = RNG; //-V2571
             break;
         default:
-            result = nullptr;
+            result = NULL;
             break;
     }
     return result;
@@ -46,7 +46,7 @@ static RNG_TypeDef *_uni_hal_rng_get_instance(uni_hal_core_periph_e instance) {
 bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
     bool result = false;
 
-    if (ctx != nullptr) {
+    if (ctx != NULL) {
         RNG_TypeDef *instance = _uni_hal_rng_get_instance(ctx->instance);
         if (instance != NULL) {
             //TODO: make it configurable
@@ -96,7 +96,7 @@ uint32_t uni_hal_rng_get_32u(uni_hal_rng_context_t *ctx) {
 bool uni_hal_rng_get(uni_hal_rng_context_t *ctx, uint8_t* buf, size_t buf_len) {
     bool result = false;
 
-    if (buf != nullptr && uni_hal_rng_is_inited(ctx)) {
+    if (buf != NULL && uni_hal_rng_is_inited(ctx)) {
         RNG_TypeDef *instance = _uni_hal_rng_get_instance(ctx->instance);
         if (instance != NULL) {
             size_t offset;

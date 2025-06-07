@@ -121,7 +121,7 @@ static TIM_TypeDef *_uni_hal_tim_get_handle(uni_hal_core_periph_e instance) {
             result = TIM17;
             break;
         default:
-            result = nullptr;
+            result = NULL;
             break;
     }
 
@@ -132,13 +132,13 @@ bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
     BaseType_t higher_task_woken = false;
 
     TIM_TypeDef *handle = _uni_hal_tim_get_handle(periph);
-    if (handle != nullptr) {
+    if (handle != NULL) {
         if (LL_TIM_IsActiveFlag_UPDATE(handle)) {
             LL_TIM_ClearFlag_UPDATE(handle);
             uint32_t id = _uni_hal_tim_get_number(handle);
             if (id > 0U) {
                 uni_hal_tim_callback_fn fn = _callback_fn[id - 1];
-                if (fn != nullptr) {
+                if (fn != NULL) {
                     higher_task_woken = fn(_callback_timctx[id - 1], _callback_userctx[id - 1]);
                 }
             }

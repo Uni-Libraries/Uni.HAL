@@ -29,7 +29,7 @@
 // Globals
 //
 
-static uni_hal_tim_context_t *g_uni_hal_tim_ctx[UNI_HAL_TIM_MAXTIMERS] = {nullptr};
+static uni_hal_tim_context_t *g_uni_hal_tim_ctx[UNI_HAL_TIM_MAXTIMERS] = {NULL};
 
 static uni_hal_tim_callback_fn _callback_fn[UNI_HAL_TIM_MAXTIMERS] = {0};
 
@@ -276,7 +276,7 @@ static void _uni_hal_tim_period_elapsed(TIM_TypeDef *handle) {
 static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_t* channel)
 {
     bool result = false;
-    if (ctx != nullptr && channel != nullptr)
+    if (ctx != NULL && channel != NULL)
     {
         result = true;
         if (channel->gpio)
@@ -357,7 +357,7 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
             result = LL_TIM_Init(handle, &tim_init) == SUCCESS;
         }
 
-        if (ctx->config.channel_count > 0 && ctx->config.channel != nullptr)
+        if (ctx->config.channel_count > 0 && ctx->config.channel != NULL)
         {
             for (size_t i = 0; i < ctx->config.channel_count; i++)
             {
@@ -396,7 +396,7 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
 
     if (uni_hal_tim_is_inited(ctx)) {
         TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
-        if (handle != nullptr) {
+        if (handle != NULL) {
             for (size_t i = 0; i < ctx->config.channel_count; i++)
             {
                 if (ctx->config.channel[i]->type == UNI_HAL_TIM_TYPE_INPUTCAPTURE)

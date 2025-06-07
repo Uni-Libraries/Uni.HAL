@@ -426,7 +426,7 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
         LL_ADC_REG_InitTypeDef reg = {
                 .TriggerSource = LL_ADC_REG_TRIG_SOFTWARE,
                 .ContinuousMode = LL_ADC_REG_CONV_CONTINUOUS,
-                .DataTransferMode =  ctx->config.dma != nullptr ? LL_ADC_REG_DMA_TRANSFER_UNLIMITED : LL_ADC_REG_DR_TRANSFER,
+                .DataTransferMode =  ctx->config.dma != NULL ? LL_ADC_REG_DMA_TRANSFER_UNLIMITED : LL_ADC_REG_DR_TRANSFER,
                 .SequencerLength = _uni_hal_adc_get_scan_length(ctx->config.channels_count),
                 .SequencerDiscont = LL_ADC_REG_SEQ_DISCONT_DISABLE,
                 .Overrun = LL_ADC_REG_OVR_DATA_OVERWRITTEN,

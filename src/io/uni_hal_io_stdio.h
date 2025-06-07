@@ -9,6 +9,7 @@ extern "C" {
 //
 
 // stdlib
+#include <stdbool.h>
 #include <stdint.h>
 
 // uni_hal
@@ -43,10 +44,15 @@ typedef struct {
  */
 bool uni_hal_io_stdio_init(uni_hal_io_context_t *io_ctx);
 
+#if defined(_MSC_VER)
+int uni_hal_io_stdio_printf(const char* format, ...);
+int uni_hal_io_stdio_vprintf(const char* format, va_list params);
+int uni_hal_io_stdio_snprintf(char *buffer, size_t buffer_size, const char* format, ...);
+#else
 int uni_hal_io_stdio_printf(const char* format, ...) __attribute__((format(printf, 1, 2)));
-
+int uni_hal_io_stdio_vprintf(const char* format, va_list params) __attribute__((format(printf, 1, 0)));
 int uni_hal_io_stdio_snprintf(char *buffer, size_t buffer_size, const char* format, ...) __attribute__((format(printf, 3, 4)));
-
+#endif
 
 #if defined(__cplusplus)
 }

@@ -57,7 +57,7 @@ static GPIO_TypeDef *_uni_hal_gpio_bank(uni_hal_core_periph_e bank) {
             result = GPIOI; //-V2571
             break;
         default:
-            result = nullptr;
+            result = NULL;
             break;
     }
 

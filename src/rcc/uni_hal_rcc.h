@@ -24,6 +24,8 @@ extern "C" {
     #include "rcc/uni_hal_rcc_stm32l4.h"
 #elif defined(UNI_HAL_TARGET_MCU_STM32H743)
     #include "rcc/uni_hal_rcc_stm32h7.h"
+#elif defined(UNI_HAL_TARGET_MCU_PC)
+    //
 #else
     #error "unknown target"
 #endif

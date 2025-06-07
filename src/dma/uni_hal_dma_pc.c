@@ -12,7 +12,7 @@
 
 bool uni_hal_dma_init(uni_hal_dma_context_t *ctx){
     bool result = false;
-    if(ctx!=nullptr){
+    if(ctx!=NULL){
         ctx->state.initialized = true;
         result = true;
     }
@@ -22,7 +22,7 @@ bool uni_hal_dma_init(uni_hal_dma_context_t *ctx){
 
 bool uni_hal_dma_is_inited(const uni_hal_dma_context_t* ctx) {
     bool result = false;
-    if (ctx != nullptr) {
+    if (ctx != NULL) {
         result = ctx->state.initialized;
     }
     return result;

@@ -76,7 +76,7 @@ bool uni_hal_crc_init(uni_hal_crc_context_t *ctx) {
 
 bool uni_hal_crc_append(uni_hal_crc_context_t *ctx, const uint8_t *data, uint32_t data_len) {
     bool result = false;
-    if (uni_hal_crc_is_inited(ctx) && data != nullptr) {
+    if (uni_hal_crc_is_inited(ctx) && data != NULL) {
         size_t idx;
 
         if ((size_t) data % 4 == 0) {

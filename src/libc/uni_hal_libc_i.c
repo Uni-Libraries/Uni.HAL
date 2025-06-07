@@ -30,7 +30,7 @@
 extern uni_hal_stdio_context_t g_uni_hal_io_stdio_ctx;
 
 #if defined(_NEWLIB_VERSION) && defined(__clang__)
-FILE* const stdout = nullptr;
+FILE* const stdout = NULL;
 #endif
 
 
@@ -75,7 +75,7 @@ int _getpid() {
 
 
 int _fstat(int UNI_COMMON_COMPILER_UNUSED_VAR(file), struct stat *st) {
-    if (st != nullptr) {
+    if (st != NULL) {
         st->st_mode = S_IFCHR;
     }
     return 0;

@@ -248,7 +248,7 @@ uint32_t _uni_hal_dma_get_interrupt(uni_hal_core_periph_e module, uni_hal_dma_ch
 
 bool uni_hal_dma_init(uni_hal_dma_context_t *ctx) {
     bool result = false;
-    if (ctx != nullptr && ctx->state.initialized != true) {
+    if (ctx != NULL && ctx->state.initialized != true) {
         result = uni_hal_rcc_clk_set(ctx->config.instance, true);
 
         uint32_t interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);

@@ -45,7 +45,7 @@ static bool _uni_hal_ads1015_write(uni_hal_ads1015_context_t* ctx, uint8_t reg_a
 
 bool uni_hal_ads1015_init(uni_hal_ads1015_context_t* ctx) {
     bool result = false;
-    if (ctx != nullptr && ctx->state.initialized != true) {
+    if (ctx != NULL && ctx->state.initialized != true) {
         result = uni_hal_i2c_is_inited(ctx->config.i2c);
         if (!result) {
             result = uni_hal_i2c_init(ctx->config.i2c);
@@ -59,7 +59,7 @@ bool uni_hal_ads1015_init(uni_hal_ads1015_context_t* ctx) {
 
 
 bool uni_hal_ads1015_is_inited(const uni_hal_ads1015_context_t* ctx) {
-    return ctx != nullptr && ctx->state.initialized != false;
+    return ctx != NULL && ctx->state.initialized != false;
 }
 
 bool uni_hal_ads1015_configure(uni_hal_ads1015_context_t* ctx)
