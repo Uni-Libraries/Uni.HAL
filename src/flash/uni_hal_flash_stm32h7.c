@@ -164,4 +164,3 @@ bool uni_hal_flash_swap_banks(void)
 
     return result;
 }
-

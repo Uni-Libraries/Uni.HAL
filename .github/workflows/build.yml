@@ -113,3 +113,47 @@ jobs:
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+  build-arm-clang:
+    name: arm/clang (${{ matrix.mcu }}) on ubuntu-latest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mcu: [STM32H743, STM32L496]
+        build_type: [Release]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install LLVM Embedded Toolchain for Arm
+      shell: bash
+      run: |
+        TOOLCHAIN_URL="https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/download/release-19.1.5/LLVM-ET-Arm-19.1.5-Linux-x86_64.tar.xz"
+        TOOLCHAIN_TAR="llvm-toolchain.tar.xz"
+        TOOLCHAIN_DIR="${{ github.workspace }}/llvm-toolchain"
+        
+        wget -O "${TOOLCHAIN_TAR}" "${TOOLCHAIN_URL}"
+        mkdir -p "${TOOLCHAIN_DIR}"
+        tar -xf "${TOOLCHAIN_TAR}" -C "${TOOLCHAIN_DIR}" --strip-components=1
+        
+        echo "${TOOLCHAIN_DIR}/bin" >> $GITHUB_PATH
+
+    - name: Set reusable strings
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build-clang-${{ matrix.mcu }}" >> "$GITHUB_OUTPUT"
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/cmake/toolchain.cmake
+        -DCMAKE_C_COMPILER=clang
+        -DCMAKE_CXX_COMPILER=clang++
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}

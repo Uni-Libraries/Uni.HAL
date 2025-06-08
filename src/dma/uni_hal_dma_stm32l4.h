@@ -31,4 +31,3 @@ DMA_TypeDef *uni_hal_dma_stm32l4_get_module(uni_hal_core_periph_e module);
  * @return DMA channel reg value
  */
 uint32_t uni_hal_dma_stm32l4_get_channel(uni_hal_dma_channel_e channel);
-
