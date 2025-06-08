@@ -11,9 +11,12 @@ project(uni.hal LANGUAGES C CXX ASM)
 # Options
 #
 
-option(UNI_HAL_TARGET_MCU    "Target MCU" "")
-option(UNI_HAL_HSE_VALUE     ""           0 )
-option(UNI_HAL_RTOS_HEAP_APP ""           1 )
+option(UNI_HAL_TARGET_MCU       "Target MCU"                  "")
+option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
+option(UNI_HAL_I2C_USE_FREERTOS "use FreeRTOS for I2C driver" ON)
+if(NOT DEFINED UNI_HAL_HSE_VALUE)
+    set(UNI_HAL_HSE_VALUE 1 CACHE STRING "HSE clock value in Hz")
+endif()
 
 
 

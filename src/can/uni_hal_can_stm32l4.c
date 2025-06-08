@@ -14,12 +14,6 @@
 #include "can/uni_hal_can.h"
 #include "rcc/uni_hal_rcc.h"
 
-//
-// Defines
-//
-
-#define UNI_HAL_CAN_QUEUE_SIZE (32U)
-
 
 
 //

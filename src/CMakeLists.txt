@@ -50,6 +50,12 @@ target_include_directories(uni.hal PUBLIC ".")
 #
 
 target_compile_definitions(uni.hal PUBLIC UNI_HAL_TARGET_MCU_${UNI_HAL_TARGET_MCU})
+if(UNI_HAL_CAN_USE_FREERTOS)
+    target_compile_definitions(uni.hal PUBLIC UNI_HAL_CAN_USE_FREERTOS)
+endif()
+if(UNI_HAL_I2C_USE_FREERTOS)
+    target_compile_definitions(uni.hal PUBLIC UNI_HAL_I2C_USE_FREERTOS)
+endif()
 
 
 

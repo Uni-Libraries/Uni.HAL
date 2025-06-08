@@ -14,7 +14,13 @@
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
-        result = uni_common_ringbuffer_init(ctx->config.buffer_rx, ctx->config.buffer_rx->data, ctx->config.buffer_rx->size_object, ctx->config.buffer_rx->size_total);
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+        ctx->status.queue_rx = xQueueCreate(UNI_HAL_CAN_QUEUE_SIZE, sizeof(uni_hal_can_msg_t));
+        result = result && ctx->status.queue_rx != NULL;
+#else
+        result =
+            result && uni_common_ringbuffer_init(ctx->config.buffer_rx, ctx->config.buffer_rx->data, ctx->config.buffer_rx->size_object, ctx->config.buffer_rx->size_total);
+#endif
     }
 
     return result;

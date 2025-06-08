@@ -5,6 +5,17 @@
 add_library(freertos_kernel STATIC)
 
 #
+# Options
+#
+
+if(NOT DEFINED UNI_HAL_RTOS_HEAP_SIZE)
+    set(UNI_HAL_RTOS_HEAP_SIZE 100*1024 CACHE STRING "FreeRTOS Heap Size")
+endif()
+option(UNI_HAL_RTOS_HEAP_APP "FreeRTOS Heap Size"  1)
+
+
+
+#
 # Sources Common
 #
 

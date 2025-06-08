@@ -37,7 +37,7 @@ bool uni_hal_can_is_inited(const uni_hal_can_context_t *ctx) {
 }
 
 
-bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, uint32_t timeout_ms) {
+bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, size_t timeout_ms) {
     bool result = false;
 
     if (uni_hal_can_is_inited(ctx) && msg != NULL) {

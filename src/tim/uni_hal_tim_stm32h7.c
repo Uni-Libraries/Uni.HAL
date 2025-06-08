@@ -13,7 +13,6 @@
 #include <FreeRTOS.h>
 
 // uni_hal
-#include "stm32l4xx_ll_tim.h"
 #include "core/uni_hal_core.h"
 #include "rcc/uni_hal_rcc.h"
 #include "tim/uni_hal_tim.h"
@@ -168,7 +167,7 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
             LL_TIM_InitTypeDef tim_init;
             tim_init.Prescaler = ctx->config.prescaler;
             tim_init.CounterMode = LL_TIM_COUNTERMODE_UP;
-            tim_init.Autoreload = ctx->config.period;
+            tim_init.Autoreload = ctx->config.reload_value;
             tim_init.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
             tim_init.RepetitionCounter = 0x00;
             result = LL_TIM_Init(handle, &tim_init) == SUCCESS;
