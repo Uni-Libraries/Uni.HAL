@@ -58,6 +58,14 @@ typedef enum {
 } uni_hal_spi_cpha_e;
 
 /**
+ * SPI CRC
+ */
+typedef enum {
+    UNI_HAL_SPI_CRC_DISABLE,
+    UNI_HAL_SPI_CRC_16BIT,
+} uni_hal_spi_crc_type_e;
+
+/**
  * SPI config
  */
 typedef struct {
@@ -125,6 +133,21 @@ typedef struct {
      * Use hardware NSS control
      */
     bool nss_hard;
+
+    /**
+     * CRC type
+     */
+    uni_hal_spi_crc_type_e crc_type;
+
+    /**
+     * CRC polynomial
+     */
+    uint32_t crc_polynomial;
+
+    /**
+     * CRC init pattern
+     */
+    uint32_t crc_init;
 } uni_hal_spi_config_t;
 
 

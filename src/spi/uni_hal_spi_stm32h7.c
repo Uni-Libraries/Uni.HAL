@@ -530,6 +530,28 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
     return result;
 }
 
+static bool _uni_hal_spi_init_crc(uni_hal_spi_context_t *ctx) {
+    bool result = false;
+
+    SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+    if (instance != NULL) {
+        if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
+        {
+            LL_SPI_SetCRCWidth(instance, LL_SPI_CRC_16BIT);
+            LL_SPI_SetCRCPolynomial(instance, ctx->config.crc_polynomial);
+            LL_SPI_SetTxCRCInitPattern(instance, ctx->config.crc_init);
+            LL_SPI_SetRxCRCInitPattern(instance, ctx->config.crc_init);
+            result = true;
+        }
+        else
+        {
+            result = true;
+        }
+    }
+
+    return result;
+}
+
 
 //
 // Public
@@ -542,6 +564,7 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
         result = result && _uni_hal_spi_init_irq(ctx);
         result = result && _uni_hal_spi_init_dma(ctx);
         result = result && _uni_hal_spi_init_spi(ctx);
+        result = result && _uni_hal_spi_init_crc(ctx);
 
         size_t index = _uni_hal_spi_index_get(ctx->config.instance);
         if (result && index != SIZE_MAX) {
@@ -608,6 +631,10 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         // enable
         LL_SPI_SetTransferSize(instance, len);
         LL_SPI_EnableIT_EOT(instance);
+        if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
+        {
+            LL_SPI_EnableCRC(instance);
+        }
         LL_SPI_Enable(instance);
         if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
             LL_SPI_StartMasterTransfer(instance);
