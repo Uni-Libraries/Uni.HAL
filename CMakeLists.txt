@@ -65,7 +65,6 @@ endif()
 #
 
 add_subdirectory(3rdparty/freertos_kernel)
-add_subdirectory(3rdparty/freertos_tcp)
 
 
 
