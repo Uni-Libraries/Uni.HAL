@@ -1,6 +1,13 @@
 #pragma once
 
 //
+// Includes
+//
+
+// stdlib
+#include <stdint.h>
+
+//
 // Typedefs
 //
 
@@ -18,3 +25,5 @@ typedef enum {
 //
 
 uni_hal_core_stm32h7_revision_e uni_hal_core_stm32h7_revision_get(void);
+
+uint32_t uni_hal_core_stm32h7_uid_0(void);

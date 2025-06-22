@@ -4,6 +4,7 @@
 
 // st
 #include <stm32h7xx.h>
+#include <stm32h7xx_ll_utils.h>
 
 // uni_hal
 #include "core/uni_hal_core_enum.h"
@@ -57,3 +58,8 @@ IRQn_Type uni_hal_core_irq_getnum(uni_hal_core_irq_e irq) {
 uni_hal_core_stm32h7_revision_e uni_hal_core_stm32h7_revision_get(void){
     return ((DBGMCU->IDCODE & DBGMCU_IDCODE_REV_ID) >> 16);
 }
+
+uint32_t uni_hal_core_stm32h7_uid_0(void){
+    return LL_GetUID_Word0();
+}
+
