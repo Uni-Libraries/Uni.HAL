@@ -149,7 +149,6 @@ Get-DFP-STM32L4
 Get-DFP-STM32H7
 Get-USB-STM-Device
 Get-FreeRTOS-Kernel
-Get-FreeRTOS-TCP
 Get-FreeRTOS-FAT
 
 Pop-Location
