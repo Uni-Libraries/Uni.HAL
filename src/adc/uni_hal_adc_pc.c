@@ -28,27 +28,6 @@ bool uni_hal_adc_trigger(uni_hal_adc_context_t* ctx){
     return result;
 }
 
-
-uint16_t uni_hal_adc_get_rank_raw(const uni_hal_adc_context_t *ctx, uint32_t rank){
-    uint16_t result = 0U;
-    if(uni_hal_adc_is_inited(ctx)){
-        (void)rank;
-        result = 1U;
-    }
-    return result;
-}
-
-
-uint16_t uni_hal_adc_get_channel_raw(const uni_hal_adc_context_t *ctx, uint32_t channel){
-    uint16_t result = 0U;
-    if(uni_hal_adc_is_inited(ctx)){
-        (void)channel;
-        result = 1U;
-    }
-    return result;
-}
-
-
 float uni_hal_adc_get_channel_voltage(const uni_hal_adc_context_t *ctx, uint32_t channel){
     float result = 0.0f;
     if(uni_hal_adc_is_inited(ctx)){
