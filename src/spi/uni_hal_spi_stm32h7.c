@@ -646,17 +646,6 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
 }
 
 
-bool uni_hal_spi_set_callback(uni_hal_spi_context_t *ctx, uni_hal_spi_callback_t callback, void *cookie) {
-    bool result = false;
-    if (uni_hal_spi_is_inited(ctx)) {
-        ctx->status.callback = callback;
-        ctx->status.callback_cookie = cookie;
-        result = true;
-    }
-    return result;
-}
-
-
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len) {
     bool result = false;
     if (uni_hal_spi_is_inited(ctx) && data && len > 0U) {
