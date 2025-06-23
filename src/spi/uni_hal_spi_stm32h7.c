@@ -16,8 +16,10 @@
 #include <FreeRTOS.h>
 
 // uni_hal
+#include "core/uni_hal_core_cm7.h"
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
+#include "core/uni_hal_core_cm7.h"
 
 
 //
@@ -36,6 +38,10 @@ bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
 
     if (!ctx->config.nss_hard) {
         uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
+    }
+
+    if(ctx->status.last_rx_data != NULL) {
+        uni_hal_core_cm7_dcache_invalidate(ctx->status.last_rx_data, ctx->status.last_len);
     }
 
     LL_SPI_ClearFlag_EOT(instance);
@@ -57,26 +63,32 @@ bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
 
 
 void SPI1_IRQHandler() {
+   traceISR_ENTER();
    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[0], SPI1));
 }
 
 void SPI2_IRQHandler() {
+    traceISR_ENTER();
     portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[1], SPI2));
 }
 
 void SPI3_IRQHandler() {
+    traceISR_ENTER();
     portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[2], SPI3));
 }
 
 void SPI4_IRQHandler() {
+    traceISR_ENTER();
     portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[3], SPI4));
 }
 
 void SPI5_IRQHandler() {
+    traceISR_ENTER();
     portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[4], SPI5));
 }
 
 void SPI6_IRQHandler() {
+    traceISR_ENTER();
     portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[5], SPI6));
 }
 
@@ -533,8 +545,8 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
             if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
             {
                 LL_SPI_SetCRCWidth(instance, LL_SPI_CRC_16BIT);
-                LL_SPI_SetTxCRCInitPattern(instance, ctx->config.crc_init);
-                LL_SPI_SetRxCRCInitPattern(instance, ctx->config.crc_init);
+                LL_SPI_SetTxCRCInitPattern(instance, LL_SPI_TXCRCINIT_ALL_ONES_PATTERN);
+                LL_SPI_SetRxCRCInitPattern(instance, LL_SPI_TXCRCINIT_ALL_ONES_PATTERN);
             }
         }
     }
@@ -586,6 +598,9 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
     bool result = false;
     if (uni_hal_spi_is_inited(ctx) && len > 0U && (data_rx || data_tx)) {
         ctx->status.in_process = true;
+        ctx->status.last_rx_data = (uint8_t *) data_rx;
+        ctx->status.last_len = len;
+
         if (!ctx->config.nss_hard) {
             uni_hal_gpio_pin_set(ctx->config.pin_nss, false);
         }
@@ -594,6 +609,7 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
 
         // set DMA source and destination
         if (data_rx != NULL) {
+            uni_hal_core_cm7_dcache_invalidate((void *) data_rx, len);
             DMA_TypeDef *dma_rx_module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_rx->config.instance);
             uint32_t dma_rx_stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_rx->config.channel);
 
@@ -606,6 +622,7 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         }
 
         if (data_tx != NULL) {
+            uni_hal_core_cm7_dcache_clean((void *) data_tx, len);
             DMA_TypeDef *dma_tx_module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_tx->config.instance);
             uint32_t dma_tx_stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_tx->config.channel);
 
@@ -618,6 +635,7 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         }
 
         // enable
+        LL_SPI_DisableMasterRxAutoSuspend(instance);
         LL_SPI_SetTransferSize(instance, len);
         LL_SPI_EnableIT_EOT(instance);
         if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)

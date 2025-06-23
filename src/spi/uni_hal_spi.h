@@ -7,6 +7,7 @@
 // stdlib
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 // uni_hal
 #include "core/uni_hal_core.h"
@@ -174,6 +175,8 @@ typedef struct {
     uni_hal_spi_callback_t callback;
 
     void *callback_cookie;
+uint8_t *last_rx_data;
+    size_t last_len;
 } uni_hal_spi_status_t;
 
 
