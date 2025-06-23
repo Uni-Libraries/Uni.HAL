@@ -10,6 +10,9 @@
 #include <stm32h7xx_ll_bus.h>
 #include <stm32h7xx_ll_dma.h>
 
+// FreeRTOS
+#include <FreeRTOS.h>
+
 // Uni.Common
 #include <uni_common.h>
 
@@ -34,6 +37,8 @@
 //
 
 void ADC1_2_IRQHandler(void) {
+    traceISR_ENTER();
+
     if (LL_ADC_IsActiveFlag_EOC(ADC1)) {
         LL_ADC_ClearFlag_EOC(ADC1);
     }
@@ -54,9 +59,13 @@ void ADC1_2_IRQHandler(void) {
     if (LL_ADC_IsActiveFlag_OVR(ADC2)) {
         LL_ADC_ClearFlag_OVR(ADC2);
     }
+
+    portYIELD_FROM_ISR(pdFALSE);
 }
 
 void ADC3_IRQHandler(void) {
+    traceISR_ENTER();
+
     if (LL_ADC_IsActiveFlag_EOC(ADC3)) {
         LL_ADC_ClearFlag_EOC(ADC3);
     }
@@ -66,6 +75,8 @@ void ADC3_IRQHandler(void) {
     if (LL_ADC_IsActiveFlag_OVR(ADC3)) {
         LL_ADC_ClearFlag_OVR(ADC3);
     }
+
+    portYIELD_FROM_ISR(pdFALSE);
 }
 
 

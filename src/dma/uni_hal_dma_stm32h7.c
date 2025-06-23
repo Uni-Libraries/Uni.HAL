@@ -9,6 +9,9 @@
 #include <stm32h7xx_ll_bus.h>
 #include <stm32h7xx_ll_dma.h>
 
+// FreeRTOS
+#include <FreeRTOS.h>
+
 // uni_hal
 #include "dma/uni_hal_dma.h"
 #include "rcc/uni_hal_rcc.h"
@@ -26,6 +29,8 @@
 //
 
 void DMA1_Stream0_IRQHandler(void) {
+    traceISR_ENTER();
+
     // transfer complete 0
     if (LL_DMA_IsActiveFlag_TC0(DMA1)) {
         LL_DMA_ClearFlag_TC0(DMA1);
@@ -40,9 +45,13 @@ void DMA1_Stream0_IRQHandler(void) {
     if (LL_DMA_IsActiveFlag_TE1(DMA1)) {
         LL_DMA_ClearFlag_TE1(DMA1);
     }
+
+    portYIELD_FROM_ISR(pdFALSE);
 }
 
 void DMA1_Stream1_IRQHandler(void) {
+    traceISR_ENTER();
+
     // transfer complete
     if (LL_DMA_IsActiveFlag_TC1(DMA1)) {
         LL_DMA_ClearFlag_TC1(DMA1);
@@ -52,9 +61,13 @@ void DMA1_Stream1_IRQHandler(void) {
     if (LL_DMA_IsActiveFlag_TE1(DMA1)) {
         LL_DMA_ClearFlag_TE1(DMA1);
     }
+
+    portYIELD_FROM_ISR(pdFALSE);
 }
 
 void DMA1_Stream2_IRQHandler(void) {
+    traceISR_ENTER();
+
     // transfer complete
     if (LL_DMA_IsActiveFlag_TC2(DMA1)) {
         LL_DMA_ClearFlag_TC2(DMA1);
@@ -64,9 +77,13 @@ void DMA1_Stream2_IRQHandler(void) {
     if (LL_DMA_IsActiveFlag_TE3(DMA1)) {
         LL_DMA_ClearFlag_TE3(DMA1);
     }
+
+    portYIELD_FROM_ISR(pdFALSE);
 }
 
 void DMA1_Stream3_IRQHandler(void) {
+    traceISR_ENTER();
+
     // transfer complete
     if (LL_DMA_IsActiveFlag_TC3(DMA1)) {
         LL_DMA_ClearFlag_TC3(DMA1);
@@ -76,6 +93,8 @@ void DMA1_Stream3_IRQHandler(void) {
     if (LL_DMA_IsActiveFlag_TE3(DMA1)) {
         LL_DMA_ClearFlag_TE3(DMA1);
     }
+
+    portYIELD_FROM_ISR(pdFALSE);
 }
 
 

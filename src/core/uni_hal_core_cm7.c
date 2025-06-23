@@ -32,6 +32,13 @@ void uni_hal_core_cm7_dcache_cleaninvalidate_addr(void* ptr, int32_t len) {
     SCB_CleanInvalidateDCache_by_Addr(ptr, len);
 }
 
+void uni_hal_core_cm7_dcache_clean(void* ptr, int32_t len) {
+    SCB_CleanDCache_by_Addr(ptr, len);
+}
+
+void uni_hal_core_cm7_dcache_invalidate(void* ptr, int32_t len) {
+    SCB_InvalidateDCache_by_Addr(ptr, len);
+}
 
 void uni_hal_core_cm7_icache_set(bool enable) {
     if (enable) {
