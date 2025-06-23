@@ -79,7 +79,7 @@ Notes:
   #define TRACERETURN_ENABLE            ( 1 )
 #endif
 
-#define SYSVIEW_FREERTOS_MAX_NOF_TASKS  10
+#define SYSVIEW_FREERTOS_MAX_NOF_TASKS  12
 
 /*********************************************************************
 *
