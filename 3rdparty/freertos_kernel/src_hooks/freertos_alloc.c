@@ -36,3 +36,11 @@ void free(void *ptr) {
         vPortFree(ptr);
     }
 }
+
+void vApplicationMallocFailedHook( void )
+{
+    volatile uint32_t c = 0;
+    while (!c) {
+        __builtin_trap();
+    }
+}
