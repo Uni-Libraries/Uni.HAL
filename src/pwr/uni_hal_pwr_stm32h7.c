@@ -27,9 +27,29 @@ extern uni_hal_pwr_context_t g_uni_hal_pwr_ctx;
 //
 
 static void _uni_hal_stm_pwr_voltagescale(void) {
+    // enable LDO
     LL_PWR_ConfigSupply(LL_PWR_LDO_SUPPLY);
+    while (!LL_PWR_IsActiveFlag_VOS()) {
+        /* wait */
+    }
+
+    // set VOS1
     LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
-    while (LL_PWR_IsActiveFlag_VOS() == 0) {
+    while (!LL_PWR_IsActiveFlag_VOS()) {
+        /* wait */
+    }
+
+    // enable LDO overdrive
+    // event on VOS1 it improves RAM stability on some MCU samples
+    SYSCFG->PWRCR |= SYSCFG_PWRCR_ODEN;
+    while (!LL_PWR_IsActiveFlag_VOS()) {
+        /* wait */
+    }
+
+    // set VOS0
+    LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE0);
+    while (!LL_PWR_IsActiveFlag_VOS()) {
+        /* wait */
     }
 }
 
