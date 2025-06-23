@@ -26,9 +26,6 @@ set(COMMON_FLAGS         "${COMMON_FLAGS} -ffunction-sections")                 
 set(COMMON_FLAGS         "${COMMON_FLAGS} -fdata-sections")                            #generate data sections in ELF file
 set(COMMON_FLAGS         "${COMMON_FLAGS} -fmacro-prefix-map=${CMAKE_SOURCE_DIR}=.")   #strip filepath from __FILE__ macro
 set(COMMON_FLAGS         "${COMMON_FLAGS} -fno-omit-frame-pointer")                    #No omitting of frame pointer, helps debugger a lot
-if(CMAKE_C_COMPILER MATCHES "gcc")
-    set(COMMON_FLAGS     "${COMMON_FLAGS} -u _printf_float")                           #Preserve _printf_float
-endif()
 
 #debug flags
 if((CMAKE_C_COMPILER MATCHES "gcc") AND (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"))
