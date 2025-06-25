@@ -103,12 +103,17 @@ typedef enum {
     UNI_HAL_GPIO_PIN_15 = 1U << 15, //-V2572
 } uni_hal_gpio_pin_e;
 
+
+/**
+ * GPIO speed
+ */
 typedef enum {
     UNI_HAL_GPIO_SPEED_0,
     UNI_HAL_GPIO_SPEED_1,
     UNI_HAL_GPIO_SPEED_2,
     UNI_HAL_GPIO_SPEED_3,
 } uni_hal_gpio_speed_e;
+
 
 /**
  * GPIO Pull Up/Down configuration
@@ -129,6 +134,35 @@ typedef enum{
      */
     UNI_HAL_GPIO_PULL_UP,
 } uni_hal_gpio_pull_e;
+
+
+/**
+ * GPIO Interrupt edge trigger
+ */
+typedef enum {
+    /**
+     * Rising edge
+     */
+    UNI_HAL_GPIO_IT_EDGE_RISING,
+
+    /**
+     * Falling edge
+     */
+    UNI_HAL_GPIO_IT_EDGE_FALLING,
+
+    /**
+     * Both edge
+     */
+    UNI_HAL_GPIO_IT_EDGE_BOTH,
+} uni_hal_gpio_it_edge_e;
+
+
+/**
+ * GPIO pin interrupt callback
+ * @param cookie user data
+ * @return true if context switch is required
+ */
+typedef bool (*uni_hal_gpio_callback_t)(void *cookie);
 
 
 /**
@@ -169,6 +203,16 @@ typedef struct {
      * Pin initial state
      */
     bool gpio_init;
+
+    /**
+     * Callback for interrupt handling
+     */
+    uni_hal_gpio_callback_t callback;
+
+    /**
+     * Cookie for interrupt callback
+     */
+    void* callback_cookie;
 
     /**
      * Initialization state
@@ -219,6 +263,16 @@ bool uni_hal_gpio_pin_get(const uni_hal_gpio_pin_context_t* ctx_pin);
  * @return true on success
  */
 bool uni_hal_gpio_pin_set(uni_hal_gpio_pin_context_t* ctx_pin, bool val);
+
+/**
+ * Sets interrupt callback for a given pin
+ * @param ctx_pin pointer to GPIO pint context structure
+ * @param edge edge to trigger on
+ * @param cb callback
+ * @param cookie user data for callback
+ * @return on success
+ */
+bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx_pin, uni_hal_gpio_it_edge_e edge, uni_hal_gpio_callback_t cb, void* cookie);
 
 uint32_t uni_hal_gpio_pin_get_bankaddr(uni_hal_gpio_pin_context_t* ctx_pin);
 
