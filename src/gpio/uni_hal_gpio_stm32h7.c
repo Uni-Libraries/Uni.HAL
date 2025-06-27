@@ -352,6 +352,28 @@ static uint32_t _uni_hal_gpio_exti_line(uni_hal_gpio_pin_e pin) {
     }
 }
 
+static uint32_t _uni_hal_gpio_exti_line_syscfg(uni_hal_gpio_pin_e pin) {
+    switch (pin) {
+        case UNI_HAL_GPIO_PIN_0: return LL_SYSCFG_EXTI_LINE0;
+        case UNI_HAL_GPIO_PIN_1: return LL_SYSCFG_EXTI_LINE1;
+        case UNI_HAL_GPIO_PIN_2: return LL_SYSCFG_EXTI_LINE2;
+        case UNI_HAL_GPIO_PIN_3: return LL_SYSCFG_EXTI_LINE3;
+        case UNI_HAL_GPIO_PIN_4: return LL_SYSCFG_EXTI_LINE4;
+        case UNI_HAL_GPIO_PIN_5: return LL_SYSCFG_EXTI_LINE5;
+        case UNI_HAL_GPIO_PIN_6: return LL_SYSCFG_EXTI_LINE6;
+        case UNI_HAL_GPIO_PIN_7: return LL_SYSCFG_EXTI_LINE7;
+        case UNI_HAL_GPIO_PIN_8: return LL_SYSCFG_EXTI_LINE8;
+        case UNI_HAL_GPIO_PIN_9: return LL_SYSCFG_EXTI_LINE9;
+        case UNI_HAL_GPIO_PIN_10: return LL_SYSCFG_EXTI_LINE10;
+        case UNI_HAL_GPIO_PIN_11: return LL_SYSCFG_EXTI_LINE11;
+        case UNI_HAL_GPIO_PIN_12: return LL_SYSCFG_EXTI_LINE12;
+        case UNI_HAL_GPIO_PIN_13: return LL_SYSCFG_EXTI_LINE13;
+        case UNI_HAL_GPIO_PIN_14: return LL_SYSCFG_EXTI_LINE14;
+        case UNI_HAL_GPIO_PIN_15: return LL_SYSCFG_EXTI_LINE15;
+        default: return UINT32_MAX;
+    }
+}
+
 static uni_hal_core_irq_e _uni_hal_gpio_irqn(uni_hal_gpio_pin_e pin) {
     uni_hal_core_irq_e result = UNI_HAL_CORE_IRQ_UNKNOWN;
     switch (pin) {
@@ -476,6 +498,7 @@ bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx, un
     if (uni_hal_gpio_pin_is_inited(ctx)) {
         uint32_t exti_port = _uni_hal_gpio_exti_port(ctx->gpio_bank);
         uint32_t exti_line = _uni_hal_gpio_exti_line(ctx->gpio_pin);
+        uint32_t exti_line_syscfg =  _uni_hal_gpio_exti_line_syscfg(ctx->gpio_pin);
         uint32_t exti_index = _uni_hal_gpio_index(ctx->gpio_pin);
         uni_hal_core_irq_e exti_irqn = _uni_hal_gpio_irqn(ctx->gpio_pin);
         
@@ -500,7 +523,8 @@ bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx, un
                     break;
             }
             LL_EXTI_Init(&EXTI_InitStruct);
-            LL_SYSCFG_SetEXTISource(exti_port, exti_index);
+            LL_EXTI_EnableIT_0_31(exti_line);
+            LL_SYSCFG_SetEXTISource(exti_port, exti_line_syscfg);
             uni_hal_core_irq_enable(exti_irqn, UNI_HAL_GPIO_IT_PRIORITY, 0);
             result = true;
         }
