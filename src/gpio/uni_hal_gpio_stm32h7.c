@@ -3,8 +3,8 @@
 //
 
 // stdlib
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
  
 // ST
 #include <stm32h7xx.h>
@@ -500,7 +500,7 @@ bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx, un
                     break;
             }
             LL_EXTI_Init(&EXTI_InitStruct);
-            LL_SYSCFG_SetEXTISource(exti_port, exti_line);
+            LL_SYSCFG_SetEXTISource(exti_port, exti_index);
             uni_hal_core_irq_enable(exti_irqn, UNI_HAL_GPIO_IT_PRIORITY, 0);
             result = true;
         }
