@@ -142,21 +142,36 @@ bool uni_hal_flash_erase_bank()
 {
     bool result = false;
 
-    FLASH_EraseInitTypeDef ei = {
-        .TypeErase    = FLASH_TYPEERASE_MASSERASE,
-        .Banks        = FLASH_BANK_2,
-        .VoltageRange = FLASH_VOLTAGE_RANGE_4      /* fastest */
-    };
+    SCB_CleanInvalidateDCache();
+    SCB_InvalidateICache();
+    SCB_DisableDCache();
+    SCB_DisableICache();
+
 
     HAL_FLASH_Unlock();
     __HAL_FLASH_SET_PSIZE(FLASH_PSIZE_DOUBLE_WORD, FLASH_BANK_2);
 
-    if (HAL_FLASHEx_Erase_IT(&ei) == HAL_OK)
+    for (size_t sector = 0 ;sector <8;sector++)
     {
-        xSemaphoreTake(xFlashDoneSem, portMAX_DELAY);
-        HAL_FLASH_Lock();
-        result = true;
+        FLASH_EraseInitTypeDef ei = {
+            .TypeErase    = FLASH_TYPEERASE_SECTORS,
+            .Banks        = FLASH_BANK_2,
+            .Sector =     sector,
+            .NbSectors = 1,
+            .VoltageRange = FLASH_VOLTAGE_RANGE_4      /* fastest */
+        };
+
+        if (HAL_FLASHEx_Erase_IT(&ei) == HAL_OK)
+        {
+            xSemaphoreTake(xFlashDoneSem, portMAX_DELAY);
+            result = true;
+        }
+        vTaskDelay(450);
     }
+
+    HAL_FLASH_Lock();
+    SCB_EnableICache();
+    SCB_EnableDCache();
 
     return result;
 }
