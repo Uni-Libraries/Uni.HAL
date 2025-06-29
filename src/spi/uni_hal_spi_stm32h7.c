@@ -29,69 +29,6 @@
 uni_hal_spi_context_t *g_uni_hal_spi_ctx[6] = {NULL};
 
 
-//
-// IRQ
-//
-
-bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
-    bool high_priority_woken = false;
-
-    if (!ctx->config.nss_hard) {
-        uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
-    }
-
-    if(ctx->status.last_rx_data != NULL) {
-        uni_hal_core_cm7_dcache_invalidate(ctx->status.last_rx_data, ctx->status.last_len);
-    }
-
-    LL_SPI_ClearFlag_EOT(instance);
-    LL_SPI_ClearFlag_TXTF(instance);
-    LL_SPI_ClearFlag_UDR(instance);
-    LL_SPI_ClearFlag_CRCERR(instance);
-
-    LL_SPI_Disable(instance);
-    LL_SPI_DisableDMAReq_RX(instance);
-    LL_SPI_DisableDMAReq_TX(instance);
-
-    ctx->status.in_process = false;
-    if(ctx->status.callback) {
-        high_priority_woken = ctx->status.callback(ctx->status.callback_cookie);
-    }
-
-    return high_priority_woken;
-}
-
-
-void SPI1_IRQHandler() {
-   traceISR_ENTER();
-   portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[0], SPI1));
-}
-
-void SPI2_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[1], SPI2));
-}
-
-void SPI3_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[2], SPI3));
-}
-
-void SPI4_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[3], SPI4));
-}
-
-void SPI5_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[4], SPI5));
-}
-
-void SPI6_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[5], SPI6));
-}
-
 
 //
 // Private
@@ -732,4 +669,75 @@ bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler
         result = true;
     }
     return result;
+}
+
+
+
+
+//
+// IRQ
+//
+
+bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
+    bool high_priority_woken = false;
+
+    if (!ctx->config.nss_hard) {
+        uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
+    }
+
+    if(ctx->status.last_rx_data != NULL) {
+        uni_hal_core_cm7_dcache_invalidate(ctx->status.last_rx_data, ctx->status.last_len);
+    }
+
+    LL_SPI_ClearFlag_EOT(instance);
+    LL_SPI_ClearFlag_TXTF(instance);
+    LL_SPI_ClearFlag_UDR(instance);
+    LL_SPI_ClearFlag_CRCERR(instance);
+
+    LL_SPI_Disable(instance);
+
+    /* ES0392 #2.22.4: mask TXP/TXC while disabled */
+    LL_SPI_DisableIT_TXP(instance);
+    LL_SPI_DisableIT_EOT(instance);
+
+    LL_SPI_DisableDMAReq_RX(instance);
+    LL_SPI_DisableDMAReq_TX(instance);
+
+    ctx->status.in_process = false;
+    if(ctx->status.callback) {
+        high_priority_woken = ctx->status.callback(ctx->status.callback_cookie);
+    }
+
+    return high_priority_woken;
+}
+
+
+void SPI1_IRQHandler() {
+    traceISR_ENTER();
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[0], SPI1));
+}
+
+void SPI2_IRQHandler() {
+    traceISR_ENTER();
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[1], SPI2));
+}
+
+void SPI3_IRQHandler() {
+    traceISR_ENTER();
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[2], SPI3));
+}
+
+void SPI4_IRQHandler() {
+    traceISR_ENTER();
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[3], SPI4));
+}
+
+void SPI5_IRQHandler() {
+    traceISR_ENTER();
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[4], SPI5));
+}
+
+void SPI6_IRQHandler() {
+    traceISR_ENTER();
+    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[5], SPI6));
 }
