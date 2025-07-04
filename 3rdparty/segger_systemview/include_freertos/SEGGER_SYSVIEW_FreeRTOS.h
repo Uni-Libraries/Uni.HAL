@@ -59,7 +59,8 @@ Notes:
 #ifndef SYSVIEW_FREERTOS_H
 #define SYSVIEW_FREERTOS_H
 
-#include "SEGGER_SYSVIEW.h"
+//TODO: make configurable
+//#include "SEGGER_SYSVIEW.h"
 
 /*********************************************************************
 *

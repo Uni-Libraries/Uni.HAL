@@ -39,4 +39,6 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/segger_systemview_config/SEGGER_SYSVIEW_
 add_library(segger_systemview_freertos INTERFACE)
 target_sources(segger_systemview_freertos INTERFACE src_freertos/SEGGER_SYSVIEW_FreeRTOS.c)
 target_include_directories(segger_systemview_freertos INTERFACE include_freertos)
-target_link_libraries(segger_systemview_freertos INTERFACE segger_systemview)
+
+# TODO: make configurable
+#target_link_libraries(segger_systemview_freertos INTERFACE segger_systemview)

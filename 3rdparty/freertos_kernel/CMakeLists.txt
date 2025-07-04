@@ -71,8 +71,10 @@ endif()
 #
 
 if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC")
-    target_link_libraries(freertos_kernel PUBLIC segger_rtt)
-    target_link_libraries(freertos_kernel PUBLIC segger_systemview_freertos)
+    # make configurable
+
+    #target_link_libraries(freertos_kernel PUBLIC segger_rtt)
+    #target_link_libraries(freertos_kernel PUBLIC segger_systemview_freertos)
 endif()
 
 
@@ -157,11 +159,12 @@ if(UNI_HAL_TARGET_MCU STREQUAL "PC")
         "                                                                               \n"
     )
 else()
+    #TODO: make configutable
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "// port specific: ARM Cortex-M                                                 \n"
         "#define configMINIMAL_STACK_SIZE                (512U)                         \n"
         "#define configUSE_PORT_OPTIMISED_TASK_SELECTION (1)                            \n"
-        "#include \"SEGGER_SYSVIEW_FreeRTOS.h\"                                         \n"
+    #    "#include \"SEGGER_SYSVIEW_FreeRTOS.h\"                                         \n"
         "                                                                               \n"
     )
 endif()

@@ -55,7 +55,9 @@ add_subdirectory(3rdparty/arm_cmsis_core)
 
 if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC")
     add_subdirectory(3rdparty/segger_rtt)
-    add_subdirectory(3rdparty/segger_systemview)
+
+    #TODO: make configurable
+    #add_subdirectory(3rdparty/segger_systemview)
 endif()
 
 
