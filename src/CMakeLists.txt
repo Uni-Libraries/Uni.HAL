@@ -64,7 +64,6 @@ endif()
 #
 
 target_link_libraries(uni.hal PUBLIC freertos_kernel)
-target_link_libraries(uni.hal PUBLIC freertos_tcp)
 target_link_libraries(uni.hal PUBLIC uni.common)
 target_link_libraries(uni.hal PUBLIC nanoprintf)
 if(DEFINED UNI_HAL_DFP_LIBRARY)
