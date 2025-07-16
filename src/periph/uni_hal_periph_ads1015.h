@@ -115,6 +115,8 @@ bool uni_hal_ads1015_is_inited(const uni_hal_ads1015_context_t* ctx);
 
 bool uni_hal_ads1015_configure(uni_hal_ads1015_context_t* ctx);
 
-uint16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx);
-
+int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx);
+ 
 int16_t uni_hal_ads1015_get_voltage_mv(uni_hal_ads1015_context_t* ctx);
+
+bool uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx);
