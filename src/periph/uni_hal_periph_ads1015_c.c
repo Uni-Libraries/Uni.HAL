@@ -12,6 +12,7 @@
 #include <uni_common.h>
 
 // Uni.HAL
+#include "task.h"
 #include "uni_hal_periph_ads1015.h"
 
 
@@ -83,29 +84,28 @@ bool uni_hal_ads1015_configure(uni_hal_ads1015_context_t* ctx)
 int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx)
 {
     int16_t result = INT16_MAX;
-    if (!uni_hal_ads1015_is_inited(ctx)) {
-        return INT16_MAX;
-    }
 
-    if (ctx->config.mode == UNI_HAL_ADS1015_MODE_SINGLE) {
-        uint16_t config_val = UNI_HAL_ADS1015_STATUS_NOEFF | ctx->config.mux | ctx->config.pga | ctx->config.mode | ctx->config.rate;
-        config_val |= (1 << 15); // Trigger conversion
-
-        if (!_uni_hal_ads1015_write(ctx, UNI_HAL_ADS1015_REG_CONFIG, config_val)) {
-            return INT16_MAX;
-        }
-
-        // Wait for the conversion to complete
-        while (!uni_hal_ads1015_is_ready(ctx)) {
-            portYIELD();
-        }
-    }
-
-    if (_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONVERSION, (uint16_t*) &result))
+    if (uni_hal_ads1015_is_inited(ctx))
     {
-        result = uni_common_bytes_i12_to_i16(result);
-    } else {
-        result = INT16_MAX;
+        if (ctx->config.mode == UNI_HAL_ADS1015_MODE_SINGLE)
+        {
+            // Trigger conversion
+            uint16_t config_val = ctx->config.mux | ctx->config.pga | ctx->config.mode | ctx->config.rate | (1 << 15);
+            _uni_hal_ads1015_write(ctx, UNI_HAL_ADS1015_REG_CONFIG, config_val);
+
+            // Wait for the conversion to complete
+            portYIELD();
+            while (!uni_hal_ads1015_is_ready(ctx)) {
+                portYIELD();
+            }
+        }
+
+        if (_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONVERSION, (uint16_t*) &result))
+        {
+            result = uni_common_bytes_i12_to_i16(result >> 4);
+        } else {
+            result = INT16_MAX;
+        }
     }
 
     return result;
@@ -154,11 +154,11 @@ bool uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx)
     bool result = false;
     if (uni_hal_ads1015_is_inited(ctx))
     {
-        uint16_t config_reg;
+        uint16_t config_reg = 0U;
         if(_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONFIG, &config_reg))
         {
             // Bit 15 is the OS bit. 1 means conversion is done.
-            result = (config_reg & 0x8000) != 0;
+            result = (config_reg & (1<<15)) != 0;
         }
     }
     return result;
