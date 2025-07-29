@@ -32,6 +32,11 @@ typedef struct {
     uni_hal_core_periph_e instance;
 
     /**
+     * Clock source
+     */
+    uni_hal_rcc_clksrc_e clksrc;
+
+    /**
      * UART RX pin
      */
     uni_hal_gpio_pin_context_t* pin_rx;
