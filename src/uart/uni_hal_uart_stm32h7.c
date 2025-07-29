@@ -250,12 +250,14 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
         if (xStreamBufferReceiveFromISR(ctx_io->buf_tx.handle, &data, 1U, &higher_task_woken)) {
             LL_USART_TransmitData8(dev_handle, data);
             ctx_io->stats.tx_transmited++;
+        } else {
+            LL_USART_DisableIT_TXE_TXFNF(dev_handle);
         }
     }
 
     if (LL_USART_IsEnabledIT_TC(dev_handle) && LL_USART_IsActiveFlag_TC(dev_handle)) {
-        if (ctx->in_transmission) {
-            LL_USART_DisableIT_TXE(dev_handle);
+        if (xStreamBufferIsEmpty(ctx_io->buf_tx.handle) && ctx->in_transmission) {
+            LL_USART_DisableIT_TXE_TXFNF(dev_handle);
             LL_USART_DisableIT_TC(dev_handle);
             LL_USART_ClearFlag_TC(dev_handle);
             ctx->in_transmission = false;
@@ -359,7 +361,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 LL_USART_ConfigAsyncMode(handle);
 
 
-                LL_USART_DisableIT_TXE(handle);
+                LL_USART_DisableIT_TXE_TXFNF(handle);
                 LL_USART_DisableIT_TC(handle);
                 LL_USART_ClearFlag_TC(handle);
                 LL_USART_ClearFlag_IDLE(handle);
