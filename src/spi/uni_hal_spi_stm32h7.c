@@ -96,6 +96,51 @@ static void _uni_hal_spi_gpio_set_alternate(uni_hal_core_periph_e spi, uni_hal_g
                     break;
             }
         }
+    } else if (spi == UNI_HAL_CORE_PERIPH_SPI_5) {
+        if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_F) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_6:
+                case UNI_HAL_GPIO_PIN_7:
+                case UNI_HAL_GPIO_PIN_8:
+                case UNI_HAL_GPIO_PIN_9:
+                case UNI_HAL_GPIO_PIN_11:
+                    result = UNI_HAL_GPIO_ALTERNATE_5;
+                    break;
+                default:
+                    break;
+            }
+        }
+        else if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_H) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_5:
+                case UNI_HAL_GPIO_PIN_6:
+                case UNI_HAL_GPIO_PIN_7:
+                    result = UNI_HAL_GPIO_ALTERNATE_5;
+                    break;
+                default:
+                    break;
+            }
+        }
+        else if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_J) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_10:
+                case UNI_HAL_GPIO_PIN_11:
+                    result = UNI_HAL_GPIO_ALTERNATE_5;
+                    break;
+                default:
+                    break;
+            }
+        }
+        else if (gpio->gpio_bank == UNI_HAL_CORE_PERIPH_GPIO_K) {
+            switch (gpio->gpio_pin) {
+                case UNI_HAL_GPIO_PIN_0:
+                case UNI_HAL_GPIO_PIN_1:
+                    result = UNI_HAL_GPIO_ALTERNATE_5;
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 
     if (result != UNI_HAL_GPIO_ALTERNATE_0) {
