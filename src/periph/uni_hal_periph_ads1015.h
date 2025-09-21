@@ -62,18 +62,17 @@ typedef enum
     UNI_HAL_ADS1015_REG_CONFIG     = 0x01
 } uni_hal_ads1015_reg_e;
 
-/*
-#define ADS1015_ADR_CONVERS      0x00
-#define ADS1015_ADR_CONFIG       0x01
-#define ADS1015_ADR_LOWTHRESH    0x02
-#define ADS1015_ADR_HITHRESH     0x03
-*/
-
 typedef enum
 {
     UNI_HAL_ADS1015_STATUS_NOEFF = 0x0000,
 } uni_hal_ads1015_status_e;
 
+typedef enum
+{
+    UNI_HAL_ADS1015_ANSWER_FAILED,
+    UNI_HAL_ADS1015_ANSWER_OK,
+    UNI_HAL_ADS1015_ANSWER_NOTREADY,
+} uni_hal_ads1015_answer_e;
 
 
 //
@@ -119,4 +118,4 @@ int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx);
  
 int16_t uni_hal_ads1015_get_voltage_mv(uni_hal_ads1015_context_t* ctx);
 
-bool uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx);
+uni_hal_ads1015_answer_e uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx);

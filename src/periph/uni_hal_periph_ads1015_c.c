@@ -21,15 +21,20 @@
 // Private
 //
 
-static bool _uni_hal_ads1015_read(uni_hal_ads1015_context_t* ctx, uint8_t address, uint16_t* val)
+static uni_hal_ads1015_answer_e _uni_hal_ads1015_read(uni_hal_ads1015_context_t* ctx, uint8_t address, uint16_t* val)
 {
-    bool result = false;
+    uni_hal_ads1015_answer_e result = UNI_HAL_ADS1015_ANSWER_FAILED;
     if (uni_hal_ads1015_is_inited(ctx) && val)
     {
         result = uni_hal_i2c_mem_read(ctx->config.i2c, ctx->config.address, address, UNI_HAL_I2C_MEMADD_SIZE_8BIT, (uint8_t*)val,
                                      sizeof(*val), ctx->config.timeout);
         *val = uni_common_bytes_swap16(*val);
+        if (result)
+        {
+            result = UNI_HAL_ADS1015_ANSWER_OK;
+        }
     }
+
     return result;
 }
 
@@ -95,12 +100,12 @@ int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx)
 
             // Wait for the conversion to complete
             portYIELD();
-            while (!uni_hal_ads1015_is_ready(ctx)) {
+            while (uni_hal_ads1015_is_ready(ctx) == UNI_HAL_ADS1015_ANSWER_NOTREADY) {
                 portYIELD();
             }
         }
 
-        if (_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONVERSION, (uint16_t*) &result))
+        if (_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONVERSION, (uint16_t*) &result) == UNI_HAL_ADS1015_ANSWER_OK)
         {
             result = uni_common_bytes_i12_to_i16(result >> 4);
         } else {
@@ -149,16 +154,16 @@ int16_t uni_hal_ads1015_get_voltage_mv(uni_hal_ads1015_context_t* ctx)
     return (int16_t)((float)raw_value * mv_per_lsb);
 }
 
-bool uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx)
+uni_hal_ads1015_answer_e uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx)
 {
-    bool result = false;
+    uni_hal_ads1015_answer_e result = UNI_HAL_ADS1015_ANSWER_FAILED;
     if (uni_hal_ads1015_is_inited(ctx))
     {
         uint16_t config_reg = 0U;
-        if(_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONFIG, &config_reg))
+        if(_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONFIG, &config_reg) != UNI_HAL_ADS1015_ANSWER_FAILED)
         {
             // Bit 15 is the OS bit. 1 means conversion is done.
-            result = (config_reg & (1<<15)) != 0;
+            result = ((config_reg & (1<<15)) != 0) ? UNI_HAL_ADS1015_ANSWER_OK : UNI_HAL_ADS1015_ANSWER_NOTREADY;
         }
     }
     return result;
