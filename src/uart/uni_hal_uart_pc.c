@@ -13,6 +13,8 @@
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
+        ctx->callback = NULL;
+        ctx->callback_cookie = NULL;
         ctx->initialized = true;
         result = true;
     }

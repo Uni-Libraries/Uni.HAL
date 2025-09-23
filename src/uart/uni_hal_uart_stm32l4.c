@@ -287,6 +287,12 @@ static bool _uni_hal_usart_irq_handler_lpuart(uni_hal_usart_context_t *ctx) {
         }
     }
 
+    if (ctx->callback) {
+        if (ctx->callback(ctx->callback_cookie)) {
+            higher_task_woken = pdTRUE;
+        }
+    }
+
     return higher_task_woken;
 }
 
@@ -347,6 +353,12 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
         }
     }
 
+    if (ctx->callback) {
+        if (ctx->callback(ctx->callback_cookie)) {
+            higher_task_woken = pdTRUE;
+        }
+    }
+
     return higher_task_woken;
 }
 
@@ -370,6 +382,9 @@ void UART5_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
     if (ctx != NULL && ctx->pin_rx != NULL && ctx->pin_tx != NULL) {
+        ctx->callback = NULL;
+        ctx->callback_cookie = NULL;
+
         // clock
         if (ctx->instance == UNI_HAL_CORE_PERIPH_LPUART_1)
         {

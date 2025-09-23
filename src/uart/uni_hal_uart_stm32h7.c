@@ -268,6 +268,12 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
         }
     }
 
+    if (ctx->callback) {
+        if (ctx->callback(ctx->callback_cookie)) {
+            higher_task_woken = pdTRUE;
+        }
+    }
+
     return higher_task_woken;
 }
 
@@ -320,6 +326,9 @@ void UART8_IRQHandler(void) {
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
+        ctx->callback = NULL;
+        ctx->callback_cookie = NULL;
+
         // clock
         result = uni_hal_rcc_clksrc_set(ctx->instance, ctx->clksrc);
         result = uni_hal_rcc_clk_set(ctx->instance, true) && result;
