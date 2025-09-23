@@ -23,6 +23,11 @@ extern "C" {
 //
 
 /**
+ * UART notification callback
+ */
+typedef bool (*uni_hal_uart_callback_t)(void *cookie);
+
+/**
  * USART interface context
  */
 typedef struct {
@@ -60,6 +65,16 @@ typedef struct {
      * Was USART in transmission state
      */
     bool in_transmission;
+
+    /**
+     * Notification callback
+     */
+    uni_hal_uart_callback_t callback;
+
+    /**
+     * Notification callback cookie
+     */
+    void *callback_cookie;
 
 } uni_hal_usart_context_t;
 
@@ -120,6 +135,15 @@ bool uni_hal_usart_transmit_enable(uni_hal_usart_context_t *ctx, bool value);
  * @return true on sucess
  */
 uni_hal_io_context_t* uni_hal_uart_io_get(uni_hal_usart_context_t *ctx);
+
+/**
+ * Set notification callback
+ * @param ctx UART context
+ * @param callback Notification callback
+ * @param cookie User data passed to callback
+ * @return true on success
+ */
+bool uni_hal_usart_set_callback(uni_hal_usart_context_t *ctx, uni_hal_uart_callback_t callback, void *cookie);
 
 
 
