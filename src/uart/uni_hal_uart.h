@@ -37,6 +37,11 @@ typedef struct {
     uni_hal_core_periph_e instance;
 
     /**
+     * UART baudrate
+     */
+    uint32_t baudrate;
+
+    /**
      * Clock source
      */
     uni_hal_rcc_clksrc_e clksrc;

@@ -346,7 +346,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
             // init
             LL_USART_InitTypeDef USART_InitStruct = {0};
             USART_InitStruct.PrescalerValue = LL_USART_PRESCALER_DIV1; //-V1048
-            USART_InitStruct.BaudRate = 115200;
+            USART_InitStruct.BaudRate = ctx->baudrate;
             USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
             USART_InitStruct.StopBits = LL_USART_STOPBITS_1;
             USART_InitStruct.Parity = LL_USART_PARITY_NONE;
