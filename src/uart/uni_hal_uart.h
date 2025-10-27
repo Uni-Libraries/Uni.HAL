@@ -12,11 +12,23 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-// uni_hal
+// uni.common
 #include "uni_common.h"
+
+// uni_hal
 #include "gpio/uni_hal_gpio.h"
 #include "io/uni_hal_io.h"
 #include "rcc/uni_hal_rcc.h"
+
+
+//
+// Enums
+//
+
+typedef enum {
+    UNI_HAL_USART_CALLBACK_UNKNOWN = 0,
+    UNI_HAL_USART_CALLBACK_TC      = 1,
+} uni_hal_usart_callback_e;
 
 //
 // Typedefs
@@ -25,7 +37,7 @@ extern "C" {
 /**
  * UART notification callback
  */
-typedef bool (*uni_hal_uart_callback_t)(void *cookie);
+typedef bool (*uni_hal_uart_callback_t)(void* ctx, void *cookie, uni_hal_usart_callback_e type);
 
 /**
  * USART interface context
