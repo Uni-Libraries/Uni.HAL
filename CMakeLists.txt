@@ -86,7 +86,7 @@ elseif(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
 elseif(UNI_HAL_TARGET_MCU STREQUAL "PC")
     set(UNI_HAL_DFP_SUFFIX  "*_pc.c")
 else()
-    message(FATAL_ERROR "Unknown target MCU. Please set `UNI_HAL_TARGET_MCU` variable")
+    message(FATAL_ERROR "Unknown target MCU ${UNI_HAL_TARGET_MCU}. Please set `UNI_HAL_TARGET_MCU` variable")
 endif()
 
 
