@@ -71,10 +71,21 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 }
 
 
+bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, size_t data_len, uint32_t timeout) {
+    (void)ctx;
+    (void)data;
+    (void)data_len;
+    (void)timeout;
+
+    //TODO
+    return false;
+}
+
+
+
 //
 // Functions/Transmit
 //
-
 
 size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, uint32_t data_len) {
     size_t result = 0;
