@@ -99,6 +99,12 @@ typedef struct {
      * Buffer array
      */
     void* array;
+
+    /**
+     * Ongoing receive_sync match progress (bytes of the pattern already matched)
+     * This allows continuing sync across calls when a timeout occurs mid-pattern.
+     */
+    size_t sync_idx;
 } uni_hal_io_buffer_t;
 
 

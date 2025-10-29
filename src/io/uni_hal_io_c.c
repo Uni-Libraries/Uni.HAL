@@ -22,6 +22,10 @@ bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
         (void) memset(&ctx->handlers, 0, sizeof(uni_hal_io_handlers_t));
         (void) memset(&ctx->stats, 0, sizeof(uni_hal_io_stats_t));
 
+        // reset sync progress
+        ctx->buf_rx.sync_idx = 0U;
+        ctx->buf_tx.sync_idx = 0U;
+
         ctx->buf_rx.handle = xStreamBufferCreateStatic(ctx->buf_rx.size, 1U, ctx->buf_rx.array, &ctx->buf_rx.cb);
         ctx->buf_tx.handle = xStreamBufferCreateStatic(ctx->buf_tx.size, 1U, ctx->buf_tx.array, &ctx->buf_tx.cb);
 
@@ -50,6 +54,8 @@ size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
 bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
+        // reset sync progress and buffer
+        ctx->buf_rx.sync_idx = 0U;
         result = xStreamBufferReset(ctx->buf_rx.handle);
     }
     return result;
@@ -78,25 +84,26 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
     }
 
     const size_t pat_len = data_len;
-    size_t match_idx = 0U; // number of contiguous matched bytes
-    bool found = false;
-
+    size_t match_idx = ctx->buf_rx.sync_idx; // resume progress across calls, if any
     uint32_t const t_start = uni_hal_systick_get_ms();
 
     for (;;) {
-        // Determine how long to wait inside FreeRTOS call
+        // Block using FreeRTOS ticks to avoid busy-waiting
         TickType_t ticks_to_wait = 0;
         if (timeout > 0U) {
             uint32_t const now = uni_hal_systick_get_ms();
             uint32_t const elapsed = now - t_start;
             if (elapsed >= timeout) {
-                break;
+                // Timeout: drain RX and persist current match progress, leave buffer empty
+                uint8_t dump[32];
+                while (xStreamBufferReceive(ctx->buf_rx.handle, dump, sizeof(dump), 0U) > 0U) { }
+                ctx->buf_rx.sync_idx = match_idx;
+                return false;
             }
-            uint32_t rem_ms = timeout - elapsed;
+            uint32_t const rem_ms = timeout - elapsed;
             ticks_to_wait = pdMS_TO_TICKS(rem_ms);
             if ((ticks_to_wait == 0U) && (rem_ms > 0U)) {
-                // ensure at least one tick wait to avoid busy loop
-                ticks_to_wait = 1U;
+                ticks_to_wait = 1U; // ensure at least one tick to yield
             }
         }
 
@@ -104,94 +111,30 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
         size_t const got = xStreamBufferReceive(ctx->buf_rx.handle, &ch, 1U, ticks_to_wait);
 
         if (got == 0U) {
-            // no data now
             if (timeout == 0U) {
-                break;
+                // Immediate mode: drain and store progress, leave buffer empty
+                uint8_t dump[32];
+                while (xStreamBufferReceive(ctx->buf_rx.handle, dump, sizeof(dump), 0U) > 0U) { }
+                ctx->buf_rx.sync_idx = match_idx;
+                return false;
             }
-            // still have time: try again
+            // Still time remaining, try again
             continue;
         }
 
-        // Update match index without any VLA/window
+        // Advance simple prefix matcher using only an index (no VLA/extra buffers)
         if (ch == data[match_idx]) {
             match_idx++;
             if (match_idx == pat_len) {
-                found = true;
-                break;
+                // Pattern found. Do not reconstruct/alter remaining RX content; stop here.
+                ctx->buf_rx.sync_idx = 0U;
+                return true;
             }
         } else {
-            // naive fallback without LPS table: keep only immediate prefix if possible
-            if (match_idx > 0U) {
-                match_idx = (ch == data[0]) ? 1U : 0U;
-            } else {
-                match_idx = (ch == data[0]) ? 1U : 0U;
-            }
+            // Simple overlap handling without tables: if current char equals first pattern byte,
+            // keep 1, else reset to 0.
+            match_idx = (ch == data[0]) ? 1U : 0U;
         }
-    }
-
-    if (found) {
-        // Tail remaining in RX after the matched pattern
-        size_t tail_len = xStreamBufferBytesAvailable(ctx->buf_rx.handle);
-        uint8_t *tail = NULL;
-
-        if (tail_len > 0U) {
-            tail = (uint8_t *) pvPortMalloc(tail_len);
-            if (tail != NULL) {
-                size_t rd = 0U;
-                while (rd < tail_len) {
-                    size_t const g = xStreamBufferReceive(ctx->buf_rx.handle, &tail[rd], tail_len - rd, 0U);
-                    if (g == 0U) {
-                        break;
-                    }
-                    rd += g;
-                }
-                tail_len = rd;
-            } else {
-                // Allocation failed: drain to discard to keep consistent state
-                (void) xStreamBufferReceive(ctx->buf_rx.handle, NULL, 0U, 0U);
-                tail_len = 0U;
-            }
-        }
-
-        // Rebuild RX buffer: pattern + tail
-        (void) xStreamBufferReset(ctx->buf_rx.handle);
-
-        // Write pattern first
-        size_t sent = 0U;
-        while (sent < pat_len) {
-            size_t const s = xStreamBufferSend(ctx->buf_rx.handle, &data[sent], pat_len - sent, 0U);
-            if (s == 0U) {
-                break;
-            }
-            sent += s;
-        }
-
-        // Then append tail if buffered
-        if (tail != NULL) {
-            size_t ts = 0U;
-            while (ts < tail_len) {
-                size_t const s = xStreamBufferSend(ctx->buf_rx.handle, &tail[ts], tail_len - ts, 0U);
-                if (s == 0U) {
-                    break;
-                }
-                ts += s;
-            }
-            vPortFree(tail);
-        }
-
-        return true;
-    } else {
-        // Keep partial prefix equal to matched length
-        size_t keep = match_idx;
-        size_t sent = 0U;
-        while (sent < keep) {
-            size_t const s = xStreamBufferSend(ctx->buf_rx.handle, &data[sent], keep - sent, 0U);
-            if (s == 0U) {
-                break;
-            }
-            sent += s;
-        }
-        return false;
     }
 }
 
