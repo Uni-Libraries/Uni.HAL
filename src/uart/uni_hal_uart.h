@@ -74,6 +74,11 @@ typedef struct {
      */
     uni_hal_io_context_t *io;
 
+    /**
+     * ISR Priority
+     */
+    uint32_t isr_priority;
+
     /*
      * Was USART initialized
      */

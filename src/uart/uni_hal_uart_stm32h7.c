@@ -350,7 +350,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
         result = uni_hal_gpio_pin_init(ctx->pin_tx) && result;
 
         // enable IRQ
-        result = _uni_hal_uart_nvic(ctx->instance, 1U) && result;
+        result = _uni_hal_uart_nvic(ctx->instance, ctx->isr_priority) && result;
         result =_uni_hal_usart_irq_rx_enable(ctx, true) && result;
 
         USART_TypeDef* handle = _uni_hal_uart_handle_get(ctx->instance);
