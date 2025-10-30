@@ -165,28 +165,6 @@ static bool _uni_hal_usart_save_ctx(uni_hal_usart_context_t *ctx) {
 }
 
 
-/**
- * Enables or disables USART Receive Interrupt
- * @param ctx pointer to the interface context
- * @param val true on enable interrupt, false to disable it
- * @return true on success
- */
-static bool _uni_hal_usart_irq_rx_enable(uni_hal_usart_context_t *ctx, bool val) {
-    bool result = false;
-    USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx->instance);
-    if (instance) {
-        if (val) {
-            LL_USART_EnableIT_RXNE(instance);
-        } else {
-            LL_USART_DisableIT_RXNE(instance);
-        }
-        result = true;
-    }
-    return result;
-}
-
-
-
 //
 // IO handlers
 //
@@ -223,11 +201,13 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
         uint8_t data = LL_USART_ReceiveData8(dev_handle);
 
         // try to tunnel data
-        uni_hal_io_tunnel_transmit_result_t tunnel_result =
-            uni_hal_io_tunnel_transmit(ctx_io->handlers.tunnel_ctx, ctx_io, &data, sizeof(data));
+        uni_hal_io_tunnel_transmit_result_t tunnel_result = UNI_HAL_IO_TUNNEL_TRANSPARENT;
+        if (ctx_io->handlers.tunnel_ctx) {
+            tunnel_result = uni_hal_io_tunnel_transmit(ctx_io->handlers.tunnel_ctx, ctx_io, &data, sizeof(data));
+        }
 
         // send to our ringbuffer in case we failed to tunnel data
-        if (tunnel_result == UNI_HAL_IO_TUNNEL_FAIL || tunnel_result == UNI_HAL_IO_TUNNEL_TRANSPARENT) {
+        if (tunnel_result == UNI_HAL_IO_TUNNEL_TRANSPARENT || tunnel_result == UNI_HAL_IO_TUNNEL_FAIL) {
             if (xStreamBufferSendFromISR(ctx_io->buf_rx.handle, &data, 1U, &higher_task_woken)) {
                 ctx_io->stats.rx_received++;
             }
@@ -351,7 +331,6 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
 
         // enable IRQ
         result = _uni_hal_uart_nvic(ctx->instance, ctx->isr_priority) && result;
-        result =_uni_hal_usart_irq_rx_enable(ctx, true) && result;
 
         USART_TypeDef* handle = _uni_hal_uart_handle_get(ctx->instance);
         if(result && handle != NULL) {
@@ -393,6 +372,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 }
 
                 LL_USART_EnableIT_IDLE(handle);
+                LL_USART_EnableIT_RXNE(handle);
             }
         }
 
