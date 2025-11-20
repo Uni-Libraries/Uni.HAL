@@ -590,12 +590,42 @@ uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t c
 // Functions/H7
 //
 
+static int32_t _uni_hal_adc_calc_temperature(uint32_t vref_analog_voltage, uint32_t tempsensor_adc_data, uint32_t adc_resolution) {
+    int32_t temp_sensor_cal1 = (int32_t) *TEMPSENSOR_CAL1_ADDR;
+    int32_t temp_sensor_cal2 = (int32_t) *TEMPSENSOR_CAL2_ADDR;
+    int32_t temp_sensor_cal1_temp = (int32_t) TEMPSENSOR_CAL1_TEMP;
+    int32_t temp_sensor_cal2_temp = (int32_t) TEMPSENSOR_CAL2_TEMP;
+    int32_t temp_sensor_cal_vref_analog = (int32_t) TEMPSENSOR_CAL_VREFANALOG;
+
+    int32_t temp_sensor_adc_data_converted = (int32_t) __LL_ADC_CONVERT_DATA_RESOLUTION(tempsensor_adc_data, adc_resolution, LL_ADC_RESOLUTION_16B);
+
+    // Calculate temperature in millidegrees Celsius
+    // Formula:
+    // Temperature = ((TS_ADC_DATA - TS_CAL1) * (TS_CAL2_TEMP - TS_CAL1_TEMP)) / (TS_CAL2 - TS_CAL1) + TS_CAL1_TEMP
+    //
+    // To improve precision and return millidegrees:
+    // 1. Scale TS_CAL1_TEMP and TS_CAL2_TEMP to millidegrees (multiply by 1000)
+    // 2. Perform calculation
+    
+    int32_t temp_diff_deg_c = temp_sensor_cal2_temp - temp_sensor_cal1_temp;
+    int32_t cal_diff = temp_sensor_cal2 - temp_sensor_cal1;
+
+    // Scale voltage to avoid precision loss during division
+    // We want to calculate: (ADC_DATA * VREF) / CAL_VREF
+    // This gives us the ADC value as if it was measured at CAL_VREF (3.3V)
+    int32_t adc_calibrated = (temp_sensor_adc_data_converted * (int32_t)vref_analog_voltage) / temp_sensor_cal_vref_analog;
+
+    int32_t numerator = (adc_calibrated - temp_sensor_cal1) * temp_diff_deg_c * 1000;
+    
+    return (numerator / cal_diff) + (temp_sensor_cal1_temp * 1000);
+}
+
 int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
     int32_t result = 0;
     if (uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
-        result = __LL_ADC_CALC_TEMPERATURE(ctx->config.v_ref,
-                                           uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR),
-                                           LL_ADC_RESOLUTION_16B);
+        result = _uni_hal_adc_calc_temperature(ctx->config.v_ref,
+                                               uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR),
+                                               LL_ADC_RESOLUTION_16B);
     }
     return result;
 }
