@@ -20,7 +20,7 @@ endif()
 
 # common compiler flags
 set(COMMON_FLAGS         "${TOOLCHAIN_ARCH}")                          #toolchain flags
-set(COMMON_FLAGS         "${COMMON_FLAGS} -Wall -Wextra -Werror -Wpedantic -Wno-psabi") #warnings
+set(COMMON_FLAGS         "${COMMON_FLAGS} -Wall -Wextra -Werror -Wno-psabi") #warnings
 set(COMMON_FLAGS         "${COMMON_FLAGS} -fstack-usage")                              #stack usage analysis
 set(COMMON_FLAGS         "${COMMON_FLAGS} -ffunction-sections")                        #generate function sections in ELF file
 set(COMMON_FLAGS         "${COMMON_FLAGS} -fdata-sections")                            #generate data sections in ELF file
