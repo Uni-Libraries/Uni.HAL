@@ -10,12 +10,16 @@ add_library(st_stm32h7 STATIC)
 #
 target_sources(st_stm32h7 PRIVATE
     "src_hal/stm32h7xx_hal.c"
+    "src_hal/stm32h7xx_hal_cryp.c"
+    "src_hal/stm32h7xx_hal_cryp_ex.c"
     "src_hal/stm32h7xx_hal_cortex.c"
     "src_hal/stm32h7xx_hal_gpio.c"
     "src_hal/stm32h7xx_hal_eth.c"
     "src_hal/stm32h7xx_hal_eth_ex.c"
     "src_hal/stm32h7xx_hal_flash.c"
     "src_hal/stm32h7xx_hal_flash_ex.c"
+    "src_hal/stm32h7xx_hal_hash.c"
+    "src_hal/stm32h7xx_hal_hash_ex.c"
     "src_hal/stm32h7xx_hal_i2c.c"
     "src_hal/stm32h7xx_hal_i2c_ex.c"
     "src_hal/stm32h7xx_hal_rcc.c"
@@ -60,7 +64,7 @@ target_compile_definitions(st_stm32h7 PUBLIC "USE_FULL_LL_DRIVER")
 target_compile_definitions(st_stm32h7 PUBLIC "HSE_VALUE=${UNI_HAL_HSE_VALUE}")
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     target_compile_definitions(st_stm32h7 PUBLIC "STM32H7")
-    target_compile_definitions(st_stm32h7 PUBLIC "STM32H743xx")
+    target_compile_definitions(st_stm32h7 PUBLIC "STM32H753xx")
 else()
     message(FATAL_ERROR "Unknown MCU")
 endif()
@@ -85,6 +89,8 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/stm32h7xx_hal_conf.h"
         "#include \"stm32h7xx.h\"                             \n"
         "#define HAL_CORTEX_MODULE_ENABLED      (1)           \n"
+        "#define HAL_CRYP_MODULE_ENABLED         (1)          \n"
+        "#define HAL_HASH_MODULE_ENABLED         (1)          \n"
         "#define HAL_DMA_MODULE_ENABLED         (1)           \n"
         "#define HAL_GPIO_MODULE_ENABLED        (1)           \n"
         "#define HAL_I2C_MODULE_ENABLED         (1)           \n"
@@ -105,6 +111,8 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
         "#define assert_param(expr) ((void)0U)                \n"
         "#include \"stm32h7xx_hal_cortex.h\"                  \n"
         "#include \"stm32h7xx_hal_dma.h\"                     \n"
+        "#include \"stm32h7xx_hal_cryp.h\"                    \n"
+        "#include \"stm32h7xx_hal_hash.h\"                    \n"
         "#include \"stm32h7xx_hal_flash.h\"                   \n"
         "#include \"stm32h7xx_hal_rcc.h\"                     \n"
         "#include \"stm32h7xx_hal_gpio.h\"                    \n"
