@@ -627,12 +627,6 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         LL_SPI_DisableMasterRxAutoSuspend(instance);
         LL_SPI_SetTransferSize(instance, len);
         LL_SPI_EnableIT_EOT(instance);
-        if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
-        {
-            /* Re-arm CRC init pattern (CRCEN edge) so each transfer starts from configured init. */
-            LL_SPI_DisableCRC(instance);
-            LL_SPI_EnableCRC(instance);
-        }
         LL_SPI_Enable(instance);
         if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
             LL_SPI_StartMasterTransfer(instance);
@@ -670,13 +664,6 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
         SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
         if (instance != NULL) {
             _uni_hal_spi_clear_flags(ctx->config.instance);
-
-            if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
-            {
-                /* Re-arm CRC init pattern (CRCEN edge) so each transfer starts from configured init. */
-                LL_SPI_DisableCRC(instance);
-                LL_SPI_EnableCRC(instance);
-            }
 
             LL_SPI_DisableGPIOControl(instance);
             LL_SPI_DisableMasterRxAutoSuspend(instance);
