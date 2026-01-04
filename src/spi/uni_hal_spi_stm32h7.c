@@ -512,11 +512,6 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
         }
         init_struct.BaudRate = _uni_hal_spi_prescaler(ctx->config.prescaler);
         init_struct.BitOrder = LL_SPI_MSB_FIRST;
-        init_struct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
-        if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE) {
-            init_struct.CRCCalculation = LL_SPI_CRCCALCULATION_ENABLE;
-            init_struct.CRCPoly = ctx->config.crc_polynomial;
-        }
 
         result = LL_SPI_Init(instance, &init_struct) == SUCCESS;
         if(result) {
@@ -526,9 +521,21 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
 
             if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
             {
+                LL_SPI_EnableCRC(instance);
+                LL_SPI_EnableFullSizeCRC(instance);
                 LL_SPI_SetCRCWidth(instance, LL_SPI_CRC_16BIT);
-                LL_SPI_SetTxCRCInitPattern(instance, LL_SPI_TXCRCINIT_ALL_ONES_PATTERN);
-                LL_SPI_SetRxCRCInitPattern(instance, LL_SPI_TXCRCINIT_ALL_ONES_PATTERN);
+
+                const uint32_t tx_init = (ctx->config.crc_init == 0xFFFFU)
+                                            ? LL_SPI_TXCRCINIT_ALL_ONES_PATTERN
+                                            : LL_SPI_TXCRCINIT_ALL_ZERO_PATTERN;
+                const uint32_t rx_init = (ctx->config.crc_init == 0xFFFFU)
+                                            ? LL_SPI_RXCRCINIT_ALL_ONES_PATTERN
+                                            : LL_SPI_RXCRCINIT_ALL_ZERO_PATTERN;
+
+                LL_SPI_SetTxCRCInitPattern(instance, tx_init);
+                LL_SPI_SetRxCRCInitPattern(instance, rx_init);
+
+                LL_SPI_SetCRCPolynomial(instance, ctx->config.crc_polynomial);
             }
         }
     }
@@ -622,6 +629,8 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         LL_SPI_EnableIT_EOT(instance);
         if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
         {
+            /* Re-arm CRC init pattern (CRCEN edge) so each transfer starts from configured init. */
+            LL_SPI_DisableCRC(instance);
             LL_SPI_EnableCRC(instance);
         }
         LL_SPI_Enable(instance);
@@ -664,6 +673,8 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
 
             if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
             {
+                /* Re-arm CRC init pattern (CRCEN edge) so each transfer starts from configured init. */
+                LL_SPI_DisableCRC(instance);
                 LL_SPI_EnableCRC(instance);
             }
 
