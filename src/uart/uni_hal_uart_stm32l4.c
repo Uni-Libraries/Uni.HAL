@@ -276,6 +276,7 @@ static bool _uni_hal_usart_irq_handler_lpuart(uni_hal_usart_context_t *ctx) {
         }
     }
 
+    // transfer complete
     if (LL_LPUART_IsEnabledIT_TC(dev_handle) && LL_LPUART_IsActiveFlag_TC(dev_handle)) {
         if (ctx->in_transmission) {
             _uni_hal_usart_irq_tx_enable(ctx, false);
@@ -285,14 +286,14 @@ static bool _uni_hal_usart_irq_handler_lpuart(uni_hal_usart_context_t *ctx) {
                 ctx_io->handlers.tx_end(ctx_io, ctx_io->handlers.tx_end_ctx);
             }
         }
-    }
 
-    if (ctx->callback) {
-        if (ctx->callback(ctx->callback_cookie)) {
-            higher_task_woken = pdTRUE;
+        if (ctx->callback) {
+            if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
+                higher_task_woken = pdTRUE;
+            }
         }
     }
-
+    
     return higher_task_woken;
 }
 
