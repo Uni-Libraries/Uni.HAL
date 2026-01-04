@@ -84,3 +84,10 @@ uint32_t uni_hal_core_stm32h7_uid_0(void){
     return LL_GetUID_Word0();
 }
 
+uint32_t uni_hal_core_stm32h7_uid_1(void){
+    return LL_GetUID_Word1();
+}
+
+uint32_t uni_hal_core_stm32h7_uid_2(void){
+    return LL_GetUID_Word2();
+}
