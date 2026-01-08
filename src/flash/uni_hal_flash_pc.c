@@ -43,7 +43,15 @@ bool uni_hal_flash_erase(size_t addr, size_t size){
 }
 
 
-bool uni_hal_flash_erase_bank(void){
+bool uni_hal_flash_erase_bank(uni_hal_flash_bank_e bank){
+    (void)bank;
+    return false;
+}
+
+
+bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_e sector){
+    (void)bank;
+    (void)sector;
     return false;
 }
 
