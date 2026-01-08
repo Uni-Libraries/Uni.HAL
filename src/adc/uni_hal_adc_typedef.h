@@ -4,6 +4,10 @@
 // Includes
 //
 
+// stdlib
+#include <stdbool.h>
+#include <stdint.h>
+
 // uni_hal
 #include "core/uni_hal_core_enum.h"
 #include "dma/uni_hal_dma.h"
@@ -72,6 +76,17 @@ typedef struct {
 
 typedef struct {
     bool initialized;
+
+    struct {
+        bool valid;
+
+        int32_t tempsensor_1_val;
+        int32_t tempsensor_1_temp;
+        int32_t tempsensor_2_val;
+        int32_t tempsensor_2_temp;
+        int32_t tempsensor_vref_analog;
+        uint16_t vref_int;
+    } cal;
 
 } uni_hal_adc_state_t;
 

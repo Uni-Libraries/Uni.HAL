@@ -84,6 +84,31 @@ void ADC3_IRQHandler(void) {
 // PRIVATE
 //
 
+static void _uni_hal_adc_stm32h7_cache_cal(uni_hal_adc_context_t *ctx) {
+    ctx->state.cal.valid = false;
+
+    if (ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
+        bool need_cache = false;
+        for (uint32_t idx_channel = 0; idx_channel < ctx->config.channels_count; idx_channel++) {
+            const uint32_t ch = ctx->config.channels[idx_channel];
+            if (ch == UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR || ch == UNI_HAL_ADC_STM32H7_CHANNEL_REFINT) {
+                need_cache = true;
+                break;
+            }
+        }
+
+        if (need_cache) {
+            ctx->state.cal.tempsensor_1_val = (int32_t)(*TEMPSENSOR_CAL1_ADDR);
+            ctx->state.cal.tempsensor_1_temp = (int32_t)TEMPSENSOR_CAL1_TEMP;
+            ctx->state.cal.tempsensor_2_val = (int32_t)(*TEMPSENSOR_CAL2_ADDR);
+            ctx->state.cal.tempsensor_2_temp = (int32_t)TEMPSENSOR_CAL2_TEMP;
+            ctx->state.cal.tempsensor_vref_analog = (int32_t)TEMPSENSOR_CAL_VREFANALOG;
+            ctx->state.cal.vref_int = (uint16_t)(*VREFINT_CAL_ADDR);
+            ctx->state.cal.valid = true;
+        }
+    }
+}
+
 /**
  * Get channel bits from the channel index
  * @param channel_num index of channel
@@ -321,7 +346,7 @@ static uint32_t _uni_hal_adc_get_rank(uint32_t rank_idx) {
  * @return pointer to ADC handle
  */
 static ADC_TypeDef *_uni_hal_adc_get_instance(uni_hal_core_periph_e instance) {
-    ADC_TypeDef *result = NULL;
+    ADC_TypeDef *result = nullptr;
 
     switch (instance) {
     case UNI_HAL_CORE_PERIPH_ADC_1:
@@ -424,7 +449,7 @@ bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
 bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
     bool result = false;
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
-    if (instance != NULL) {
+    if (instance != nullptr) {
         // module
         LL_ADC_InitTypeDef adc = {
                 .Resolution = LL_ADC_RESOLUTION_16B,
@@ -437,7 +462,7 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
         LL_ADC_REG_InitTypeDef reg = {
                 .TriggerSource = LL_ADC_REG_TRIG_SOFTWARE,
                 .ContinuousMode = LL_ADC_REG_CONV_CONTINUOUS,
-                .DataTransferMode =  ctx->config.dma != NULL ? LL_ADC_REG_DMA_TRANSFER_UNLIMITED : LL_ADC_REG_DR_TRANSFER,
+                .DataTransferMode =  ctx->config.dma != nullptr ? LL_ADC_REG_DMA_TRANSFER_UNLIMITED : LL_ADC_REG_DR_TRANSFER,
                 .SequencerLength = _uni_hal_adc_get_scan_length(ctx->config.channels_count),
                 .SequencerDiscont = LL_ADC_REG_SEQ_DISCONT_DISABLE,
                 .Overrun = LL_ADC_REG_OVR_DATA_OVERWRITTEN,
@@ -469,7 +494,7 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
 bool _uni_hal_adc_powerup(uni_hal_adc_context_t *ctx) {
     bool result = false;
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
-    if (instance != NULL) {
+    if (instance != nullptr) {
         // Disable ADC deep power down (enabled by default after reset state)
         LL_ADC_DisableDeepPowerDown(instance);
 
@@ -505,7 +530,7 @@ void _uni_hal_adc_enable(uni_hal_adc_context_t *ctx) {
 bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
     bool result = false;
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
-    if (instance != NULL) {
+    if (instance != nullptr) {
         if (!LL_ADC_REG_IsConversionOngoing(instance)) {
             LL_ADC_REG_StartConversion(instance);
             result = true;
@@ -524,15 +549,17 @@ bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
 bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     bool result = false;
 
-    if (ctx != NULL && ctx->config.channels_count > 0U) {
+    if (ctx != nullptr && ctx->config.channels_count > 0U) {
         result = true;
+
+        _uni_hal_adc_stm32h7_cache_cal(ctx);
 
         // clock
         uint32_t adc_interrupt = _uni_hal_adc_get_interrupt(ctx->config.instance);
 
         // gpio
         for (size_t idx = 0; idx < ctx->config.channels_count; idx++) {
-            if (ctx->config.pins[idx] != NULL && !uni_hal_gpio_pin_is_inited(ctx->config.pins[idx])) {
+            if (ctx->config.pins[idx] != nullptr && !uni_hal_gpio_pin_is_inited(ctx->config.pins[idx])) {
                 ctx->config.pins[idx]->gpio_type = UNI_HAL_GPIO_TYPE_ANALOG;
                 ctx->config.pins[idx]->gpio_pull = UNI_HAL_GPIO_PULL_NO;
                 result = uni_hal_gpio_pin_init(ctx->config.pins[idx]) && result;
@@ -590,12 +617,11 @@ uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t c
 // Functions/H7
 //
 
-static int32_t _uni_hal_adc_calc_temperature(uint32_t vref_analog_voltage, uint32_t tempsensor_adc_data, uint32_t adc_resolution) {
-    int32_t temp_sensor_cal1 = (int32_t) *TEMPSENSOR_CAL1_ADDR;
-    int32_t temp_sensor_cal2 = (int32_t) *TEMPSENSOR_CAL2_ADDR;
-    int32_t temp_sensor_cal1_temp = (int32_t) TEMPSENSOR_CAL1_TEMP;
-    int32_t temp_sensor_cal2_temp = (int32_t) TEMPSENSOR_CAL2_TEMP;
-    int32_t temp_sensor_cal_vref_analog = (int32_t) TEMPSENSOR_CAL_VREFANALOG;
+static int32_t _uni_hal_adc_calc_temperature(const uni_hal_adc_state_t *state,
+                                            uint32_t vref_analog_voltage,
+                                            uint32_t tempsensor_adc_data,
+                                            uint32_t adc_resolution) {
+    int32_t result = UINT32_MAX;
 
     int32_t temp_sensor_adc_data_converted = (int32_t) __LL_ADC_CONVERT_DATA_RESOLUTION(tempsensor_adc_data, adc_resolution, LL_ADC_RESOLUTION_16B);
 
@@ -607,33 +633,39 @@ static int32_t _uni_hal_adc_calc_temperature(uint32_t vref_analog_voltage, uint3
     // 1. Scale TS_CAL1_TEMP and TS_CAL2_TEMP to millidegrees (multiply by 1000)
     // 2. Perform calculation
     
-    int32_t temp_diff_deg_c = temp_sensor_cal2_temp - temp_sensor_cal1_temp;
-    int32_t cal_diff = temp_sensor_cal2 - temp_sensor_cal1;
+    int32_t temp_diff_deg_c = state->cal.tempsensor_2_temp - state->cal.tempsensor_1_temp;
+    int32_t cal_diff = state->cal.tempsensor_2_val - state->cal.tempsensor_1_val;
 
-    // Scale voltage to avoid precision loss during division
-    // We want to calculate: (ADC_DATA * VREF) / CAL_VREF
-    // This gives us the ADC value as if it was measured at CAL_VREF (3.3V)
-    int32_t adc_calibrated = (temp_sensor_adc_data_converted * (int32_t)vref_analog_voltage) / temp_sensor_cal_vref_analog;
-
-    int32_t numerator = (adc_calibrated - temp_sensor_cal1) * temp_diff_deg_c * 1000;
+    if (cal_diff != 0) {
+        // Scale voltage to avoid precision loss during division
+        // We want to calculate: (ADC_DATA * VREF) / CAL_VREF
+        // This gives us the ADC value as if it was measured at CAL_VREF (3.3V)
+        int32_t adc_calibrated = (temp_sensor_adc_data_converted * (int32_t)vref_analog_voltage) / state->cal.tempsensor_vref_analog;
+        int32_t numerator = (adc_calibrated - state->cal.tempsensor_1_val) * temp_diff_deg_c * 1000;
+        result = (numerator / cal_diff) + (state->cal.tempsensor_1_temp * 1000);
+    }
     
-    return (numerator / cal_diff) + (temp_sensor_cal1_temp * 1000);
+    return result;
 }
 
 int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
-    int32_t result = 0;
+    int32_t result = UINT32_MAX;
     if (uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
-        result = _uni_hal_adc_calc_temperature(ctx->config.v_ref,
+        result = _uni_hal_adc_calc_temperature(&ctx->state,
+                                               ctx->config.v_ref,
                                                uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR),
                                                LL_ADC_RESOLUTION_16B);
     }
     return result;
 }
 
-uint32_t uni_hal_adc_stm32h7_get_vdda(uni_hal_adc_context_t* ctx){
+uint32_t uni_hal_adc_stm32h7_get_vdda(uni_hal_adc_context_t* ctx) {
     uint32_t result = UINT32_MAX;
-    if(uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3){
-        result = 3300U * (*VREFINT_CAL_ADDR) / uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT);
+    if(uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
+        const uint16_t vrefint_raw = uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT);
+        if (vrefint_raw != 0U) {
+            result = (3300U * ctx->state.cal.vref_int) / (uint32_t)vrefint_raw;
+        }
     }
     return result;
 }
