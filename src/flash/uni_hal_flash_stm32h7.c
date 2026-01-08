@@ -138,8 +138,8 @@ size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst)
     return size;
 }
 
-bool uni_hal_flash_erase_bank()
-{
+
+bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_e sector) {
     bool result = false;
 
     SCB_CleanInvalidateDCache();
@@ -147,26 +147,21 @@ bool uni_hal_flash_erase_bank()
     SCB_DisableDCache();
     SCB_DisableICache();
 
-
     HAL_FLASH_Unlock();
     __HAL_FLASH_SET_PSIZE(FLASH_PSIZE_DOUBLE_WORD, FLASH_BANK_2);
 
-    for (size_t sector = 0 ;sector <8;sector++)
-    {
-        FLASH_EraseInitTypeDef ei = {
-            .TypeErase    = FLASH_TYPEERASE_SECTORS,
-            .Banks        = FLASH_BANK_2,
-            .Sector =     sector,
-            .NbSectors = 1,
-            .VoltageRange = FLASH_VOLTAGE_RANGE_4      /* fastest */
-        };
+    FLASH_EraseInitTypeDef ei = {
+        .TypeErase    = FLASH_TYPEERASE_SECTORS,
+        .Banks        = bank == UNI_HAL_FLASH_BANK_2 ? FLASH_BANK_2 : FLASH_BANK_1,
+        .Sector       = (uint32_t)sector,
+        .NbSectors    = 1,
+        .VoltageRange = FLASH_VOLTAGE_RANGE_4      /* fastest */
+    };
 
-        if (HAL_FLASHEx_Erase_IT(&ei) == HAL_OK)
-        {
-            xSemaphoreTake(xFlashDoneSem, portMAX_DELAY);
-            result = true;
-        }
-        vTaskDelay(450);
+    if (HAL_FLASHEx_Erase_IT(&ei) == HAL_OK)
+    {
+        xSemaphoreTake(xFlashDoneSem, portMAX_DELAY);
+        result = true;
     }
 
     HAL_FLASH_Lock();
@@ -175,6 +170,17 @@ bool uni_hal_flash_erase_bank()
 
     return result;
 }
+
+
+bool uni_hal_flash_erase_bank(uni_hal_flash_bank_e bank)
+{
+    bool result = true;
+    for (int sector_idx = 0; sector_idx < 9; sector_idx++) {
+        result = uni_hal_flash_erase_sector(bank, sector_idx) && result;
+    }
+    return result;
+}
+
 
 bool uni_hal_flash_erase(size_t addr, size_t size)
 {
