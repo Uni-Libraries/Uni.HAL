@@ -276,6 +276,14 @@ bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx_pin
 
 uint32_t uni_hal_gpio_pin_get_bankaddr(uni_hal_gpio_pin_context_t* ctx_pin);
 
+/**
+ * Gets current GPIO pin speed setting.
+ *
+ * @param ctx_pin pointer to GPIO pin context structure
+ * @return current speed enum (UNI_HAL_GPIO_SPEED_0..3)
+ */
+uni_hal_gpio_speed_e uni_hal_gpio_pin_speed_get(const uni_hal_gpio_pin_context_t* ctx_pin);
+
 #if defined(__cplusplus)
 }
 #endif

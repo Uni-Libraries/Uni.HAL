@@ -531,3 +531,34 @@ bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx, un
     }
     return result;
 }
+
+
+uni_hal_gpio_speed_e uni_hal_gpio_pin_speed_get(const uni_hal_gpio_pin_context_t* ctx_pin) {
+    uni_hal_gpio_speed_e result = UNI_HAL_GPIO_SPEED_0;
+
+    if (ctx_pin != NULL && ctx_pin->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
+        GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx_pin->gpio_bank);
+        if (bank != NULL) {
+            const uint32_t speed_ll = LL_GPIO_GetPinSpeed(bank, (uint32_t)ctx_pin->gpio_pin);
+            switch (speed_ll) {
+                case LL_GPIO_SPEED_FREQ_LOW:
+                    result = UNI_HAL_GPIO_SPEED_0;
+                    break;
+                case LL_GPIO_SPEED_FREQ_MEDIUM:
+                    result = UNI_HAL_GPIO_SPEED_1;
+                    break;
+                case LL_GPIO_SPEED_FREQ_HIGH:
+                    result = UNI_HAL_GPIO_SPEED_2;
+                    break;
+                case LL_GPIO_SPEED_FREQ_VERY_HIGH:
+                    result = UNI_HAL_GPIO_SPEED_3;
+                    break;
+                default:
+                    // unknown speed
+                    break;
+            }
+        }
+    }
+
+    return result;
+}

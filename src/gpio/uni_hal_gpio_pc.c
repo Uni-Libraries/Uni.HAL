@@ -57,3 +57,11 @@ bool uni_hal_gpio_pin_set(uni_hal_gpio_pin_context_t* ctx_pin, bool val) {
 
     return result;
 }
+
+
+uni_hal_gpio_speed_e uni_hal_gpio_pin_speed_get(const uni_hal_gpio_pin_context_t* ctx_pin) {
+    if (ctx_pin != NULL) {
+        return ctx_pin->gpio_speed;
+    }
+    return UNI_HAL_GPIO_SPEED_0;
+}
