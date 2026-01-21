@@ -877,6 +877,18 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
         case UNI_HAL_CORE_PERIPH_SYSCLK:
             result = uni_hal_rcc_stm32h7_clk_get_hclk();
             break;
+        case UNI_HAL_CORE_PERIPH_SPI_1:
+        case UNI_HAL_CORE_PERIPH_SPI_2:
+        case UNI_HAL_CORE_PERIPH_SPI_3:
+            result = LL_RCC_GetSPIClockFreq(LL_RCC_SPI123_CLKSOURCE);
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_4:
+        case UNI_HAL_CORE_PERIPH_SPI_5:
+            result = LL_RCC_GetSPIClockFreq(LL_RCC_SPI45_CLKSOURCE);
+            break;
+        case UNI_HAL_CORE_PERIPH_SPI_6:
+            result = LL_RCC_GetSPIClockFreq(LL_RCC_SPI6_CLKSOURCE);
+            break;
         case UNI_HAL_CORE_PERIPH_UART_1:
         case UNI_HAL_CORE_PERIPH_UART_6:
             result = LL_RCC_GetUSARTClockFreq(LL_RCC_USART16_CLKSOURCE);
@@ -1385,5 +1397,4 @@ void NMI_Handler(void) {
         _uni_hal_stm_rcc_sysclk();
     }
 }
-
 
