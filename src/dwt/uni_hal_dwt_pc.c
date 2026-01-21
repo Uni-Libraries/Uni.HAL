@@ -4,6 +4,8 @@
 
 #include "dwt/uni_hal_dwt.h"
 
+#include <limits.h>
+
 
 
 //
@@ -42,5 +44,28 @@ uint32_t uni_hal_dwt_get_us(void){
 
 
 uint32_t uni_hal_dwt_get_tick(void){
+    return 0U;
+}
+
+
+uint32_t uni_hal_dwt_compare(uint32_t timestamp_1, uint32_t timestamp_2) {
+    return (uint32_t)(timestamp_2 - timestamp_1);
+}
+
+
+uint32_t uni_hal_dwt_convert_ms(uint32_t tick) {
+    (void)tick;
+    return 0U;
+}
+
+
+uint32_t uni_hal_dwt_convert_ns(uint32_t tick) {
+    (void)tick;
+    return 0U;
+}
+
+
+uint32_t uni_hal_dwt_convert_us(uint32_t tick) {
+    (void)tick;
     return 0U;
 }
