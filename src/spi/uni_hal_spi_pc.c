@@ -75,3 +75,9 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
     (void)len;
     return false;
 }
+
+
+uint32_t uni_hal_spi_bitrate_get(uni_hal_spi_context_t *ctx) {
+    (void)ctx;
+    return 0U;
+}

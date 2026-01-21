@@ -226,6 +226,17 @@ bool uni_hal_spi_is_busy(const uni_hal_spi_context_t *ctx);
 bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler_e prescaler);
 
 /**
+ * Gets current SPI bitrate (SCK frequency) in bits per second.
+ *
+ * @note For master mode, this is calculated as: SPI kernel clock / baudrate prescaler.
+ *       For slave mode, the bitrate is driven externally, so this function returns 0.
+ *
+ * @param ctx SPI context
+ * @return bitrate in b/s, or 0 if not available
+ */
+uint32_t uni_hal_spi_bitrate_get(uni_hal_spi_context_t *ctx);
+
+/**
  * Receive data from SPI bus
  * @param ctx SPI context
  * @param data receive buffer pointer

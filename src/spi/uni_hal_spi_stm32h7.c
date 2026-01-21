@@ -352,6 +352,40 @@ uint32_t _uni_hal_spi_prescaler(uni_hal_spi_prescaler_e prescaler) {
     return result;
 }
 
+static uint32_t _uni_hal_spi_prescaler_div_get(uint32_t prescaler_ll) {
+    uint32_t result = 0U;
+    switch (prescaler_ll) {
+        case LL_SPI_BAUDRATEPRESCALER_DIV2:
+            result = 2U;
+            break;
+        case LL_SPI_BAUDRATEPRESCALER_DIV4:
+            result = 4U;
+            break;
+        case LL_SPI_BAUDRATEPRESCALER_DIV8:
+            result = 8U;
+            break;
+        case LL_SPI_BAUDRATEPRESCALER_DIV16:
+            result = 16U;
+            break;
+        case LL_SPI_BAUDRATEPRESCALER_DIV32:
+            result = 32U;
+            break;
+        case LL_SPI_BAUDRATEPRESCALER_DIV64:
+            result = 64U;
+            break;
+        case LL_SPI_BAUDRATEPRESCALER_DIV128:
+            result = 128U;
+            break;
+        case LL_SPI_BAUDRATEPRESCALER_DIV256:
+            result = 256U;
+            break;
+        default:
+            // unknown prescaler
+            break;
+    }
+    return result;
+}
+
 
 //
 // Private/init
@@ -574,6 +608,25 @@ bool uni_hal_spi_is_inited(const uni_hal_spi_context_t *ctx) {
 
 bool uni_hal_spi_is_busy(const uni_hal_spi_context_t *ctx) {
     return uni_hal_spi_is_inited(ctx) && ctx->status.in_process;
+}
+
+
+uint32_t uni_hal_spi_bitrate_get(uni_hal_spi_context_t *ctx) {
+    uint32_t result = 0U;
+
+    if (uni_hal_spi_is_inited(ctx) && (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER)) {
+        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+        if (instance != NULL) {
+            const uint32_t clk_hz = uni_hal_rcc_clk_get_freq(ctx->config.instance);
+            const uint32_t prescaler_ll = LL_SPI_GetBaudRatePrescaler(instance);
+            const uint32_t div = _uni_hal_spi_prescaler_div_get(prescaler_ll);
+            if (clk_hz > 0U && div > 0U) {
+                result = clk_hz / div;
+            }
+        }
+    }
+
+    return result;
 }
 
 
