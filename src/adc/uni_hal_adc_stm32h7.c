@@ -4,6 +4,10 @@
 
 // stdlib
 #include <stddef.h>
+#include <stdint.h>
+
+// libc
+#include <limits.h>
 
 // st
 #include <stm32h7xx_ll_adc.h>
@@ -618,10 +622,14 @@ uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t c
 //
 
 static int32_t _uni_hal_adc_calc_temperature(const uni_hal_adc_state_t *state,
-                                            uint32_t vref_analog_voltage,
-                                            uint32_t tempsensor_adc_data,
-                                            uint32_t adc_resolution) {
-    int32_t result = UINT32_MAX;
+                                             uint32_t vref_analog_voltage,
+                                             uint32_t tempsensor_adc_data,
+                                             uint32_t adc_resolution) {
+    int32_t result = INT32_MAX;
+
+    if (state == nullptr || state->cal.valid == false) {
+        return result;
+    }
 
     int32_t temp_sensor_adc_data_converted = (int32_t) __LL_ADC_CONVERT_DATA_RESOLUTION(tempsensor_adc_data, adc_resolution, LL_ADC_RESOLUTION_16B);
 
@@ -649,7 +657,7 @@ static int32_t _uni_hal_adc_calc_temperature(const uni_hal_adc_state_t *state,
 }
 
 int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
-    int32_t result = UINT32_MAX;
+    int32_t result = INT32_MAX;
     if (uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
         result = _uni_hal_adc_calc_temperature(&ctx->state,
                                                ctx->config.v_ref,
@@ -661,7 +669,7 @@ int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
 
 uint32_t uni_hal_adc_stm32h7_get_vdda(uni_hal_adc_context_t* ctx) {
     uint32_t result = UINT32_MAX;
-    if(uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
+    if(uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3 && ctx->state.cal.valid != false) {
         const uint16_t vrefint_raw = uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT);
         if (vrefint_raw != 0U) {
             result = (3300U * ctx->state.cal.vref_int) / (uint32_t)vrefint_raw;
