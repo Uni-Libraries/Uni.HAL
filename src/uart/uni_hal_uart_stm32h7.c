@@ -10,6 +10,7 @@
 #include <stm32h7xx_ll_usart.h>
 
 // uni_hal
+#include "core/uni_hal_core.h"
 #include "io/uni_hal_io_tunnel.h"
 #include "uart/uni_hal_uart.h"
 
@@ -25,7 +26,7 @@
 // Globals
 //
 
-static uni_hal_usart_context_t * g_uni_hal_usart_ctx[UNI_HAL_UART_NUM] = { };
+static uni_hal_usart_context_t * g_uni_hal_usart_ctx[UNI_HAL_UART_NUM] = { 0 };
 
 
 
@@ -34,7 +35,7 @@ static uni_hal_usart_context_t * g_uni_hal_usart_ctx[UNI_HAL_UART_NUM] = { };
 //
 
 static USART_TypeDef *_uni_hal_uart_handle_get(uni_hal_core_periph_e instance) {
-    USART_TypeDef *result = NULL;
+    USART_TypeDef *result = nullptr;
     switch (instance) {
     case UNI_HAL_CORE_PERIPH_UART_1:
         result = USART1;
@@ -65,6 +66,17 @@ static USART_TypeDef *_uni_hal_uart_handle_get(uni_hal_core_periph_e instance) {
     }
     return result;
 }
+
+// STM32H7 USART has FIFO support and Cube LL can expose RXNE/RXFNE with different names.
+#if defined(LL_USART_IsActiveFlag_RXNE_RXFNE)
+#define UNI_HAL_USART_IsActiveFlag_RXNE(handle) LL_USART_IsActiveFlag_RXNE_RXFNE(handle)
+#define UNI_HAL_USART_IsEnabledIT_RXNE(handle)  LL_USART_IsEnabledIT_RXNE_RXFNE(handle)
+#define UNI_HAL_USART_EnableIT_RXNE(handle)     LL_USART_EnableIT_RXNE_RXFNE(handle)
+#else
+#define UNI_HAL_USART_IsActiveFlag_RXNE(handle) LL_USART_IsActiveFlag_RXNE(handle)
+#define UNI_HAL_USART_IsEnabledIT_RXNE(handle)  LL_USART_IsEnabledIT_RXNE(handle)
+#define UNI_HAL_USART_EnableIT_RXNE(handle)     LL_USART_EnableIT_RXNE(handle)
+#endif
 
 /**
  * Enable NVIC interrupts
@@ -122,7 +134,7 @@ static bool _uni_hal_uart_nvic(uni_hal_core_periph_e instance, uint32_t priority
 static bool _uni_hal_usart_save_ctx(uni_hal_usart_context_t *ctx) {
     bool result = false;
 
-    if (ctx != NULL) {
+    if (ctx != nullptr) {
         switch (ctx->instance) {
         case UNI_HAL_CORE_PERIPH_UART_1:
             g_uni_hal_usart_ctx[0] = ctx;
@@ -170,12 +182,15 @@ static bool _uni_hal_usart_save_ctx(uni_hal_usart_context_t *ctx) {
 //
 
 static void _uni_hal_usart_tx_trigger(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_io_r), void *ctx_fn_r) {
-    USART_TypeDef *instance = _uni_hal_uart_handle_get(((uni_hal_usart_context_t *) ctx_fn_r)->instance);
-    if (instance != NULL) {
-        LL_USART_ClearFlag_TC(instance);
-        LL_USART_ClearFlag_IDLE(instance);
-        LL_USART_EnableIT_TXE_TXFNF(instance);
-        LL_USART_EnableIT_TC(instance);
+    if (ctx_fn_r != nullptr) {
+        uni_hal_usart_context_t *ctx_fn = (uni_hal_usart_context_t *)ctx_fn_r;
+        USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx_fn->instance);
+        if (instance != nullptr) {
+            LL_USART_ClearFlag_TC(instance);
+            LL_USART_DisableIT_TC(instance);
+            LL_USART_ClearFlag_IDLE(instance);
+            LL_USART_EnableIT_TXE_TXFNF(instance);
+        }
     }
 }
 
@@ -185,18 +200,29 @@ static void _uni_hal_usart_tx_trigger(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_i
 // IRQ handlers
 //
 
-static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
-    BaseType_t higher_task_woken = 0U;
+static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
+    BaseType_t higher_task_woken = pdFALSE;
+
+    if (ctx == nullptr) {
+        return pdFALSE;
+    }
 
     USART_TypeDef *dev_handle = _uni_hal_uart_handle_get(ctx->instance);
+    if (dev_handle == nullptr) {
+        return pdFALSE;
+    }
+
     uni_hal_io_context_t *ctx_io = ctx->io;
+    if (ctx_io == nullptr) {
+        return pdFALSE;
+    }
 
     if (LL_USART_IsActiveFlag_ORE(dev_handle)) {
         ctx_io->stats.rx_overrun++;
         LL_USART_ClearFlag_ORE(dev_handle);
     }
 
-    if (LL_USART_IsEnabledIT_RXNE(dev_handle) && LL_USART_IsActiveFlag_RXNE(dev_handle)) {
+    if (UNI_HAL_USART_IsEnabledIT_RXNE(dev_handle) && UNI_HAL_USART_IsActiveFlag_RXNE(dev_handle)) {
         // receive data
         uint8_t data = LL_USART_ReceiveData8(dev_handle);
 
@@ -218,29 +244,48 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
     }
 
     if (LL_USART_IsEnabledIT_TXE_TXFNF(dev_handle) && LL_USART_IsActiveFlag_TXE_TXFNF(dev_handle)) {
-        uint8_t data = 0;
-
-        if (!ctx->in_transmission) {
-            if (ctx_io->handlers.tx_start) {
-                ctx_io->handlers.tx_start(ctx_io, ctx_io->handlers.tx_start_ctx);
-            }
-            ctx->in_transmission = true;
-        }
+        uint8_t data = 0U;
 
         if (xStreamBufferReceiveFromISR(ctx_io->buf_tx.handle, &data, 1U, &higher_task_woken)) {
+            // We have data to send -> TXE path is active, TC interrupt must be off.
+            LL_USART_DisableIT_TC(dev_handle);
+
+            if (!ctx->in_transmission) {
+                if (ctx_io->handlers.tx_start) {
+                    ctx_io->handlers.tx_start(ctx_io, ctx_io->handlers.tx_start_ctx);
+                }
+                ctx->in_transmission = true;
+            }
+
             LL_USART_TransmitData8(dev_handle, data);
             ctx_io->stats.tx_transmited++;
-        } else {
+        }
+        else {
+            // No more bytes to write into TDR -> wait for last byte to fully shift out.
             LL_USART_DisableIT_TXE_TXFNF(dev_handle);
+            if (ctx->in_transmission) {
+                LL_USART_ClearFlag_TC(dev_handle);
+                LL_USART_EnableIT_TC(dev_handle);
+            }
         }
     }
 
     // Transfer Complete
     if (LL_USART_IsEnabledIT_TC(dev_handle) && LL_USART_IsActiveFlag_TC(dev_handle)) {
-        if (xStreamBufferIsEmpty(ctx_io->buf_tx.handle) && ctx->in_transmission) {
+        // NOTE:
+        // - TXE_TXFNF is a *status* flag (mapped to TXE on STM32H7). It is not "clearable".
+        //   Correct handling is enabling/disabling its interrupt source (TXEIE_TXFNFIE).
+        // - TC is clearable via ICR (LL_USART_ClearFlag_TC).
+        LL_USART_ClearFlag_TC(dev_handle);
+
+        if (!ctx->in_transmission) {
+            // Nothing to complete, but do not keep TC interrupt enabled (TC is often 1 when idle).
+            LL_USART_DisableIT_TC(dev_handle);
+        }
+        else if (xStreamBufferIsEmpty(ctx_io->buf_tx.handle)) {
+            // no more bytes pending, end transmission
             LL_USART_DisableIT_TXE_TXFNF(dev_handle);
             LL_USART_DisableIT_TC(dev_handle);
-            LL_USART_ClearFlag_TC(dev_handle);
             ctx->in_transmission = false;
 
             if (ctx_io->handlers.tx_end) {
@@ -253,6 +298,11 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
                     higher_task_woken = pdTRUE;
                 }
             }
+        }
+        else {
+            // New data appeared while we were waiting for TC -> continue sending.
+            LL_USART_DisableIT_TC(dev_handle);
+            LL_USART_EnableIT_TXE_TXFNF(dev_handle);
         }
     }
 
@@ -317,9 +367,11 @@ void UART8_IRQHandler(void) {
 
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL) {
-        ctx->callback = NULL;
-        ctx->callback_cookie = NULL;
+    if (ctx != nullptr && ctx->pin_rx != nullptr && ctx->pin_tx != nullptr) {
+        ctx->callback = nullptr;
+        ctx->callback_cookie = nullptr;
+        ctx->in_transmission = false;
+        ctx->initialized = false;
 
         // clock
         result = uni_hal_rcc_clksrc_set(ctx->instance, ctx->clksrc);
@@ -333,14 +385,14 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
         result = _uni_hal_uart_nvic(ctx->instance, ctx->isr_priority) && result;
 
         // init IO
-        if (ctx->io) {
+        if (ctx->io != nullptr) {
             uni_hal_io_init(ctx->io);
             ctx->io->handlers.tx_trigger = _uni_hal_usart_tx_trigger;
             ctx->io->handlers.tx_trigger_ctx = ctx;
         }
 
         USART_TypeDef* handle = _uni_hal_uart_handle_get(ctx->instance);
-        if(result && handle != NULL) {
+        if(result && handle != nullptr) {
             // init
             LL_USART_InitTypeDef USART_InitStruct = {0};
             USART_InitStruct.PrescalerValue = LL_USART_PRESCALER_DIV1; //-V1048
@@ -372,7 +424,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 }
 
                 LL_USART_EnableIT_IDLE(handle);
-                LL_USART_EnableIT_RXNE(handle);
+                UNI_HAL_USART_EnableIT_RXNE(handle);
             }
         }
 
@@ -388,31 +440,34 @@ uint32_t uni_hal_usart_baudrate_get(uni_hal_usart_context_t *ctx) {
 
     if (uni_hal_uart_is_inited(ctx)) {
         USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx->instance);
-        result = LL_USART_GetBaudRate(instance, uni_hal_rcc_clk_get_freq(ctx->instance), LL_USART_GetPrescaler(instance),
-                                      LL_USART_GetOverSampling(instance));
+        if (instance != nullptr) {
+            result = LL_USART_GetBaudRate(instance, uni_hal_rcc_clk_get_freq(ctx->instance), LL_USART_GetPrescaler(instance),
+                                          LL_USART_GetOverSampling(instance));
+        }
     }
 
     return result;
 }
 
 bool uni_hal_usart_baudrate_set(uni_hal_usart_context_t *ctx, uint32_t baudrate) {
-    uint32_t result = 0;
+    bool result = false;
 
     if (uni_hal_uart_is_inited(ctx)) {
         USART_TypeDef* instance = _uni_hal_uart_handle_get(ctx->instance);
-        LL_USART_Disable(instance);
+        if (instance != nullptr) {
+            LL_USART_Disable(instance);
 
-        LL_USART_SetBaudRate(instance, uni_hal_rcc_clk_get_freq(ctx->instance),
-                             LL_USART_GetPrescaler(instance),
-                             LL_USART_GetOverSampling(instance), baudrate);
+            LL_USART_SetBaudRate(instance, uni_hal_rcc_clk_get_freq(ctx->instance),
+                                LL_USART_GetPrescaler(instance),
+                                LL_USART_GetOverSampling(instance), baudrate);
 
+            LL_USART_Enable(instance);
+            while ((!(LL_USART_IsActiveFlag_TEACK(instance))) ||
+                (!(LL_USART_IsActiveFlag_REACK(instance)))) {
+            }
 
-        LL_USART_Enable(instance);
-        while ((!(LL_USART_IsActiveFlag_TEACK(instance))) ||
-               (!(LL_USART_IsActiveFlag_REACK(instance)))) {
+            result = true;
         }
-
-        result = true;
     }
 
     return result;
@@ -423,12 +478,14 @@ bool uni_hal_usart_receive_enable(uni_hal_usart_context_t *ctx, bool value) {
 
     if (uni_hal_uart_is_inited(ctx)) {
         USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx->instance);
-        if (value) {
-            LL_USART_EnableDirectionRx(instance);
-        } else {
-            LL_USART_DisableDirectionRx(instance);
+        if (instance != nullptr) {
+            if (value) {
+                LL_USART_EnableDirectionRx(instance);
+            } else {
+                LL_USART_DisableDirectionRx(instance);
+            }
+            result = true;
         }
-        result = true;
     }
 
     return result;
@@ -439,12 +496,14 @@ bool uni_hal_usart_transmit_enable(uni_hal_usart_context_t *ctx, bool value) {
 
     if (uni_hal_uart_is_inited(ctx)) {
         USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx->instance);
-        if (value) {
-            LL_USART_EnableDirectionTx(instance);
-        } else {
-            LL_USART_DisableDirectionTx(instance);
+        if (instance != nullptr) {  
+            if (value) {
+                LL_USART_EnableDirectionTx(instance);
+            } else {
+                LL_USART_DisableDirectionTx(instance);
+            }
+            result = true;
         }
-        result = true;
     }
 
     return result;
