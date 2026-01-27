@@ -59,3 +59,8 @@ bool uni_hal_usart_transmit_enable(uni_hal_usart_context_t *ctx, bool value){
     }
     return result;
 }
+
+bool uni_hal_usart_irq_enable(uni_hal_usart_context_t *ctx, bool value) {
+    (void)value;
+    return uni_hal_uart_is_inited(ctx);
+}

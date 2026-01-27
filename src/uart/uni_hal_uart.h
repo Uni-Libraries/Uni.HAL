@@ -153,6 +153,18 @@ bool uni_hal_usart_receive_enable(uni_hal_usart_context_t *ctx, bool value);
 bool uni_hal_usart_transmit_enable(uni_hal_usart_context_t *ctx, bool value);
 
 /**
+ * Enables/disables USART interrupt sources used by the Uni.HAL driver.
+ *
+ * Intended for temporarily quiescing UART traffic during time-critical operations
+ * (e.g. flash erase/program with interrupt-driven completion).
+ *
+ * Implementation-specific details:
+ * - On STM32H7: controls RXNE/RXFNE + IDLE and also disables TXE/TC sources.
+ * - On other targets: best-effort.
+ */
+bool uni_hal_usart_irq_enable(uni_hal_usart_context_t *ctx, bool value);
+
+/**
  * Receive IO context context
  * @param ctx pointer to the UART context
  * @return true on sucess

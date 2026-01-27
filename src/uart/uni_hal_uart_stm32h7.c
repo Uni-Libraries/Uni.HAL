@@ -72,10 +72,12 @@ static USART_TypeDef *_uni_hal_uart_handle_get(uni_hal_core_periph_e instance) {
 #define UNI_HAL_USART_IsActiveFlag_RXNE(handle) LL_USART_IsActiveFlag_RXNE_RXFNE(handle)
 #define UNI_HAL_USART_IsEnabledIT_RXNE(handle)  LL_USART_IsEnabledIT_RXNE_RXFNE(handle)
 #define UNI_HAL_USART_EnableIT_RXNE(handle)     LL_USART_EnableIT_RXNE_RXFNE(handle)
+#define UNI_HAL_USART_DisableIT_RXNE(handle)    LL_USART_DisableIT_RXNE_RXFNE(handle)
 #else
 #define UNI_HAL_USART_IsActiveFlag_RXNE(handle) LL_USART_IsActiveFlag_RXNE(handle)
 #define UNI_HAL_USART_IsEnabledIT_RXNE(handle)  LL_USART_IsEnabledIT_RXNE(handle)
 #define UNI_HAL_USART_EnableIT_RXNE(handle)     LL_USART_EnableIT_RXNE(handle)
+#define UNI_HAL_USART_DisableIT_RXNE(handle)    LL_USART_DisableIT_RXNE(handle)
 #endif
 
 /**
@@ -502,6 +504,46 @@ bool uni_hal_usart_transmit_enable(uni_hal_usart_context_t *ctx, bool value) {
             } else {
                 LL_USART_DisableDirectionTx(instance);
             }
+            result = true;
+        }
+    }
+
+    return result;
+}
+
+bool uni_hal_usart_irq_enable(uni_hal_usart_context_t *ctx, bool value) {
+    bool result = false;
+
+    if (uni_hal_uart_is_inited(ctx)) {
+        USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx->instance);
+        if (instance != nullptr) {
+            if (value) {
+                // RX path (used by higher-level UART drivers)
+                LL_USART_EnableIT_IDLE(instance);
+                UNI_HAL_USART_EnableIT_RXNE(instance);
+
+                // TX path is enabled on demand via tx_trigger.
+                LL_USART_DisableIT_TC(instance);
+                LL_USART_DisableIT_TXE_TXFNF(instance);
+                LL_USART_ClearFlag_TC(instance);
+            }
+            else {
+                // Stop generating interrupts first (prevents ISR storm during long ops)
+                UNI_HAL_USART_DisableIT_RXNE(instance);
+                LL_USART_DisableIT_IDLE(instance);
+
+                LL_USART_DisableIT_TXE_TXFNF(instance);
+                LL_USART_DisableIT_TC(instance);
+
+                // Clear flags to avoid spurious pending IRQs on re-enable.
+                LL_USART_ClearFlag_TC(instance);
+                LL_USART_ClearFlag_IDLE(instance);
+                LL_USART_ClearFlag_ORE(instance);
+
+                // Best-effort: mark transmission inactive.
+                ctx->in_transmission = false;
+            }
+
             result = true;
         }
     }

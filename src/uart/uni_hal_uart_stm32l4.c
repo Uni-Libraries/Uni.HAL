@@ -558,3 +558,16 @@ bool uni_hal_usart_transmit_enable(uni_hal_usart_context_t *ctx, bool value)
 
     return result;
 }
+
+bool uni_hal_usart_irq_enable(uni_hal_usart_context_t *ctx, bool value) {
+    if (!uni_hal_uart_is_inited(ctx)) {
+        return false;
+    }
+
+    // This target uses RXNE for reception and TXE/TC for transmission.
+    (void)_uni_hal_usart_irq_rx_enable(ctx, value);
+    if (!value) {
+        (void)_uni_hal_usart_irq_tx_enable(ctx, false);
+    }
+    return true;
+}
