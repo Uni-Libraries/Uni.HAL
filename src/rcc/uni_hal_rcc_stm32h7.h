@@ -36,6 +36,11 @@ typedef struct {
      * PLL post-divider (output R)
      */
     uint32_t r;
+
+    /**
+     * PLL fractional part (0..8192)
+     */
+    uint32_t fracn;
 } uni_hal_rcc_stm32h7_config_pll_t;
 
 
@@ -129,7 +134,7 @@ typedef struct {
     /**
      * PLL initialization was successful
      */
-    bool pll_inited;
+    bool pll_inited[3];
 
     /**
      * SYS clock initialization was successful
