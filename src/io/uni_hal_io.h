@@ -18,6 +18,11 @@ extern "C" {
 #include <FreeRTOS.h>
 #include <stream_buffer.h>
 
+// Max bytes supported for RX pushback (used by uni_hal_io_receive_sync())
+#ifndef UNI_HAL_IO_RX_PUSHBACK_MAX
+#define UNI_HAL_IO_RX_PUSHBACK_MAX (32U)
+#endif
+
 
 
 //
@@ -102,9 +107,19 @@ typedef struct {
 
     /**
      * Ongoing receive_sync match progress (bytes of the pattern already matched)
-     * This allows continuing sync across calls when a timeout occurs mid-pattern.
+     * @note The implementation may also use an internal RX pushback buffer, so callers
+     *       must not assume that bytes were permanently consumed unless they explicitly
+     *       call uni_hal_io_receive_data().
      */
     size_t sync_idx;
+
+    /**
+     * RX pushback stack ("send to front" analogue for StreamBuffer).
+     * Bytes are popped from the end, so to push a sequence to the front in the original
+     * order it must be inserted in reverse order.
+     */
+    uint8_t pushback[UNI_HAL_IO_RX_PUSHBACK_MAX];
+    size_t  pushback_len;
 } uni_hal_io_buffer_t;
 
 
@@ -226,6 +241,9 @@ size_t uni_hal_io_receive_line(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
  * @param data pointer to the data array
  * @param data_len length of the data array in bytes
  * @param timeout receive timoeut in msecs
+ * @note The implementation consumes bytes before the marker, but preserves the marker
+ *       itself in the RX stream (via internal pushback). If the RX stream ends mid-marker,
+ *       the partial prefix is also preserved.
  * @return true in case of successful sync
  */
 bool uni_hal_io_receive_sync(uni_hal_io_context_t* ctx, const uint8_t* data, size_t data_len, uint32_t timeout);
