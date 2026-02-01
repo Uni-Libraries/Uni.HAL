@@ -25,8 +25,6 @@ bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
         // reset sync progress
         ctx->buf_rx.sync_idx = 0U;
         ctx->buf_tx.sync_idx = 0U;
-        ctx->buf_rx.pushback_len = 0U;
-        ctx->buf_tx.pushback_len = 0U;
 
         ctx->buf_rx.handle = xStreamBufferCreateStatic(ctx->buf_rx.size, 1U, ctx->buf_rx.array, &ctx->buf_rx.cb);
         ctx->buf_tx.handle = xStreamBufferCreateStatic(ctx->buf_tx.size, 1U, ctx->buf_tx.array, &ctx->buf_tx.cb);
@@ -71,17 +69,7 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
         size_t ticktime = uni_hal_systick_get_ms();
 
         do {
-            // 1) Drain internal pushback first
-            while (received < data_len && ctx->buf_rx.pushback_len > 0U) {
-                ctx->buf_rx.pushback_len--;
-                data[received] = ctx->buf_rx.pushback[ctx->buf_rx.pushback_len];
-                received++;
-            }
-
-            // 2) Then read from StreamBuffer
-            if (received < data_len) {
-                received += xStreamBufferReceive(ctx->buf_rx.handle, &data[received], data_len - received, 0U);
-            }
+            received += xStreamBufferReceive(ctx->buf_rx.handle, &data[received], data_len - received, 0U);
         } while (received < data_len && uni_hal_systick_get_ms() - ticktime < timeout);
     }
 
@@ -89,73 +77,50 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 }
 
 
-bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *pattern, size_t pattern_len, uint32_t timeout) {
+bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, size_t data_len, uint32_t timeout) {
     // Validate inputs
-    if (ctx == NULL || ctx->buf_rx.handle == NULL || pattern == NULL || pattern_len == 0U || pattern_len > UNI_HAL_IO_RX_PUSHBACK_MAX) {
+    if (ctx == NULL || ctx->buf_rx.handle == NULL || data == NULL || data_len == 0U) {
         return false;
     }
 
-    // resume progress
-    size_t match_idx = ctx->buf_rx.sync_idx;
-
+    const size_t pat_len = data_len;
+    size_t match_idx = ctx->buf_rx.sync_idx; // resume progress across calls
     uint32_t const t_start = uni_hal_systick_get_ms();
+
     for (;;) {
-        // Block using FreeRTOS ticks to avoid busy-waiting
         TickType_t ticks_to_wait = 0;
         if (timeout > 0U) {
-            uint32_t const elapsed = uni_hal_systick_get_ms() - t_start;
+            uint32_t const now = uni_hal_systick_get_ms();
+            uint32_t const elapsed = now - t_start;
             if (elapsed >= timeout) {
                 ctx->buf_rx.sync_idx = match_idx;
                 return false;
             }
-            ticks_to_wait = pdMS_TO_TICKS(timeout - elapsed);
+            uint32_t const rem_ms = timeout - elapsed;
+            ticks_to_wait = pdMS_TO_TICKS(rem_ms);
+            if ((ticks_to_wait == 0U) && (rem_ms > 0U)) {
+                ticks_to_wait = 1U;
+            }
         }
 
-        // Read one byte: prefer internal pushback, then StreamBuffer.
         uint8_t ch = 0U;
-        size_t got = 0U;
-        if (ctx->buf_rx.pushback_len > 0U) {
-            ctx->buf_rx.pushback_len--;
-            ch = ctx->buf_rx.pushback[ctx->buf_rx.pushback_len];
-            got = 1U;
-        } else {
-            got = xStreamBufferReceive(ctx->buf_rx.handle, &ch, 1U, ticks_to_wait);
-        }
+        size_t const got = xStreamBufferReceive(ctx->buf_rx.handle, &ch, 1U, ticks_to_wait);
 
         if (got == 0U) {
-            // Immediate mode: store progress (do not drain RX).
-            if (timeout == 0U) {
-                ctx->buf_rx.sync_idx = match_idx;
-                return false;
-            }
-            // Still time remaining, try again
-            continue;
+            // No new data available.
+            ctx->buf_rx.sync_idx = match_idx;
+            return false;
         }
 
-        // Advance simple prefix matcher using only an index (no VLA/extra buffers)
-        if (ch == pattern[match_idx]) {
+        if (ch == data[match_idx]) {
             match_idx++;
-            if (match_idx == pattern_len) {
-                // Pattern found. Push it back to RX (marker must be preserved).
-                // Because pushback is LIFO, insert in reverse.
-                for (size_t i = 0U; i < pattern_len; i++) {
-                    const uint8_t b = pattern_len[pattern_len - 1U - i];
-                    if (ctx->buf_rx.pushback_len < UNI_HAL_IO_RX_PUSHBACK_MAX) {
-                        ctx->buf_rx.pushback[ctx->buf_rx.pushback_len] = b;
-                        ctx->buf_rx.pushback_len++;
-                    } else {
-                        // Should not happen due to pat_len check.
-                        ctx->buf_rx.pushback_len = 0U;
-                        ctx->buf_rx.sync_idx = 0U;
-                        return false;
-                    }
-                }
+            if (match_idx == pat_len) {
                 ctx->buf_rx.sync_idx = 0U;
                 return true;
             }
         } else {
-            // Simple overlap handling without tables: if current char equals first pattern byte, keep 1, else reset to 0.
-            match_idx = (ch == pattern_len[0]) ? 1U : 0U;
+            // Overlap handling: if current char equals first pattern byte, keep 1, else reset.
+            match_idx = (ch == data[0]) ? 1U : 0U;
         }
     }
 }
