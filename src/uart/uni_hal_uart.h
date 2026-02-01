@@ -55,6 +55,11 @@ typedef struct {
     uint32_t baudrate;
 
     /**
+     * UART baudrate divider
+     */
+    uint32_t baudrate_div;
+
+    /**
      * Clock source
      */
     uni_hal_rcc_clksrc_e clksrc;

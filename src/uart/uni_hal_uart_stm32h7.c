@@ -414,6 +414,10 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 // enable
                 LL_USART_ConfigAsyncMode(handle);
 
+                if (ctx->baudrate_div) {
+                    handle->BRR = (ctx->baudrate_div & 0xFFFFU);
+                }
+
                 LL_USART_DisableIT_TXE_TXFNF(handle);
                 LL_USART_DisableIT_TC(handle);
                 LL_USART_ClearFlag_TC(handle);
