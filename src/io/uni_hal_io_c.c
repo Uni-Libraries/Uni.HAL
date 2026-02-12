@@ -136,7 +136,14 @@ size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, 
 
     if (ctx != NULL && ctx->buf_tx.handle != NULL && data != NULL) {
         // push to buffer
-        result = xStreamBufferSend(ctx->buf_tx.handle, data, data_len, 0U);
+        if (xPortIsInsideInterrupt())
+        {
+            result = xStreamBufferSendFromISR(ctx->buf_tx.handle, data, data_len, nullptr);
+        }
+        else
+        {
+            result = xStreamBufferSend(ctx->buf_tx.handle, data, data_len, 0U);
+        }
 
         // call TX trigger hook
         if (ctx->handlers.tx_trigger != NULL) {
