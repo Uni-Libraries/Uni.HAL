@@ -1,6 +1,7 @@
 /*
  * FreeRTOS Kernel <DEVELOPMENT BRANCH>
  * Copyright (C) 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
  *
  * SPDX-License-Identifier: MIT
  *
@@ -1689,7 +1690,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
             /* MISRA Ref 11.5.1 [Malloc memory assignment] */
             /* More details at: https://github.com/FreeRTOS/FreeRTOS-Kernel/blob/main/MISRA.md#rule-115 */
             /* coverity[misra_c_2012_rule_11_5_violation] */
-            pxStack = pvPortMallocStack( ( ( ( size_t ) uxStackDepth ) * sizeof( StackType_t ) ) );
+            pxStack = ( StackType_t * ) pvPortMallocStack( ( ( ( size_t ) uxStackDepth ) * sizeof( StackType_t ) ) );
 
             if( pxStack != NULL )
             {
@@ -2007,18 +2008,18 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
             pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxTaskCode, pvParameters );
         }
         #endif /* portHAS_STACK_OVERFLOW_CHECKING */
+
+        #if ( portSTACK_GROWTH < 0 )
+        {
+            configASSERT( ( ( portPOINTER_SIZE_TYPE ) ( pxTopOfStack - pxNewTCB->pxTopOfStack ) ) < ( ( portPOINTER_SIZE_TYPE ) uxStackDepth ) );
+        }
+        #else /* portSTACK_GROWTH */
+        {
+            configASSERT( ( ( portPOINTER_SIZE_TYPE ) ( pxNewTCB->pxTopOfStack - pxTopOfStack ) ) < ( ( portPOINTER_SIZE_TYPE ) uxStackDepth ) );
+        }
+        #endif /* portSTACK_GROWTH */
     }
     #endif /* portUSING_MPU_WRAPPERS */
-
-    #if ( portSTACK_GROWTH < 0 )
-    {
-        configASSERT( ( ( portPOINTER_SIZE_TYPE ) ( pxTopOfStack - pxNewTCB->pxTopOfStack ) ) < ( ( portPOINTER_SIZE_TYPE ) uxStackDepth ) );
-    }
-    #else /* portSTACK_GROWTH */
-    {
-        configASSERT( ( ( portPOINTER_SIZE_TYPE ) ( pxNewTCB->pxTopOfStack - pxTopOfStack ) ) < ( ( portPOINTER_SIZE_TYPE ) uxStackDepth ) );
-    }
-    #endif
 
     /* Initialize task state and task attributes. */
     #if ( configNUMBER_OF_CORES > 1 )
@@ -6916,7 +6917,7 @@ static void prvResetNextTaskUnblockTime( void )
                             /* It is known that the task is in its ready list so
                              * there is no need to check again and the port level
                              * reset macro can be called directly. */
-                            portRESET_READY_PRIORITY( pxTCB->uxPriority, uxTopReadyPriority );
+                            portRESET_READY_PRIORITY( uxPriorityUsedOnEntry, uxTopReadyPriority );
                         }
                         else
                         {
