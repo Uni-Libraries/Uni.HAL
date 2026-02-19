@@ -46,3 +46,4 @@ endfunction()
 #
 
 #uni_hal_add_test(io)
+uni_hal_add_test(dwt)

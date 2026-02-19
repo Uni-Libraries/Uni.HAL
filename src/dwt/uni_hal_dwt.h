@@ -107,6 +107,13 @@ uint32_t uni_hal_dwt_convert_ns(uint32_t tick);
  */
 uint32_t uni_hal_dwt_convert_us(uint32_t tick);
 
+/**
+ * Converts timeout in milliseconds to DWT counter ticks, clamped to UINT32_MAX.
+ *
+ * The result is guaranteed to be at least 1 tick.
+ */
+uint32_t uni_hal_dwt_timeout_ms_to_tick(uint32_t timeout_ms);
+
 
 #if defined(__cplusplus)
 }
