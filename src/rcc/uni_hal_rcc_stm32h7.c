@@ -16,6 +16,7 @@
 #include <uni_common.h>
 
 // uni_hal
+#include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
 #include "pwr/uni_hal_pwr_stm32.h"
 #include "rcc/uni_hal_rcc.h"
@@ -28,7 +29,7 @@
 // Globals
 //
 
-uni_hal_rcc_stm32h7_config_t* g_uni_hal_rcc_config = NULL;
+uni_hal_rcc_stm32h7_config_t* g_uni_hal_rcc_config = nullptr;
 uni_hal_rcc_stm32h7_status_t  g_uni_hal_rcc_status = { 0 };
 
 
@@ -632,7 +633,11 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) { //-V2008
             result = LL_APB1_GRP1_IsEnabledClock(LL_APB1_GRP1_PERIPH_UART5);
             break;
         case UNI_HAL_CORE_PERIPH_PWR:
+            result = true;
+            break;
         case UNI_HAL_CORE_PERIPH_SYSCFG:
+            result = LL_APB4_GRP1_IsEnabledClock(LL_APB4_GRP1_PERIPH_SYSCFG);
+            break;
         case UNI_HAL_CORE_PERIPH_TIM_9:
         case UNI_HAL_CORE_PERIPH_TIM_10:
         case UNI_HAL_CORE_PERIPH_TIM_11:
@@ -810,6 +815,9 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) { //-V2008
             case UNI_HAL_CORE_PERIPH_SYSCFG:
                 state ? LL_APB4_GRP1_EnableClock(LL_APB4_GRP1_PERIPH_SYSCFG) : LL_APB4_GRP1_DisableClock(
                         LL_APB4_GRP1_PERIPH_SYSCFG);
+                result = true;
+                break;
+            case UNI_HAL_CORE_PERIPH_PWR:
                 result = true;
                 break;
             case UNI_HAL_CORE_PERIPH_TIM_1:
@@ -1308,7 +1316,7 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
 
 bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t *config) {
     bool result = false;
-    if (config != NULL) {
+    if (config != nullptr) {
         g_uni_hal_rcc_config = config;
         result = true;
     }
@@ -1438,8 +1446,9 @@ uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e c
 void NMI_Handler(void) {
     if (LL_RCC_IsActiveFlag_HSECSS()) {
         LL_RCC_ClearFlag_HSECSS();
+        if (g_uni_hal_rcc_config != nullptr) {
         g_uni_hal_rcc_config->hse_enable = false;
-
+        }
         g_uni_hal_rcc_status.hse_inited = false;
         g_uni_hal_rcc_status.pll_inited[0] = false;
         g_uni_hal_rcc_status.pll_inited[1] = false;

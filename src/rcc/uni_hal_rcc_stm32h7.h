@@ -140,6 +140,21 @@ typedef struct {
      * SYS clock initialization was successful
      */
     bool sys_inited;
+
+    /**
+     * HSE clock security system fault happened
+     */
+    bool css_fault;
+
+    /**
+     * CSS recovery should be processed in non-NMI context
+     */
+    bool css_recovery_pending;
+
+    /**
+     * Number of detected CSS faults
+     */
+    uint32_t css_fault_count;
 } uni_hal_rcc_stm32h7_status_t;
 
 
@@ -153,4 +168,3 @@ bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t* config);
 uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get();
 
 uint32_t uni_hal_rcc_stm32h7_clk_get_hclk(void);
-
