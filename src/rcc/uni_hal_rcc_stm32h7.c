@@ -21,6 +21,7 @@
 
 // uni_hal
 #include "dwt/uni_hal_dwt.h"
+#include "flash/uni_hal_flash.h"
 #include "gpio/uni_hal_gpio.h"
 #include "pwr/uni_hal_pwr_stm32.h"
 #include "rcc/uni_hal_rcc.h"
@@ -83,7 +84,6 @@ static volatile uni_hal_rcc_boot_stage_e g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_
 
 
 enum {
-    UNI_HAL_RCC_FLASH_TIMEOUT_MS = 100U,
     UNI_HAL_RCC_NMI_WAIT_ITERATIONS = 500000U,
 };
 
@@ -350,27 +350,6 @@ static void _uni_hal_stm_rcc_reset(void){
     g_uni_hal_rcc_css_nmi_processing = false;
     g_uni_hal_rcc_css_event_latched = false;
 }
-
-/**
- * Configure FLASH latency
- * TODO: move out
- */
-static bool _uni_hal_stm_rcc_flash(uint32_t latency, uint32_t wrhighfreq) {
-    MODIFY_REG(FLASH->ACR, FLASH_ACR_WRHIGHFREQ, wrhighfreq);
-    LL_FLASH_SetLatency(latency);
-
-    uni_hal_rcc_wait_timeout_t timeout_ctx = { 0 };
-    _uni_hal_stm_rcc_wait_timeout_begin(&timeout_ctx, UNI_HAL_RCC_FLASH_TIMEOUT_MS);
-
-    while (LL_FLASH_GetLatency() != latency) {
-        if (_uni_hal_stm_rcc_wait_timeout_expired(&timeout_ctx)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 
 /**
  * Configure high speed external clock
@@ -751,30 +730,63 @@ static bool _uni_hal_stm_rcc_pll(void) {
 static bool _uni_hal_stm_rcc_sysclk(void) {
     uint32_t clock_source;
     uint32_t clock_source_status;
+    uint32_t target_sysclk_hz = 0U;
+
     if (g_uni_hal_rcc_status.pll_inited[0]) {
+        LL_PLL_ClocksTypeDef pll1_clocks = { 0 };
+        LL_RCC_GetPLL1ClockFreq(&pll1_clocks);
+
         clock_source = LL_RCC_SYS_CLKSOURCE_PLL1;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_PLL1;
+        target_sysclk_hz = pll1_clocks.PLL_P_Frequency;
     } else if (g_uni_hal_rcc_status.hse_inited) {
         clock_source = LL_RCC_SYS_CLKSOURCE_HSE;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_HSE;
+        target_sysclk_hz = HSE_VALUE;
     } else if (g_uni_hal_rcc_status.csi_inited) {
         clock_source = LL_RCC_SYS_CLKSOURCE_CSI;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_CSI;
+        target_sysclk_hz = CSI_VALUE;
     } else if (g_uni_hal_rcc_status.hsi_inited) {
         clock_source = LL_RCC_SYS_CLKSOURCE_HSI;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_HSI;
+        target_sysclk_hz = HSI_VALUE >> (LL_RCC_HSI_GetDivider() >> RCC_CR_HSIDIV_Pos);
     }
     else{
         return false;
     }
 
+    uint32_t const sys_prescaler = LL_RCC_SYSCLK_DIV_1;
+    uint32_t const ahb_prescaler = LL_RCC_AHB_DIV_2;
+    uint32_t const apb1_prescaler = LL_RCC_APB1_DIV_2;
+    uint32_t const apb2_prescaler = LL_RCC_APB2_DIV_2;
+    uint32_t const apb3_prescaler = LL_RCC_APB3_DIV_2;
+    uint32_t const apb4_prescaler = LL_RCC_APB4_DIV_2;
+
+    if (target_sysclk_hz == 0U) {
+        g_uni_hal_rcc_status.sys_inited = false;
+        return false;
+    }
+
+    uint32_t const target_cpuclk_hz = LL_RCC_CALC_SYSCLK_FREQ(target_sysclk_hz, sys_prescaler);
+    uint32_t const target_axi_hz = LL_RCC_CALC_HCLK_FREQ(target_sysclk_hz, ahb_prescaler);
+    if ((target_cpuclk_hz == 0U) || (target_axi_hz == 0U)) {
+        g_uni_hal_rcc_status.sys_inited = false;
+        return false;
+    }
+
+    if (!uni_hal_flash_configure_latency_auto(target_axi_hz)) {
+        g_uni_hal_rcc_status.sys_inited = false;
+        return false;
+    }
+
     // set prescalers
-    LL_RCC_SetSysPrescaler(LL_RCC_SYSCLK_DIV_1);
-    LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_2);
-    LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_2);
-    LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_2);
-    LL_RCC_SetAPB3Prescaler(LL_RCC_APB3_DIV_2);
-    LL_RCC_SetAPB4Prescaler(LL_RCC_APB4_DIV_2);
+    LL_RCC_SetSysPrescaler(sys_prescaler);
+    LL_RCC_SetAHBPrescaler(ahb_prescaler);
+    LL_RCC_SetAPB1Prescaler(apb1_prescaler);
+    LL_RCC_SetAPB2Prescaler(apb2_prescaler);
+    LL_RCC_SetAPB3Prescaler(apb3_prescaler);
+    LL_RCC_SetAPB4Prescaler(apb4_prescaler);
 
     // Reconfigure sysclk
     if (!_uni_hal_stm_rcc_switch_sysclk(clock_source, clock_source_status, g_uni_hal_rcc_config->timeout.pll)) {
@@ -819,15 +831,6 @@ bool uni_hal_rcc_init(void) {
         result = uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_SYSCFG, true);
         (void)uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_PWR, true);
         if (!result) {
-            g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_NONE;
-            _uni_hal_stm_rcc_diag_capture(&g_uni_hal_rcc_diag_boot);
-            g_uni_hal_rcc_status.inited = false;
-            g_uni_hal_rcc_reconfig_in_progress = false;
-            return g_uni_hal_rcc_status.inited;
-        }
-
-        g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_FLASH;
-        if (!_uni_hal_stm_rcc_flash(LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_1)) {
             g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_NONE;
             _uni_hal_stm_rcc_diag_capture(&g_uni_hal_rcc_diag_boot);
             g_uni_hal_rcc_status.inited = false;

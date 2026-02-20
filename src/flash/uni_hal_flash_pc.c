@@ -16,6 +16,12 @@ void uni_hal_flash_init(void){
 }
 
 
+bool uni_hal_flash_configure_latency_auto(uint32_t axi_clock_hz) {
+    (void)axi_clock_hz;
+    return false;
+}
+
+
 size_t uni_hal_flash_get_size(void){
     return 0U;
 }

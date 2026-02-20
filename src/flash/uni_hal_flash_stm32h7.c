@@ -6,6 +6,10 @@
 #include <stm32h7xx_hal.h>
 #include <stm32h7xx_hal_flash.h>
 #include <stm32h7xx_hal_flash_ex.h>
+#include <stm32h7xx_hal_rcc.h>
+#include <stm32h7xx_ll_rcc.h>
+#include <stm32h7xx_ll_system.h>
+#include <stm32h7xx_ll_pwr.h>
 
 // FreeRTOS
 //TODO: guard with define
@@ -14,7 +18,9 @@
 #include <task.h>
 
 // Uni.HAL
+#include "dwt/uni_hal_dwt.h"
 #include "flash/uni_hal_flash.h"
+#include "systick/uni_hal_systick.h"
 
 
 //
@@ -23,6 +29,27 @@
 
 static SemaphoreHandle_t xFlashDoneSem;
 BaseType_t flash_wake_up = pdFALSE;
+
+
+enum {
+    UNI_HAL_FLASH_LATENCY_TIMEOUT_MS = 100U,
+};
+
+
+typedef struct {
+    bool dwt_ready;
+    uint32_t start_tick;
+    uint32_t timeout_tick;
+    uint32_t start_ms;
+    uint32_t timeout_ms;
+} uni_hal_flash_wait_timeout_t;
+
+
+typedef struct {
+    uint32_t max_hz;
+    uint32_t latency;
+    uint32_t wrhighfreq;
+} uni_hal_flash_latency_step_t;
 
 //
 // HAL
@@ -83,6 +110,254 @@ bool _uni_hal_flash_unlock_ob()
 }
 
 
+static void _uni_hal_flash_wait_timeout_begin(uni_hal_flash_wait_timeout_t* timeout_ctx, uint32_t timeout_ms) {
+    if (timeout_ctx == nullptr) {
+        return;
+    }
+
+    timeout_ctx->dwt_ready = uni_hal_dwt_is_inited();
+    timeout_ctx->start_tick = 0U;
+    timeout_ctx->timeout_tick = 0U;
+    timeout_ctx->start_ms = uni_hal_systick_get_ms();
+    timeout_ctx->timeout_ms = timeout_ms;
+
+    if (timeout_ctx->dwt_ready) {
+        timeout_ctx->start_tick = uni_hal_dwt_get_tick();
+        timeout_ctx->timeout_tick = uni_hal_dwt_timeout_ms_to_tick(timeout_ms);
+    }
+}
+
+
+static bool _uni_hal_flash_wait_timeout_expired(const uni_hal_flash_wait_timeout_t* timeout_ctx) {
+    if (timeout_ctx == nullptr) {
+        return true;
+    }
+
+    if (timeout_ctx->timeout_ms == 0U) {
+        return true;
+    }
+
+    if (timeout_ctx->dwt_ready) {
+        if (timeout_ctx->timeout_tick == 0U) {
+            uint32_t elapsed_ms = uni_hal_systick_get_ms() - timeout_ctx->start_ms;
+            return elapsed_ms >= timeout_ctx->timeout_ms;
+        }
+
+        uint32_t elapsed_tick = uni_hal_dwt_compare(timeout_ctx->start_tick, uni_hal_dwt_get_tick());
+        return elapsed_tick >= timeout_ctx->timeout_tick;
+    }
+
+    uint32_t elapsed_ms = uni_hal_systick_get_ms() - timeout_ctx->start_ms;
+    return elapsed_ms >= timeout_ctx->timeout_ms;
+}
+
+
+static uint32_t _uni_hal_flash_vos_to_index(uint32_t vos_value) {
+    if (vos_value == LL_PWR_REGU_VOLTAGE_SCALE0) {
+        return 0U;
+    }
+    if (vos_value == LL_PWR_REGU_VOLTAGE_SCALE1) {
+        return 1U;
+    }
+    if (vos_value == LL_PWR_REGU_VOLTAGE_SCALE2) {
+        return 2U;
+    }
+    if (vos_value == LL_PWR_REGU_VOLTAGE_SCALE3) {
+        return 3U;
+    }
+
+    return UINT32_MAX;
+}
+
+
+static uint32_t _uni_hal_flash_calc_pll_source_hz(void) {
+    switch (LL_RCC_PLL_GetSource()) {
+        case LL_RCC_PLLSOURCE_HSE:
+            return HSE_VALUE;
+
+        case LL_RCC_PLLSOURCE_CSI:
+            return CSI_VALUE;
+
+        case LL_RCC_PLLSOURCE_HSI: {
+            uint32_t const hsidiv = __HAL_RCC_GET_HSI_DIVIDER();
+            if (hsidiv == RCC_CR_HSIDIV_2) {
+                return HSI_VALUE / 2U;
+            }
+            if (hsidiv == RCC_CR_HSIDIV_4) {
+                return HSI_VALUE / 4U;
+            }
+            if (hsidiv == RCC_CR_HSIDIV_8) {
+                return HSI_VALUE / 8U;
+            }
+            return HSI_VALUE;
+        }
+
+        default:
+            return 0U;
+    }
+}
+
+
+static uint32_t _uni_hal_flash_calc_pll1_p_hz(void) {
+    if (LL_RCC_PLL1P_IsEnabled() == 0U) {
+        return 0U;
+    }
+
+    uint32_t const pll_input_hz = _uni_hal_flash_calc_pll_source_hz();
+    if (pll_input_hz == 0U) {
+        return 0U;
+    }
+
+    uint32_t const pll_m = LL_RCC_PLL1_GetM();
+    uint32_t const pll_p = LL_RCC_PLL1_GetP();
+    uint32_t const pll_n = LL_RCC_PLL1_GetN();
+    if ((pll_m == 0U) || (pll_p == 0U) || (pll_n == 0U)) {
+        return 0U;
+    }
+
+    uint32_t const pll_fracn = LL_RCC_PLL1_GetFRACN();
+    uint64_t const vco_input_hz = ((uint64_t)pll_input_hz) / pll_m;
+    uint64_t const vco_mult_q13 = ((uint64_t)pll_n << 13U) + pll_fracn;
+    uint64_t const vco_hz = (vco_input_hz * vco_mult_q13) >> 13U;
+    uint64_t const pll_p_hz = vco_hz / pll_p;
+
+    return pll_p_hz > (uint64_t)UINT32_MAX ? UINT32_MAX : (uint32_t)pll_p_hz;
+}
+
+
+static uint32_t _uni_hal_flash_calc_sysclk_hz(void) {
+    uint32_t const sysclk_src = LL_RCC_GetSysClkSource();
+
+    if (sysclk_src == LL_RCC_SYS_CLKSOURCE_STATUS_PLL1) {
+        return _uni_hal_flash_calc_pll1_p_hz();
+    }
+
+    if (sysclk_src == LL_RCC_SYS_CLKSOURCE_STATUS_HSE) {
+        return HSE_VALUE;
+    }
+
+    if (sysclk_src == LL_RCC_SYS_CLKSOURCE_STATUS_CSI) {
+        return CSI_VALUE;
+    }
+
+    if (sysclk_src == LL_RCC_SYS_CLKSOURCE_STATUS_HSI) {
+        uint32_t const hsidiv = __HAL_RCC_GET_HSI_DIVIDER();
+        if (hsidiv == RCC_CR_HSIDIV_2) {
+            return HSI_VALUE / 2U;
+        }
+        if (hsidiv == RCC_CR_HSIDIV_4) {
+            return HSI_VALUE / 4U;
+        }
+        if (hsidiv == RCC_CR_HSIDIV_8) {
+            return HSI_VALUE / 8U;
+        }
+        return HSI_VALUE;
+    }
+
+    return 0U;
+}
+
+
+static uint32_t _uni_hal_flash_calc_axi_clock_hz(void) {
+    uint32_t const sysclk_hz = _uni_hal_flash_calc_sysclk_hz();
+    if (sysclk_hz == 0U) {
+        return 0U;
+    }
+
+    return LL_RCC_CALC_HCLK_FREQ(sysclk_hz, LL_RCC_GetAHBPrescaler());
+}
+
+
+static uint32_t _uni_hal_flash_select_latency(uint32_t vos_index, uint32_t axi_clock_hz, uint32_t* wrhighfreq_out) {
+    if (wrhighfreq_out == nullptr) {
+        return UINT32_MAX;
+    }
+
+    // STM32H7 datasheet: FLASH recommended wait states / WRHIGHFREQ table.
+    static const uni_hal_flash_latency_step_t k_limits_vos0[] = {
+        { 70'000'000U, LL_FLASH_LATENCY_0, 0U },
+        { 140'000'000U, LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0 },
+        { 185'000'000U, LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_0 },
+        { 210'000'000U, LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_1 },
+        { 225'000'000U, LL_FLASH_LATENCY_3, FLASH_ACR_WRHIGHFREQ_1 },
+        { 240'000'000U, LL_FLASH_LATENCY_4, FLASH_ACR_WRHIGHFREQ_1 },
+    };
+
+    static const uni_hal_flash_latency_step_t k_limits_vos1[] = {
+        { 70'000'000U, LL_FLASH_LATENCY_0, 0U },
+        { 140'000'000U, LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0 },
+        { 185'000'000U, LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_0 },
+        { 210'000'000U, LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_1 },
+        { 225'000'000U, LL_FLASH_LATENCY_3, FLASH_ACR_WRHIGHFREQ_1 },
+    };
+
+    static const uni_hal_flash_latency_step_t k_limits_vos2[] = {
+        { 55'000'000U, LL_FLASH_LATENCY_0, 0U },
+        { 110'000'000U, LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0 },
+        { 165'000'000U, LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_0 },
+        { 225'000'000U, LL_FLASH_LATENCY_3, FLASH_ACR_WRHIGHFREQ_1 },
+    };
+
+    static const uni_hal_flash_latency_step_t k_limits_vos3[] = {
+        { 45'000'000U, LL_FLASH_LATENCY_0, 0U },
+        { 90'000'000U, LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0 },
+        { 135'000'000U, LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_0 },
+        { 180'000'000U, LL_FLASH_LATENCY_3, FLASH_ACR_WRHIGHFREQ_1 },
+        { 225'000'000U, LL_FLASH_LATENCY_4, FLASH_ACR_WRHIGHFREQ_1 },
+    };
+
+    uni_hal_flash_latency_step_t const* limits = nullptr;
+    size_t limit_count = 0U;
+
+    switch (vos_index) {
+        case 0U:
+            limits = k_limits_vos0;
+            limit_count = sizeof(k_limits_vos0) / sizeof(k_limits_vos0[0]);
+            break;
+        case 1U:
+            limits = k_limits_vos1;
+            limit_count = sizeof(k_limits_vos1) / sizeof(k_limits_vos1[0]);
+            break;
+        case 2U:
+            limits = k_limits_vos2;
+            limit_count = sizeof(k_limits_vos2) / sizeof(k_limits_vos2[0]);
+            break;
+        case 3U:
+            limits = k_limits_vos3;
+            limit_count = sizeof(k_limits_vos3) / sizeof(k_limits_vos3[0]);
+            break;
+        default:
+            return UINT32_MAX;
+    }
+
+    for (size_t i = 0U; i < limit_count; i++) {
+        if (axi_clock_hz <= limits[i].max_hz) {
+            *wrhighfreq_out = limits[i].wrhighfreq;
+            return limits[i].latency;
+        }
+    }
+
+    return UINT32_MAX;
+}
+
+
+static bool _uni_hal_flash_apply_latency(uint32_t latency, uint32_t wrhighfreq) {
+    MODIFY_REG(FLASH->ACR, FLASH_ACR_WRHIGHFREQ, wrhighfreq);
+    LL_FLASH_SetLatency(latency);
+
+    uni_hal_flash_wait_timeout_t timeout_ctx = { 0 };
+    _uni_hal_flash_wait_timeout_begin(&timeout_ctx, UNI_HAL_FLASH_LATENCY_TIMEOUT_MS);
+
+    while (LL_FLASH_GetLatency() != latency) {
+        if (_uni_hal_flash_wait_timeout_expired(&timeout_ctx)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 //
 // Public
 //
@@ -92,6 +367,29 @@ void uni_hal_flash_init()
     xFlashDoneSem = xSemaphoreCreateBinary();
     HAL_NVIC_SetPriority(FLASH_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(FLASH_IRQn);
+}
+
+
+bool uni_hal_flash_configure_latency_auto(uint32_t axi_clock_hz)
+{
+    uint32_t const effective_axi_clock_hz = axi_clock_hz != 0U ? axi_clock_hz : _uni_hal_flash_calc_axi_clock_hz();
+    if (effective_axi_clock_hz == 0U) {
+        return false;
+    }
+
+    uint32_t const vos = LL_PWR_GetRegulVoltageScaling();
+    uint32_t const vos_index = _uni_hal_flash_vos_to_index(vos);
+    if (vos_index == UINT32_MAX) {
+        return false;
+    }
+
+    uint32_t wrhighfreq = 0U;
+    uint32_t const latency = _uni_hal_flash_select_latency(vos_index, effective_axi_clock_hz, &wrhighfreq);
+    if (latency == UINT32_MAX) {
+        return false;
+    }
+
+    return _uni_hal_flash_apply_latency(latency, wrhighfreq);
 }
 
 size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *dst)

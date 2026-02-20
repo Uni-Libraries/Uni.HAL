@@ -36,6 +36,8 @@ typedef enum {
 
 void uni_hal_flash_init(void);
 
+bool uni_hal_flash_configure_latency_auto(uint32_t axi_clock_hz);
+
 size_t uni_hal_flash_get_size(void);
 
 size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst);
