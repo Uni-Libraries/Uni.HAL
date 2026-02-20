@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 // ST
+#include <stm32l4xx_ll_rcc.h>
 #include <stm32l4xx_ll_spi.h>
 
 // Uni.HAL

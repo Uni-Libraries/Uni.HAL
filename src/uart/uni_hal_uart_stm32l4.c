@@ -355,7 +355,7 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
     }
 
     if (ctx->callback) {
-        if (ctx->callback(ctx->callback_cookie)) {
+        if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
             higher_task_woken = pdTRUE;
         }
     }
