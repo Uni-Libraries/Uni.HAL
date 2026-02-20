@@ -1,3 +1,5 @@
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/fun_rcc_map.cmake")
+
 function(uni_hal_set_linker_file executable_name file_name)
     set_target_properties(${executable_name} PROPERTIES LINK_DEPENDS "${file_name}")
     set_target_properties(${executable_name} PROPERTIES LINK_FLAGS   "-T ${file_name}")
