@@ -1337,15 +1337,21 @@ def main() -> int:
             src_node = freq_id_to_node(freq_id) if freq_id else None
             src_hz = freqs.get(freq_id) if freq_id else None
 
+            i2c_div = 1
+            if src_hz is not None and i2c.speed_hz is not None and i2c.speed_hz > 0:
+                i2c_div = src_hz // i2c.speed_hz
+                if i2c_div <= 0:
+                    i2c_div = 1
+
             label = inst_name
-            if src_hz is not None:
-                label += f"\n{format_hz(src_hz)}"
             if i2c.speed_hz is not None:
                 label += f"\n{format_hz(i2c.speed_hz)}"
+            elif src_hz is not None:
+                label += f"\n{format_hz(src_hz)}"
 
             lines.append(f'    "{node_name}" [label="{esc_label(label)}", shape=ellipse, fillcolor="#ecfeff", color="#0f766e"];')
             if src_node:
-                lines.append(f'  "{src_node}" -> "{node_name}" [label="/1", color="#0f766e"];')
+                lines.append(f'  "{src_node}" -> "{node_name}" [label="/{i2c_div}", color="#0f766e"];')
 
         lines.append("  }")
         lines.append("")
