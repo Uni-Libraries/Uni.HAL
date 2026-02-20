@@ -136,7 +136,7 @@ size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, 
 
     if (ctx != NULL && ctx->buf_tx.handle != NULL && data != NULL) {
         // push to buffer
-#if defined(UNI_HAL_TARGET_MCU_PC)
+#if defined(UNI_HAL_TARGET_MCU_PC) || defined(_MSC_VER)
         result = xStreamBufferSend(ctx->buf_tx.handle, data, data_len, 0U);
 #else
         if (xPortIsInsideInterrupt()) {
