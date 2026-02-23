@@ -15,6 +15,7 @@
 // Implementation
 //
 
+#if !defined(_MSC_VER)
 void *calloc(size_t num, size_t size) {
     void *result = NULL;
     if (num > 0U && size > 0U) {
@@ -36,6 +37,7 @@ void free(void *ptr) {
         vPortFree(ptr);
     }
 }
+#endif
 
 void vApplicationMallocFailedHook( void )
 {
