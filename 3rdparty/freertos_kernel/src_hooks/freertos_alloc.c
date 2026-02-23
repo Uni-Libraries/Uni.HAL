@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <string.h>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 // FreeRTOS
 #include <FreeRTOS.h>
 
@@ -15,6 +19,7 @@
 // Implementation
 //
 
+#if !defined(_MSC_VER)
 void *calloc(size_t num, size_t size) {
     void *result = NULL;
     if (num > 0U && size > 0U) {
@@ -36,11 +41,16 @@ void free(void *ptr) {
         vPortFree(ptr);
     }
 }
+#endif
 
 void vApplicationMallocFailedHook( void )
 {
     volatile uint32_t c = 0;
     while (!c) {
+#if defined(_MSC_VER)
+        __debugbreak();
+#else
         __builtin_trap();
+#endif
     }
 }

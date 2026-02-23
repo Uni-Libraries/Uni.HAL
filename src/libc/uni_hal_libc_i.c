@@ -5,7 +5,9 @@
 // stdlib
 #include <errno.h>
 #include <stdio.h>
+#if !defined(_MSC_VER)
 #include <unistd.h>
+#endif
 #include <sys/stat.h>
 #include <sys/types.h>
 
