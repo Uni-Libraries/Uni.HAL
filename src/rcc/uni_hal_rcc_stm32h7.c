@@ -232,19 +232,17 @@ static bool _uni_hal_stm_rcc_switch_sysclk(uint32_t source, uint32_t status, uin
 static bool _uni_hal_stm_rcc_hse(void) {
     bool result = false;
 
-    for (uint32_t retry = 0U; retry < 3U && !result; retry++) {
-        LL_RCC_HSE_Disable();
-        (void)_uni_hal_stm_rcc_wait_ready(LL_RCC_HSE_IsReady, false, g_uni_hal_rcc_config->timeout.hse);
-        LL_RCC_HSE_DisableBypass();
+    LL_RCC_HSE_Disable();
+    (void)_uni_hal_stm_rcc_wait_ready(LL_RCC_HSE_IsReady, false, g_uni_hal_rcc_config->timeout.hse);
+    LL_RCC_HSE_DisableBypass();
 
-        if (g_uni_hal_rcc_config->hse_bypass != false) {
-            LL_RCC_HSE_EnableBypass();
-        }
-
-        LL_RCC_ClearFlag_HSECSS();
-        LL_RCC_HSE_Enable();
-        result = _uni_hal_stm_rcc_wait_ready(LL_RCC_HSE_IsReady, true, g_uni_hal_rcc_config->timeout.hse);
+    if (g_uni_hal_rcc_config->hse_bypass != false) {
+        LL_RCC_HSE_EnableBypass();
     }
+
+    LL_RCC_ClearFlag_HSECSS();
+    LL_RCC_HSE_Enable();
+    result = _uni_hal_stm_rcc_wait_ready(LL_RCC_HSE_IsReady, true, g_uni_hal_rcc_config->timeout.hse);
 
     g_uni_hal_rcc_status.hse_inited = result;
 
@@ -286,7 +284,7 @@ static bool _uni_hal_stm_rcc_csi(void) {
     g_uni_hal_rcc_status.csi_inited = _uni_hal_stm_rcc_enable_and_wait(LL_RCC_CSI_Enable,
                                                                         LL_RCC_CSI_IsReady,
                                                                         LL_RCC_CSI_SetCalibTrimming,
-                                                                        16U,
+                                                                        30U,
                                                                         g_uni_hal_rcc_config->timeout.csi);
 
     return g_uni_hal_rcc_status.csi_inited;
@@ -302,7 +300,7 @@ static bool _uni_hal_stm_rcc_hsi(void) {
     g_uni_hal_rcc_status.hsi_inited = _uni_hal_stm_rcc_enable_and_wait(LL_RCC_HSI_Enable,
                                                                         LL_RCC_HSI_IsReady,
                                                                         LL_RCC_HSI_SetCalibTrimming,
-                                                                        64U,
+                                                                        63U,
                                                                         g_uni_hal_rcc_config->timeout.hsi);
 
     return g_uni_hal_rcc_status.hsi_inited;
@@ -418,6 +416,7 @@ static bool _uni_hal_stm_rcc_pll_reset(void){
 static bool _uni_hal_stm_rcc_pll(void) {
     uint32_t clock_source = LL_RCC_PLLSOURCE_HSI;
     uint32_t source_hz = HSI_VALUE;
+    uint32_t pll_division = 1U;
 
     if (g_uni_hal_rcc_status.hse_inited) {
         clock_source = LL_RCC_PLLSOURCE_HSE;
@@ -430,6 +429,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
     else if (g_uni_hal_rcc_status.hsi_inited) {
         clock_source = LL_RCC_PLLSOURCE_HSI;
         source_hz = HSI_VALUE;
+        pll_division = HSI_VALUE / HSE_VALUE;
     }
     else {
         return false;
@@ -468,7 +468,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
 
             LL_RCC_PLL1_SetVCOInputRange(pll_input_range);
             LL_RCC_PLL1_SetVCOOutputRange(LL_RCC_PLLVCORANGE_WIDE);
-            LL_RCC_PLL1_SetM(pll_m);
+            LL_RCC_PLL1_SetM(pll_m * pll_division);
             LL_RCC_PLL1_SetN(g_uni_hal_rcc_config->pll[0].n);
 
             if (g_uni_hal_rcc_config->pll[0].fracn != 0U) {
@@ -514,7 +514,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
 
                 LL_RCC_PLL2_SetVCOInputRange(pll_input_range);
                 LL_RCC_PLL2_SetVCOOutputRange(LL_RCC_PLLVCORANGE_WIDE);
-                LL_RCC_PLL2_SetM(pll_m);
+                LL_RCC_PLL2_SetM(pll_m * pll_division);
                 LL_RCC_PLL2_SetN(g_uni_hal_rcc_config->pll[1].n);
 
                 if (g_uni_hal_rcc_config->pll[1].fracn != 0U) {
@@ -564,7 +564,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
 
                 LL_RCC_PLL3_SetVCOInputRange(pll_input_range);
                 LL_RCC_PLL3_SetVCOOutputRange(LL_RCC_PLLVCORANGE_WIDE);
-                LL_RCC_PLL3_SetM(pll_m);
+                LL_RCC_PLL3_SetM(pll_m * pll_division);
                 LL_RCC_PLL3_SetN(g_uni_hal_rcc_config->pll[2].n);
 
                 if (g_uni_hal_rcc_config->pll[2].fracn != 0U) {
@@ -719,13 +719,13 @@ bool uni_hal_rcc_init(void) {
         }
 
         g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_HSI;
-        (void)_uni_hal_stm_rcc_hsi();
+        _uni_hal_stm_rcc_hsi();
 
         if(g_uni_hal_rcc_config->lse_enable != false) {
-            (void)_uni_hal_stm_rcc_lse();
+            _uni_hal_stm_rcc_lse();
         }
         if (!g_uni_hal_rcc_status.lse_inited) {
-            (void)_uni_hal_stm_rcc_lsi();
+            _uni_hal_stm_rcc_lsi();
         }
 
         g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_PLL;

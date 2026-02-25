@@ -84,9 +84,7 @@ typedef struct {
     bool                                 hse_enable;
     bool                                 hse_bypass;
     bool                                 hse_css;
-
     bool                                 csi_enable;
-
     bool                                 lse_enable;
 
     uni_hal_rcc_stm32h7_config_pll_t      pll[3];
