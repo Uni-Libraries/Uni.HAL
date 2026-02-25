@@ -571,7 +571,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         }
 
         // clk
-        result = uni_hal_rcc_clksrc_set(ctx->config.instance, UNI_HAL_RCC_CLKSRC_PLL2P) && result;
+        result = uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source) && result;
         result = uni_hal_rcc_clk_set(ctx->config.instance, true) && result;
 
         // irq

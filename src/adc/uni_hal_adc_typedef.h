@@ -12,7 +12,7 @@
 #include "core/uni_hal_core_enum.h"
 #include "dma/uni_hal_dma.h"
 #include "gpio/uni_hal_gpio.h"
-
+#include "rcc/uni_hal_rcc_enum.h"
 
 
 //
@@ -33,6 +33,11 @@ typedef struct {
      * ADC instance
      */
     uni_hal_core_periph_e instance;
+
+    /**
+     * ADC clock source
+     */
+    uni_hal_rcc_clksrc_e clock_source;
 
     /**
      * DMA context

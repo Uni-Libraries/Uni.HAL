@@ -551,6 +551,14 @@ class I2cClockConsumer:
     speed_hz: int | None
 
 
+@dataclass
+class AdcClockConsumer:
+    name: str
+    instance: str | None
+    clksrc_token: str | None
+    channels_count: int | None
+
+
 def _extract_block(text: str, start_index: int) -> tuple[str, int] | None:
     eq_index = text.find("=", start_index)
     if eq_index < 0:
@@ -695,6 +703,36 @@ def parse_i2c_consumers(text: str) -> list[I2cClockConsumer]:
                 instance=instance,
                 clksrc_token=clksrc_token,
                 speed_hz=speed_hz,
+            )
+        )
+
+    return consumers
+
+
+def parse_adc_consumers(text: str) -> list[AdcClockConsumer]:
+    consumers: list[AdcClockConsumer] = []
+    pattern = re.compile(r"uni_hal_adc_context_t\s+([A-Za-z_][A-Za-z0-9_]*)\s*=", flags=re.S)
+
+    for match in pattern.finditer(text):
+        name = match.group(1).strip()
+        block = _extract_block(text, match.end() - 1)
+        if block is None:
+            continue
+
+        block_text, _ = block
+        instance = _extract_designated_from_block(block_text, "instance")
+        clksrc_token = _extract_designated_from_block(block_text, "clock_source")
+        channels_count = parse_int(_extract_designated_from_block(block_text, "channels_count"))
+
+        if instance is None and clksrc_token is None:
+            continue
+
+        consumers.append(
+            AdcClockConsumer(
+                name=name,
+                instance=instance,
+                clksrc_token=clksrc_token,
+                channels_count=channels_count,
             )
         )
 
@@ -978,6 +1016,10 @@ def main() -> int:
     i2c_consumers = parse_i2c_consumers(merged_pp)
     if not i2c_consumers:
         i2c_consumers = parse_i2c_consumers(merged_raw)
+
+    adc_consumers = parse_adc_consumers(merged_pp)
+    if not adc_consumers:
+        adc_consumers = parse_adc_consumers(merged_raw)
 
     hse_hz = parse_int(args.hse_hz)
     if hse_hz is None:
@@ -1352,6 +1394,31 @@ def main() -> int:
             lines.append(f'    "{node_name}" [label="{esc_label(label)}", shape=ellipse, fillcolor="#ecfeff", color="#0f766e"];')
             if src_node:
                 lines.append(f'  "{src_node}" -> "{node_name}" [label="/{i2c_div}", color="#0f766e"];')
+
+        lines.append("  }")
+        lines.append("")
+
+    if adc_consumers:
+        lines.append("  subgraph cluster_adc_io {")
+        lines.append('    label="ADC clocks";')
+        lines.append('    color="#cbd5e1";')
+        lines.append('    style="rounded";')
+
+        for idx, adc in enumerate(adc_consumers, start=1):
+            node_name = f"adc_cfg_{idx}"
+            inst_name = normalize_instance_name(adc.instance, f"ADC{idx}")
+
+            freq_id = token_to_freq_id(adc.clksrc_token) if adc.clksrc_token else None
+            src_node = freq_id_to_node(freq_id) if freq_id else None
+            src_hz = freqs.get(freq_id) if freq_id else None
+
+            label = inst_name
+            if src_hz is not None:
+                label += f"\n{format_hz(src_hz)}"
+
+            lines.append(f'    "{node_name}" [label="{esc_label(label)}", shape=ellipse, fillcolor="#f3e8ff", color="#7c3aed"];')
+            if src_node:
+                lines.append(f'  "{src_node}" -> "{node_name}" [label="/1", color="#7c3aed"];')
 
         lines.append("  }")
         lines.append("")

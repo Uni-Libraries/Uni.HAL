@@ -200,17 +200,20 @@ static bool _uni_hal_stm_rcc_wait_ready_nmi(uint32_t (*get_state)(void), bool ex
 }
 
 
-static uint32_t _uni_hal_stm_rcc_get_pll_input_range(uint32_t input_hz) {
-    if (input_hz < 2'000'000U) {
-        return LL_RCC_PLLINPUTRANGE_1_2;
+static uint32_t _uni_hal_stm_rcc_get_pll_input_range(uint32_t input_hz)
+{
+    uint32_t result = LL_RCC_PLLINPUTRANGE_1_2;
+    if (input_hz >= 8'000'000)
+    {
+        result = LL_RCC_PLLINPUTRANGE_8_16;
     }
-    if (input_hz < 4'000'000U) {
-        return LL_RCC_PLLINPUTRANGE_2_4;
+    else if (input_hz >= 4'000'000U) {
+        result = LL_RCC_PLLINPUTRANGE_4_8;
     }
-    if (input_hz < 8'000'000U) {
-        return LL_RCC_PLLINPUTRANGE_4_8;
+    else if (input_hz >= 2'000'000U) {
+        result = LL_RCC_PLLINPUTRANGE_2_4;
     }
-    return LL_RCC_PLLINPUTRANGE_8_16;
+    return result;
 }
 
 
