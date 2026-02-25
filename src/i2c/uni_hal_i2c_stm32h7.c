@@ -118,7 +118,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
         if (handle != NULL && handle_hal != NULL) {
             result = true;
             if (!ctx->state.initialized) {
-                uni_hal_rcc_clksrc_set(ctx->config.instance, UNI_HAL_RCC_CLKSRC_PCLK1);
+                uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source);
                 result = uni_hal_rcc_clk_set(ctx->config.instance, true);
 
                 if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sck)) {

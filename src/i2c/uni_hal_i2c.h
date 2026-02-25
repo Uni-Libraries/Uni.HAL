@@ -48,6 +48,11 @@ typedef struct {
     uni_hal_core_periph_e instance;
 
     /**
+     * I2C Clock Source
+     */
+    uni_hal_rcc_clksrc_e clock_source;
+
+    /**
      * I2C speed
      */
     uni_hal_i2c_speed_e speed;

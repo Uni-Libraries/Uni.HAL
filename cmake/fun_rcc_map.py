@@ -659,7 +659,7 @@ def parse_spi_consumers(text: str) -> list[SpiClockConsumer]:
     return consumers
 
 
-def parse_i2c_speed_hz(token: str | None) -> int | None:
+def parse_i2c_speed_hz(token: str | None, named_speeds: dict[str, int] | None = None) -> int | None:
     number = parse_int(token)
     if number is not None and number > 0:
         return number
@@ -667,8 +667,18 @@ def parse_i2c_speed_hz(token: str | None) -> int | None:
     if token is None:
         return None
 
-    upper = token.strip().upper()
-    match = re.search(r"_([0-9]+)\s*([KM])HZ$", upper)
+    upper = token.strip().upper().replace(" ", "")
+    if not upper:
+        return None
+
+    if named_speeds:
+        if upper in named_speeds:
+            return named_speeds[upper]
+        compact = upper.replace("_", "")
+        if compact in named_speeds:
+            return named_speeds[compact]
+
+    match = re.search(r"([0-9]+)\s*([KMG])HZ$", upper.replace("_", ""))
     if not match:
         return None
 
@@ -676,10 +686,49 @@ def parse_i2c_speed_hz(token: str | None) -> int | None:
     unit = match.group(2)
     if unit == "K":
         return value * 1_000
+    if unit == "G":
+        return value * 1_000_000_000
     return value * 1_000_000
 
 
-def parse_i2c_consumers(text: str) -> list[I2cClockConsumer]:
+def parse_i2c_speed_map(text: str) -> dict[str, int]:
+    speeds: dict[str, int] = {}
+    enum_match = re.search(r"typedef\s+enum\s*\{(.*?)\}\s*uni_hal_i2c_speed_e\s*;", text, flags=re.S)
+    enum_body = enum_match.group(1) if enum_match else text
+
+    for token in collect_group1(r"\b(UNI_HAL_I2C_SPEED_[A-Z0-9_]+)\b", enum_body):
+        speed_hz = parse_i2c_speed_hz(token)
+        if speed_hz is None:
+            continue
+        normalized = token.strip().upper().replace(" ", "")
+        speeds[normalized] = speed_hz
+        speeds[normalized.replace("_", "")] = speed_hz
+
+    return speeds
+
+
+def detect_i2c_default_clksrc_token(driver_text: str) -> str | None:
+    for match in re.finditer(r"uni_hal_rcc_clksrc_set\s*\(\s*ctx->config.instance\s*,\s*([^\),]+)", driver_text):
+        token = match.group(1).strip()
+        if token.startswith("UNI_HAL_RCC_CLKSRC_"):
+            return token
+    return None
+
+
+def detect_i2c_default_speed_token(driver_text: str) -> str | None:
+    switch_match = re.search(r"switch\s*\(\s*ctx->config.speed\s*\)\s*\{(.*?)\}", driver_text, flags=re.S)
+    if switch_match is None:
+        return None
+
+    switch_body = switch_match.group(1)
+    default_case_match = re.search(r"case\s+(UNI_HAL_I2C_SPEED_[A-Z0-9_]+)\s*:\s*default\s*:", switch_body, flags=re.S)
+    if default_case_match is not None:
+        return default_case_match.group(1)
+
+    return None
+
+
+def parse_i2c_consumers(text: str, i2c_speed_map: dict[str, int] | None = None) -> list[I2cClockConsumer]:
     consumers: list[I2cClockConsumer] = []
     pattern = re.compile(r"uni_hal_i2c_context_t\s+([A-Za-z_][A-Za-z0-9_]*)\s*=", flags=re.S)
 
@@ -692,7 +741,7 @@ def parse_i2c_consumers(text: str) -> list[I2cClockConsumer]:
         block_text, _ = block
         instance = _extract_designated_from_block(block_text, "instance")
         clksrc_token = _extract_designated_from_block(block_text, "clock_source")
-        speed_hz = parse_i2c_speed_hz(_extract_designated_from_block(block_text, "speed"))
+        speed_hz = parse_i2c_speed_hz(_extract_designated_from_block(block_text, "speed"), i2c_speed_map)
 
         if instance is None and clksrc_token is None:
             continue
@@ -869,6 +918,26 @@ def main() -> int:
     merged_raw = strip_comments(merged_raw)
 
     extra_clock_text_parts: list[str] = []
+    i2c_header_text = ""
+    i2c_driver_text = ""
+
+    i2c_header_path = find_project_file_near_inputs(input_paths, "src_unihal/src/i2c/uni_hal_i2c.h")
+    if i2c_header_path is not None:
+        i2c_header_text = strip_comments(i2c_header_path.read_text(encoding="utf-8"))
+
+    if "STM32H7" in defined:
+        i2c_driver_path = find_project_file_near_inputs(input_paths, "src_unihal/src/i2c/uni_hal_i2c_stm32h7.c")
+        if i2c_driver_path is not None:
+            i2c_driver_text = strip_comments(i2c_driver_path.read_text(encoding="utf-8"))
+
+    i2c_speed_map = parse_i2c_speed_map(i2c_header_text)
+    i2c_default_speed_hz: int | None = None
+    default_i2c_speed_token = detect_i2c_default_speed_token(i2c_driver_text)
+    if default_i2c_speed_token is not None:
+        i2c_default_speed_hz = parse_i2c_speed_hz(default_i2c_speed_token, i2c_speed_map)
+
+    i2c_default_clksrc_token = detect_i2c_default_clksrc_token(i2c_driver_text)
+
     if "STM32H7" in defined:
         h7_rcc_path = find_project_file_near_inputs(input_paths, "src_unihal/src/rcc/uni_hal_rcc_stm32h7.c")
         if h7_rcc_path is not None:
@@ -1013,9 +1082,9 @@ def main() -> int:
     if not spi_consumers:
         spi_consumers = parse_spi_consumers(merged_raw)
 
-    i2c_consumers = parse_i2c_consumers(merged_pp)
+    i2c_consumers = parse_i2c_consumers(merged_pp, i2c_speed_map)
     if not i2c_consumers:
-        i2c_consumers = parse_i2c_consumers(merged_raw)
+        i2c_consumers = parse_i2c_consumers(merged_raw, i2c_speed_map)
 
     adc_consumers = parse_adc_consumers(merged_pp)
     if not adc_consumers:
@@ -1373,21 +1442,25 @@ def main() -> int:
             inst_name = normalize_instance_name(i2c.instance, f"I2C{idx}")
 
             freq_id = token_to_freq_id(i2c.clksrc_token) if i2c.clksrc_token else None
+            if freq_id is None and i2c_default_clksrc_token is not None:
+                freq_id = token_to_freq_id(i2c_default_clksrc_token)
             if freq_id is None:
                 freq_id = i2c_instance_to_freq_id(i2c.instance)
 
             src_node = freq_id_to_node(freq_id) if freq_id else None
             src_hz = freqs.get(freq_id) if freq_id else None
 
+            resolved_i2c_speed_hz = i2c.speed_hz if i2c.speed_hz is not None else i2c_default_speed_hz
+
             i2c_div = 1
-            if src_hz is not None and i2c.speed_hz is not None and i2c.speed_hz > 0:
-                i2c_div = src_hz // i2c.speed_hz
+            if src_hz is not None and resolved_i2c_speed_hz is not None and resolved_i2c_speed_hz > 0:
+                i2c_div = src_hz // resolved_i2c_speed_hz
                 if i2c_div <= 0:
                     i2c_div = 1
 
             label = inst_name
-            if i2c.speed_hz is not None:
-                label += f"\n{format_hz(i2c.speed_hz)}"
+            if resolved_i2c_speed_hz is not None:
+                label += f"\n{format_hz(resolved_i2c_speed_hz)}"
             elif src_hz is not None:
                 label += f"\n{format_hz(src_hz)}"
 
