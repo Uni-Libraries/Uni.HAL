@@ -146,15 +146,6 @@ typedef struct {
      */
     bool css_fault;
 
-    /**
-     * CSS recovery should be processed in non-NMI context
-     */
-    bool css_recovery_pending;
-
-    /**
-     * Number of detected CSS faults
-     */
-    uint32_t css_fault_count;
 } uni_hal_rcc_stm32h7_status_t;
 
 

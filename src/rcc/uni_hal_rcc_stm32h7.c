@@ -63,8 +63,6 @@ typedef struct {
 
 static volatile uni_hal_rcc_stm32h7_diag_t g_uni_hal_rcc_diag_boot = { 0 };
 static volatile uint32_t g_uni_hal_rcc_reset_flags_shadow = 0U;
-static volatile bool g_uni_hal_rcc_css_nmi_processing = false;
-static volatile bool g_uni_hal_rcc_css_event_latched = false;
 static volatile bool g_uni_hal_rcc_reconfig_in_progress = false;
 
 
@@ -186,20 +184,6 @@ static bool _uni_hal_stm_rcc_wait_ready(uint32_t (*get_state)(void), bool expect
 }
 
 
-static bool _uni_hal_stm_rcc_wait_ready_nmi(uint32_t (*get_state)(void), bool expected_state) {
-    if (get_state == nullptr) {
-        return false;
-    }
-
-    uint32_t wait_counter = UNI_HAL_RCC_NMI_WAIT_ITERATIONS;
-    while (((get_state() != 0U) != expected_state) && (wait_counter > 0U)) {
-        wait_counter--;
-    }
-
-    return ((get_state() != 0U) == expected_state);
-}
-
-
 static uint32_t _uni_hal_stm_rcc_get_pll_input_range(uint32_t input_hz)
 {
     uint32_t result = LL_RCC_PLLINPUTRANGE_1_2;
@@ -240,120 +224,6 @@ static bool _uni_hal_stm_rcc_switch_sysclk(uint32_t source, uint32_t status, uin
     return _uni_hal_stm_rcc_wait_sysclk_status(status, timeout_ms);
 }
 
-
-static bool _uni_hal_stm_rcc_switch_sysclk_nmi(uint32_t source, uint32_t status) {
-    LL_RCC_SetSysClkSource(source);
-
-    uint32_t wait_counter = UNI_HAL_RCC_NMI_WAIT_ITERATIONS;
-    while ((LL_RCC_GetSysClkSource() != status) && (wait_counter > 0U)) {
-        wait_counter--;
-    }
-
-    return (LL_RCC_GetSysClkSource() == status);
-}
-
-
-static bool _uni_hal_stm_rcc_nmi_fallback_to_safe_clk(void) {
-    bool switched = false;
-
-    LL_RCC_HSI_Enable();
-    g_uni_hal_rcc_status.hsi_inited = _uni_hal_stm_rcc_wait_ready_nmi(LL_RCC_HSI_IsReady, true);
-    if (g_uni_hal_rcc_status.hsi_inited) {
-        switched = _uni_hal_stm_rcc_switch_sysclk_nmi(LL_RCC_SYS_CLKSOURCE_HSI,
-                                                       LL_RCC_SYS_CLKSOURCE_STATUS_HSI);
-    }
-
-    if (!switched) {
-        LL_RCC_CSI_Enable();
-        g_uni_hal_rcc_status.csi_inited = _uni_hal_stm_rcc_wait_ready_nmi(LL_RCC_CSI_IsReady, true);
-        if (g_uni_hal_rcc_status.csi_inited) {
-            switched = _uni_hal_stm_rcc_switch_sysclk_nmi(LL_RCC_SYS_CLKSOURCE_CSI,
-                                                           LL_RCC_SYS_CLKSOURCE_STATUS_CSI);
-        }
-    }
-
-    g_uni_hal_rcc_status.sys_inited = switched;
-    if (switched) {
-        SystemCoreClockUpdate();
-        (void)uni_hal_systick_init();
-    }
-
-    return switched;
-}
-
-
-static bool _uni_hal_stm_rcc_fallback_to_safe_clk(uint32_t timeout_ms) {
-    bool hsi_ready = (LL_RCC_HSI_IsReady() != 0U);
-    if (!hsi_ready) {
-        LL_RCC_HSI_Enable();
-        hsi_ready = _uni_hal_stm_rcc_wait_ready(LL_RCC_HSI_IsReady, true, timeout_ms);
-    }
-    g_uni_hal_rcc_status.hsi_inited = hsi_ready;
-
-    bool csi_ready = (LL_RCC_CSI_IsReady() != 0U);
-    if (!hsi_ready && !csi_ready) {
-        LL_RCC_CSI_Enable();
-        csi_ready = _uni_hal_stm_rcc_wait_ready(LL_RCC_CSI_IsReady, true, timeout_ms);
-    }
-    g_uni_hal_rcc_status.csi_inited = csi_ready;
-
-    if (hsi_ready) {
-        if (_uni_hal_stm_rcc_switch_sysclk(LL_RCC_SYS_CLKSOURCE_HSI,
-                                           LL_RCC_SYS_CLKSOURCE_STATUS_HSI,
-                                           timeout_ms)) {
-            g_uni_hal_rcc_status.sys_inited = true;
-            SystemCoreClockUpdate();
-            return true;
-        }
-    }
-
-    if (csi_ready) {
-        if (_uni_hal_stm_rcc_switch_sysclk(LL_RCC_SYS_CLKSOURCE_CSI,
-                                           LL_RCC_SYS_CLKSOURCE_STATUS_CSI,
-                                           timeout_ms)) {
-            g_uni_hal_rcc_status.sys_inited = true;
-            SystemCoreClockUpdate();
-            return true;
-        }
-    }
-
-    g_uni_hal_rcc_status.sys_inited = false;
-    return false;
-}
-
-
-static void _uni_hal_stm_rcc_css_request_recovery(void) {
-    if (!g_uni_hal_rcc_css_event_latched) {
-        g_uni_hal_rcc_status.css_fault_count++;
-    }
-
-    g_uni_hal_rcc_css_event_latched = true;
-    g_uni_hal_rcc_status.css_fault = true;
-    g_uni_hal_rcc_status.css_recovery_pending = true;
-
-    g_uni_hal_rcc_status.hse_inited = false;
-    g_uni_hal_rcc_status.pll_inited[0] = false;
-    g_uni_hal_rcc_status.pll_inited[1] = false;
-    g_uni_hal_rcc_status.pll_inited[2] = false;
-    g_uni_hal_rcc_status.sys_inited = false;
-}
-
-
-static void _uni_hal_stm_rcc_reset(void){
-    bool const css_fault = g_uni_hal_rcc_status.css_fault;
-    bool const css_recovery_pending = g_uni_hal_rcc_status.css_recovery_pending;
-    uint32_t const css_fault_count = g_uni_hal_rcc_status.css_fault_count;
-
-    memset(&g_uni_hal_rcc_status, 0, sizeof(g_uni_hal_rcc_status));
-
-    g_uni_hal_rcc_status.css_fault = css_fault;
-    g_uni_hal_rcc_status.css_recovery_pending = css_recovery_pending;
-    g_uni_hal_rcc_status.css_fault_count = css_fault_count;
-
-    g_uni_hal_rcc_css_nmi_processing = false;
-    g_uni_hal_rcc_css_event_latched = false;
-}
-
 /**
  * Configure high speed external clock
  * @param ctx RCC context
@@ -380,8 +250,6 @@ static bool _uni_hal_stm_rcc_hse(void) {
 
     if (result) {
         if (g_uni_hal_rcc_config->hse_css) {
-            g_uni_hal_rcc_css_event_latched = false;
-            g_uni_hal_rcc_css_nmi_processing = false;
             LL_RCC_ClearFlag_HSECSS();
             LL_RCC_HSE_EnableCSS();
             LL_RCC_ClearFlag_HSECSS();
@@ -821,10 +689,6 @@ bool uni_hal_rcc_init(void) {
     g_uni_hal_rcc_reconfig_in_progress = true;
 
     if (g_uni_hal_rcc_config != nullptr && !g_uni_hal_rcc_status.inited) {
-        g_uni_hal_rcc_status.css_recovery_pending = false;
-        g_uni_hal_rcc_css_event_latched = false;
-
-        _uni_hal_stm_rcc_reset();
         g_uni_hal_rcc_reset_flags_shadow = RCC->RSR;
 
         if (!uni_hal_dwt_is_inited()) {
@@ -872,9 +736,10 @@ bool uni_hal_rcc_init(void) {
             result = _uni_hal_stm_rcc_sysclk() && result;
         }
 
+        /*
         if (!result || !pll_ok || !g_uni_hal_rcc_status.sys_inited) {
             result = _uni_hal_stm_rcc_fallback_to_safe_clk(g_uni_hal_rcc_config->timeout.hsi);
-        }
+        }*/
 
         uni_hal_systick_init();
         _uni_hal_stm_rcc_diag_capture(&g_uni_hal_rcc_diag_boot);
@@ -1882,35 +1747,24 @@ uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e c
 // STM32H7 - Interrupts
 //
 
-
 void NMI_Handler(void) {
     if (LL_RCC_IsActiveFlag_HSECSS()) {
         LL_RCC_ClearFlag_HSECSS();
 
-        if (g_uni_hal_rcc_css_nmi_processing) {
-            g_uni_hal_rcc_css_event_latched = true;
-            LL_RCC_ClearFlag_HSECSS();
-            return;
-        }
-
-        g_uni_hal_rcc_css_nmi_processing = true;
-
-        LL_RCC_ClearFlag_HSECSS();
-        if (g_uni_hal_rcc_config != nullptr) {
+        if (g_uni_hal_rcc_config != nullptr)
+        {
             g_uni_hal_rcc_config->hse_enable = false;
         }
 
-        _uni_hal_stm_rcc_css_request_recovery();
+        g_uni_hal_rcc_status.css_fault = true;
+        g_uni_hal_rcc_status.hse_inited = false;
+        g_uni_hal_rcc_status.pll_inited[0] = false;
+        g_uni_hal_rcc_status.pll_inited[1] = false;
+        g_uni_hal_rcc_status.pll_inited[2] = false;
+        g_uni_hal_rcc_status.sys_inited = false;
 
-        LL_RCC_HSE_Disable();
-        (void)_uni_hal_stm_rcc_wait_ready_nmi(LL_RCC_HSE_IsReady, false);
-
-        bool recovered = _uni_hal_stm_rcc_nmi_fallback_to_safe_clk();
-        if (recovered) {
-            g_uni_hal_rcc_status.css_recovery_pending = false;
-        }
-
-        LL_RCC_ClearFlag_HSECSS();
-        g_uni_hal_rcc_css_nmi_processing = false;
+        //TODO: NEEDED? LL_RCC_HSE_Disable();
+        _uni_hal_stm_rcc_pll();
+        _uni_hal_stm_rcc_sysclk();
     }
 }
