@@ -332,7 +332,7 @@ static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
                 .ICPolarity = _uni_hal_tim_get_polarity(channel->polarity),
                 .ICActiveInput = LL_TIM_ACTIVEINPUT_DIRECTTI,
                 .ICPrescaler = LL_TIM_ICPSC_DIV1,
-                .ICFilter = LL_TIM_IC_FILTER_FDIV1,
+                .ICFilter = (channel->filter & 0b1111) << 16U,
             };
             result = result && (LL_TIM_IC_Init(_uni_hal_tim_get_handle(ctx->config.instance), _uni_hal_tim_get_channel(channel->channel_number), &ic_config) == SUCCESS);
         }

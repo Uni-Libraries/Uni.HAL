@@ -35,6 +35,12 @@ extern "C" {
 
 typedef bool (*uni_hal_tim_callback_fn)(void *ctx_timer, void *ctx_fn);
 
+
+
+//
+// Enums
+//
+
 /** Input capture edge polarity. */
 typedef enum
 {
@@ -60,6 +66,11 @@ typedef enum
     UNI_HAL_TIM_CHANNEL_5 = 4,
     UNI_HAL_TIM_CHANNEL_6 = 5,
 } uni_hal_tim_channel_num_e;
+
+
+//
+// Structs
+//
 
 /**
  * TIM channel status
@@ -95,6 +106,9 @@ typedef struct
 
     /** Optional GPIO pin used by the channel. */
     uni_hal_gpio_pin_context_t* gpio;
+
+    /** Digital filter settings */
+    uint32_t filter;
 } uni_hal_tim_channel_t;
 
 /**
