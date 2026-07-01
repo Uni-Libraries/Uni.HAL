@@ -567,7 +567,43 @@ bool uni_hal_tim_clear(uni_hal_tim_context_t* ctx)
     if (uni_hal_tim_is_inited(ctx)) {
         TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
         if (handle != NULL) {
+            uint32_t primask = uni_hal_core_irq_pause();
+
             LL_TIM_SetCounter(handle, 0U);
+            LL_TIM_ClearFlag_UPDATE(handle);
+
+            memset(ctx->status.chan, 0, sizeof(ctx->status.chan));
+
+            for (size_t i = 0; i < ctx->config.channel_count; i++)
+            {
+                if (ctx->config.channel[i]->type == UNI_HAL_TIM_TYPE_INPUTCAPTURE)
+                {
+                    switch (ctx->config.channel[i]->channel_number)
+                    {
+                    case UNI_HAL_TIM_CHANNEL_1:
+                        LL_TIM_ClearFlag_CC1(handle);
+                        LL_TIM_ClearFlag_CC1OVR(handle);
+                        break;
+                    case UNI_HAL_TIM_CHANNEL_2:
+                        LL_TIM_ClearFlag_CC2(handle);
+                        LL_TIM_ClearFlag_CC2OVR(handle);
+                        break;
+                    case UNI_HAL_TIM_CHANNEL_3:
+                        LL_TIM_ClearFlag_CC3(handle);
+                        LL_TIM_ClearFlag_CC3OVR(handle);
+                        break;
+                    case UNI_HAL_TIM_CHANNEL_4:
+                        LL_TIM_ClearFlag_CC4(handle);
+                        LL_TIM_ClearFlag_CC4OVR(handle);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+
+            uni_hal_core_irq_resume(primask);
+
             result = true;
         }
     }
@@ -583,7 +619,52 @@ bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
         TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
         if (handle != NULL) {
             LL_TIM_DisableCounter(handle);
+            LL_TIM_SetCounter(handle, 0U);
+
+            for (size_t i = 0; i < ctx->config.channel_count; i++)
+            {
+                if (ctx->config.channel[i]->type == UNI_HAL_TIM_TYPE_INPUTCAPTURE)
+                {
+                    LL_TIM_CC_DisableChannel(handle,  _uni_hal_tim_get_channel(ctx->config.channel[i]->channel_number));
+
+                    switch (ctx->config.channel[i]->channel_number)
+                    {
+                    case UNI_HAL_TIM_CHANNEL_1:
+                        LL_TIM_DisableIT_CC1(handle);
+                        LL_TIM_ClearFlag_CC1(handle);
+                        LL_TIM_ClearFlag_CC1OVR(handle);
+                        break;
+                    case UNI_HAL_TIM_CHANNEL_2:
+                        LL_TIM_DisableIT_CC2(handle);
+                        LL_TIM_ClearFlag_CC2(handle);
+                        LL_TIM_ClearFlag_CC2OVR(handle);
+                        break;
+                    case UNI_HAL_TIM_CHANNEL_3:
+                        LL_TIM_DisableIT_CC3(handle);
+                        LL_TIM_ClearFlag_CC3(handle);
+                        LL_TIM_ClearFlag_CC3OVR(handle);
+                        break;
+                    case UNI_HAL_TIM_CHANNEL_4:
+                        LL_TIM_DisableIT_CC4(handle);
+                        LL_TIM_ClearFlag_CC4(handle);
+                        LL_TIM_ClearFlag_CC4OVR(handle);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+
             LL_TIM_DisableIT_UPDATE(handle);
+            LL_TIM_ClearFlag_UPDATE(handle);
+
+            memset(ctx->status.chan, 0, sizeof(ctx->status.chan));
+
+            if (ctx->config.instance == UNI_HAL_CORE_PERIPH_TIM_1)
+            {
+                uni_hal_core_irq_disable(UNI_HAL_CORE_IRQ_TIM_1);
+            }
+
             result = true;
         }
     }
