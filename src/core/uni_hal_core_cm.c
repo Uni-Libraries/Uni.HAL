@@ -35,6 +35,16 @@ void uni_hal_core_irq_init(void){
     NVIC_SetPriorityGrouping(0x00000003);
 }
 
+bool uni_hal_core_irq_disable(uni_hal_core_irq_e irq) {
+    bool result = false;
+    uint32_t irq_num = uni_hal_core_irq_getnum(irq);
+    if (irq_num != INT16_MAX) {
+        NVIC_DisableIRQ(irq_num);
+        NVIC_ClearPendingIRQ(irq_num);
+        result = true;
+    }
+    return result;
+}
 
 bool uni_hal_core_irq_enable(uni_hal_core_irq_e irq, uint32_t priority_group, uint32_t priority_subgroup) {
     bool result = false;
