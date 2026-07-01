@@ -47,6 +47,9 @@ IRQn_Type uni_hal_core_irq_getnum(uni_hal_core_irq_e irq)
     case UNI_HAL_CORE_IRQ_TIM_1:
         result = TIM1_CC_IRQn;
         break;
+    case UNI_HAL_CORE_IRQ_TIM_1_UP:
+        result = TIM1_UP_TIM16_IRQn;
+        break;
     case UNI_HAL_CORE_IRQ_UART_1:
         result = USART1_IRQn;
         break;
