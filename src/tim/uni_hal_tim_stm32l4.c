@@ -5,6 +5,7 @@
 // stdlib
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 // ST
 #include <stm32l4xx_ll_tim.h>
@@ -216,9 +217,28 @@ static uint32_t _uni_hal_tim_get_polarity(uni_hal_tim_polarity_e channel)
     return result;
 }
 
-static bool _uni_hal_tim_is_channel_valid(uni_hal_tim_channel_num_e channel)
-{
-    return (uint32_t)channel < UNI_HAL_TIM_CHANNEL_MAXCOUNT;
+
+static uint32_t _uni_hal_tim_get_capture_raw(TIM_TypeDef *handle, uni_hal_tim_channel_num_e chan){
+    uint32_t result = UINT32_MAX;
+
+    switch(chan){
+        case UNI_HAL_TIM_CHANNEL_1:
+            result = LL_TIM_IC_GetCaptureCH1(handle);
+            break;
+        case UNI_HAL_TIM_CHANNEL_2:
+            result = LL_TIM_IC_GetCaptureCH2(handle);
+            break;
+        case UNI_HAL_TIM_CHANNEL_3:
+            result = LL_TIM_IC_GetCaptureCH3(handle);
+            break;
+        case UNI_HAL_TIM_CHANNEL_4:
+            result = LL_TIM_IC_GetCaptureCH4(handle);
+            break;
+        default:
+            break;
+    }
+
+    return result;
 }
 
 static uint32_t _uni_hal_tim_get_capture_delta(TIM_TypeDef *handle, uint32_t current, uint32_t previous)
@@ -241,7 +261,7 @@ static uint64_t _uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_
 {
     uint64_t result = 0U;
 
-    if (uni_hal_tim_is_inited(ctx) && _uni_hal_tim_is_channel_valid(chan))
+    if (uni_hal_tim_is_inited(ctx) && uni_hal_tim_is_channel_valid(ctx, chan))
     {
         result = (uint64_t)ctx->status.chan_val[chan] * uni_hal_tim_get_tick_period_ns(ctx);
     }
@@ -249,76 +269,61 @@ static uint64_t _uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_
     return result;
 }
 
-static void _uni_hal_tim_irq_cc(TIM_TypeDef* handle)
+static void _uni_hal_tim_irq_cc_chan(uni_hal_tim_context_t* ctx, TIM_TypeDef* handle, uni_hal_tim_channel_num_e chan)
 {
-    uint32_t tim_cnt;
-    uint32_t tim_ms = uni_hal_systick_get_ms();
-    uint32_t tim_number = _uni_hal_tim_get_number_by_handle(handle);
+    uint32_t value = _uni_hal_tim_get_capture_raw(handle, chan);
+    if(ctx->status.chan_seen[chan]){
+        uint32_t delta = _uni_hal_tim_get_capture_delta(handle, value, ctx->status.chan_cnt[chan]);
+        ctx->status.chan_cnt[chan] = value;
 
-    if ((tim_number == 0U) || (tim_number > UNI_HAL_TIM_MAXTIMERS))
-    {
-        return;
-    }
-
-    uni_hal_tim_context_t* ctx = g_uni_hal_tim_ctx[tim_number - 1U];
-    if (ctx == NULL)
-    {
-        return;
-    }
-
-    if (LL_TIM_IsActiveFlag_CC1(handle)) {
-        tim_cnt = LL_TIM_IC_GetCaptureCH1(handle);
-        ctx->status.chan_val[UNI_HAL_TIM_CHANNEL_1] = _uni_hal_tim_get_capture_delta(handle, tim_cnt, ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_1]);
-        ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_1] = tim_cnt;
-        ctx->status.chan_ms[UNI_HAL_TIM_CHANNEL_1]  = tim_ms;
-        LL_TIM_ClearFlag_CC1(handle);
-    }
-
-    if (LL_TIM_IsActiveFlag_CC2(handle)) {
-        tim_cnt = LL_TIM_IC_GetCaptureCH2(handle);
-        ctx->status.chan_val[UNI_HAL_TIM_CHANNEL_2] = _uni_hal_tim_get_capture_delta(handle, tim_cnt, ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_2]);
-        ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_2] = tim_cnt;
-        ctx->status.chan_ms[UNI_HAL_TIM_CHANNEL_2]  = tim_ms;
-        LL_TIM_ClearFlag_CC2(handle);
-    }
-
-    if (LL_TIM_IsActiveFlag_CC3(handle)) {
-        tim_cnt = LL_TIM_IC_GetCaptureCH3(handle);
-        ctx->status.chan_val[UNI_HAL_TIM_CHANNEL_3] = _uni_hal_tim_get_capture_delta(handle, tim_cnt, ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_3]);
-        ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_3] = tim_cnt;
-        ctx->status.chan_ms[UNI_HAL_TIM_CHANNEL_3]  = tim_ms;
-        LL_TIM_ClearFlag_CC3(handle);
-    }
-
-    if (LL_TIM_IsActiveFlag_CC4(handle)) {
-        tim_cnt = LL_TIM_IC_GetCaptureCH4(handle);
-        ctx->status.chan_val[UNI_HAL_TIM_CHANNEL_4] = _uni_hal_tim_get_capture_delta(handle, tim_cnt, ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_4]);
-        ctx->status.chan_cnt[UNI_HAL_TIM_CHANNEL_4] = tim_cnt;
-        ctx->status.chan_ms[UNI_HAL_TIM_CHANNEL_4]  = tim_ms;
-        LL_TIM_ClearFlag_CC4(handle);
-    }
-}
-
-
-bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
-    bool result = false;
-    TIM_TypeDef *handle = _uni_hal_tim_get_handle(periph);
-
-    if (handle != NULL) {
-        if (LL_TIM_IsActiveFlag_UPDATE(handle)) {
-            LL_TIM_ClearFlag_UPDATE(handle);
-            uint32_t id = _uni_hal_tim_get_number_by_handle(handle);
-            if ((id > 0U) && (id <= UNI_HAL_TIM_MAXTIMERS)) {
-                uni_hal_tim_callback_fn fn = _callback_fn[id - 1];
-                if (fn != NULL) {
-                    result = fn(g_uni_hal_tim_ctx[id - 1], _callback_userctx[id - 1]);
-                }
-            }
+        if (delta != 0U) {
+            ctx->status.chan_val[chan] = delta;
+            ctx->status.chan_ms[chan]  = uni_hal_systick_get_ms();
+            ctx->status.chan_valid[chan] = true;
         }
     }
-
-    return result;
+    else{
+        ctx->status.chan_cnt[chan] = value;
+        ctx->status.chan_seen[chan] = true;
+    }
 }
+
+static void _uni_hal_tim_irq_cc(TIM_TypeDef* handle)
+{
+    uint32_t tim_number = _uni_hal_tim_get_number_by_handle(handle);
+    if (tim_number > 0U && tim_number <= UNI_HAL_TIM_MAXTIMERS) {
+        uni_hal_tim_context_t* ctx = g_uni_hal_tim_ctx[tim_number - 1U];
+        if (ctx != NULL) {
+            if (LL_TIM_IsActiveFlag_CC1(handle)) {
+                _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_1);
+                LL_TIM_ClearFlag_CC1(handle);
+            }
+
+            if (LL_TIM_IsActiveFlag_CC2(handle)) {
+                _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_2);
+                LL_TIM_ClearFlag_CC2(handle);
+            }
+
+            if (LL_TIM_IsActiveFlag_CC3(handle)) {
+                _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_3);
+                LL_TIM_ClearFlag_CC3(handle);
+            }
+
+            if (LL_TIM_IsActiveFlag_CC4(handle)) {
+                _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_4);
+                LL_TIM_ClearFlag_CC4(handle);
+            }
+
+            // CC5 / CC6 cannot be used here
+        }
+    }
+}
+
+
+static void _uni_hal_tim_irq_update(TIM_TypeDef* handle){
+    (void)handle;
+}
+
 
 static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_t* channel)
 {
@@ -371,6 +376,13 @@ static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
 
 void TIM1_CC_IRQHandler(void) {
     _uni_hal_tim_irq_cc(TIM1);
+}
+
+void TIM1_UP_TIM16_IRQHandler(void) {
+    if (LL_TIM_IsActiveFlag_UPDATE(TIM1)) {
+        LL_TIM_ClearFlag_UPDATE(TIM1);
+        _uni_hal_tim_irq_update(TIM1);
+    }
 }
 
 void TIM2_IRQHandler(void) {
@@ -452,6 +464,9 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
     if (uni_hal_tim_is_inited(ctx)) {
         TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
         if (handle != NULL) {
+            memset(ctx->status.chan_seen, 0, sizeof(ctx->status.chan_seen));
+            memset(ctx->status.chan_valid, 0, sizeof(ctx->status.chan_valid));
+
             for (size_t i = 0; i < ctx->config.channel_count; i++)
             {
                 if (ctx->config.channel[i]->type == UNI_HAL_TIM_TYPE_INPUTCAPTURE)
@@ -520,6 +535,36 @@ bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
 
     return result;
 }
+
+bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
+    bool result = false;
+    TIM_TypeDef *handle = _uni_hal_tim_get_handle(periph);
+
+    if (handle != NULL) {
+        if (LL_TIM_IsActiveFlag_UPDATE(handle)) {
+            LL_TIM_ClearFlag_UPDATE(handle);
+            uint32_t id = _uni_hal_tim_get_number_by_handle(handle);
+            if ((id > 0U) && (id <= UNI_HAL_TIM_MAXTIMERS)) {
+                uni_hal_tim_callback_fn fn = _callback_fn[id - 1];
+                if (fn != NULL) {
+                    result = fn(g_uni_hal_tim_ctx[id - 1], _callback_userctx[id - 1]);
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+bool uni_hal_tim_is_channel_valid(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e channel)
+{
+    bool result = false;
+    if(ctx != NULL){
+        result = ((uint32_t)channel < UNI_HAL_TIM_CHANNEL_MAXCOUNT) && ctx->status.chan_valid[channel];
+    }
+    return result;
+}
+
 
 //
 // get_tick_period
@@ -613,7 +658,7 @@ uint32_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
 uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_num_e chan)
 {
     uint32_t result = UINT32_MAX;
-    if (uni_hal_tim_is_inited(ctx) && _uni_hal_tim_is_channel_valid(chan))
+    if (uni_hal_tim_is_inited(ctx) && uni_hal_tim_is_channel_valid(ctx, chan))
     {
         result = uni_hal_systick_get_ms() - ctx->status.chan_ms[chan];
     }

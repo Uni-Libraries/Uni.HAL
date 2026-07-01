@@ -127,6 +127,12 @@ typedef struct {
 
     /** Captured period in timer ticks for each channel. */
     uint32_t chan_val[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
+
+    /** Channel was seen at least one. */
+    bool chan_seen[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
+
+    /** Channel contains valid data. */
+    bool chan_valid[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
 } uni_hal_tim_status_t;
 
 /**
@@ -224,6 +230,10 @@ bool uni_hal_tim_set_dmarequest(uni_hal_tim_context_t * ctx, bool val);
  * @return true if the callback requested a context switch.
  */
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph);
+
+
+bool uni_hal_tim_is_channel_valid(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e channel);
+
 
 //
 // get_tick_period
