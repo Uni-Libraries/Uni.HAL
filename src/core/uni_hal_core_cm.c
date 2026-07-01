@@ -46,3 +46,15 @@ bool uni_hal_core_irq_enable(uni_hal_core_irq_e irq, uint32_t priority_group, ui
     }
     return result;
 }
+
+uint32_t uni_hal_core_irq_pause(void){
+    uint32_t primask =  __get_PRIMASK();
+    __disable_irq();
+    return primask;   
+}
+
+void uni_hal_core_irq_resume(uint32_t primask){
+    if (primask == 0U) {
+        __enable_irq();
+    }
+}
