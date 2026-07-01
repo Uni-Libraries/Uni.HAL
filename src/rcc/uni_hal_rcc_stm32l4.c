@@ -2,6 +2,9 @@
 // Includes
 //
 
+// stdlib
+#include <stdint.h>
+
 // ST
 #include <stm32l4xx_ll_bus.h>
 #include <stm32l4xx_ll_cortex.h>
@@ -124,6 +127,14 @@ static uint32_t _uni_hal_rcc_get_hclk_freq(void) {
     LL_RCC_ClocksTypeDef clocks;
     LL_RCC_GetSystemClocksFreq(&clocks);
     return clocks.HCLK_Frequency;
+}
+
+
+static uint32_t _uni_hal_rcc_get_pclk1_freq(void) {
+    // get HCLK freq
+    LL_RCC_ClocksTypeDef clocks;
+    LL_RCC_GetSystemClocksFreq(&clocks);
+    return clocks.PCLK1_Frequency;
 }
 
 static uint32_t _uni_hal_rcc_get_pclk2_freq(void) {
@@ -394,6 +405,58 @@ static bool _uni_hal_rcc_update_status_reg() {
     return result;
 }
 
+static uint32_t _uni_hal_rcc_apb1_prescaler_get(){
+    uint32_t result = 1;
+
+    switch(LL_RCC_GetAPB1Prescaler()){
+        case LL_RCC_APB1_DIV_1:
+            result = 1;
+            break;
+        case LL_RCC_APB1_DIV_2:
+            result = 2;
+            break;
+        case LL_RCC_APB1_DIV_4:
+            result = 4;
+            break;
+        case LL_RCC_APB1_DIV_8:
+            result = 8;
+            break;
+        case LL_RCC_APB1_DIV_16:
+            result = 16;
+            break;
+    }
+
+    return result;
+}
+
+static uint32_t _uni_hal_rcc_apb2_prescaler_get(){
+    uint32_t result = 1;
+
+    switch(LL_RCC_GetAPB2Prescaler()){
+        case LL_RCC_APB2_DIV_1:
+            result = 1;
+            break;
+        case LL_RCC_APB2_DIV_2:
+            result = 2;
+            break;
+        case LL_RCC_APB2_DIV_4:
+            result = 4;
+            break;
+        case LL_RCC_APB2_DIV_8:
+            result = 8;
+            break;
+        case LL_RCC_APB2_DIV_16:
+            result = 16;
+            break;
+    }
+
+    return result;
+}
+
+
+//
+// Public
+//
 
 bool uni_hal_rcc_init() {
     bool result = false;
@@ -958,7 +1021,27 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
                 result = LL_RCC_GetUARTClockFreq(LL_RCC_UART5_CLKSOURCE);
                 break;
             case UNI_HAL_CORE_PERIPH_TIM_1:
-                result = _uni_hal_rcc_get_pclk2_freq();
+            case UNI_HAL_CORE_PERIPH_TIM_8:
+            case UNI_HAL_CORE_PERIPH_TIM_15:
+            case UNI_HAL_CORE_PERIPH_TIM_16:
+            case UNI_HAL_CORE_PERIPH_TIM_17:
+                result = _uni_hal_rcc_get_pclk2_freq() * ((_uni_hal_rcc_apb2_prescaler_get() > 1) ? 2 : 1);
+                break;
+            case UNI_HAL_CORE_PERIPH_TIM_2:
+            case UNI_HAL_CORE_PERIPH_TIM_3:
+            case UNI_HAL_CORE_PERIPH_TIM_4:
+            case UNI_HAL_CORE_PERIPH_TIM_5:
+            case UNI_HAL_CORE_PERIPH_TIM_6:
+            case UNI_HAL_CORE_PERIPH_TIM_7:
+                result = _uni_hal_rcc_get_pclk1_freq() * ((_uni_hal_rcc_apb1_prescaler_get() > 1) ? 2 : 1);
+                break;
+            case UNI_HAL_CORE_PERIPH_TIM_9:
+            case UNI_HAL_CORE_PERIPH_TIM_10:
+            case UNI_HAL_CORE_PERIPH_TIM_11:
+            case UNI_HAL_CORE_PERIPH_TIM_12:
+            case UNI_HAL_CORE_PERIPH_TIM_13:
+            case UNI_HAL_CORE_PERIPH_TIM_14:
+                result = 0;
                 break;
             default:
                 break;
