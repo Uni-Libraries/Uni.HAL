@@ -24,6 +24,7 @@ extern "C" {
 // Defines
 //
 
+/** Maximum number of channels tracked by a timer context. */
 #define UNI_HAL_TIM_CHANNEL_MAXCOUNT 6U
 
 
@@ -34,6 +35,7 @@ extern "C" {
 
 typedef bool (*uni_hal_tim_callback_fn)(void *ctx_timer, void *ctx_fn);
 
+/** Input capture edge polarity. */
 typedef enum
 {
     UNI_HAL_TIM_POLARITY_RISING,
@@ -41,12 +43,14 @@ typedef enum
     UNI_HAL_TIM_POLARITY_BOTH,
 } uni_hal_tim_polarity_e;
 
+/** Timer channel operating mode. */
 typedef enum
 {
     UNI_HAL_TIM_TYPE_INPUTCAPTURE,
     UNI_HAL_TIM_TYPE_OUTPUTCOMPARE,
 } uni_hal_tim_type_e;
 
+/** Logical timer channel number. */
 typedef enum
 {
     UNI_HAL_TIM_CHANNEL_1 = 0,
@@ -57,14 +61,19 @@ typedef enum
     UNI_HAL_TIM_CHANNEL_6 = 5,
 } uni_hal_tim_channel_num_e;
 
+/** Timer channel configuration. */
 typedef struct
 {
+    /** Logical channel number. */
     uni_hal_tim_channel_num_e channel_number;
 
+    /** Channel operating mode. */
     uni_hal_tim_type_e type;
 
+    /** Input capture polarity. */
     uni_hal_tim_polarity_e polarity;
 
+    /** Optional GPIO pin used by the channel. */
     uni_hal_gpio_pin_context_t* gpio;
 } uni_hal_tim_channel_t;
 
@@ -83,17 +92,17 @@ typedef struct {
     uni_hal_tim_callback_fn callback;
 
     /**
-     * Presccaler
+     * Timer prescaler register value.
      */
      uint32_t prescaler;
 
      /**
-      * Reload value
+      * Timer auto-reload register value.
       */
     uint32_t reload_value;
 
     /**
-    * Channels
+    * Array of channel configuration pointers.
     */
     uni_hal_tim_channel_t** channel;
 
@@ -107,10 +116,17 @@ typedef struct {
  * TIM status
  */
 typedef struct {
+    /** True after successful initialization. */
     bool inited;
+
+    /** Last captured counter value for each channel. */
     uint32_t chan_cnt[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
+
+    /** System tick in milliseconds when the channel was last captured. */
     uint32_t chan_ms[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
-    uint16_t chan_val[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
+
+    /** Captured period in timer ticks for each channel. */
+    uint32_t chan_val[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
 } uni_hal_tim_status_t;
 
 /**
@@ -133,28 +149,153 @@ typedef struct {
 // Functions
 //
 
+/**
+ * Initialize a timer context and its configured channels.
+ *
+ * @param ctx Timer context to initialize.
+ * @return true on success, false otherwise.
+ */
 bool uni_hal_tim_init(uni_hal_tim_context_t *ctx);
 
+/**
+ * Check whether a timer context was initialized successfully.
+ *
+ * @param ctx Timer context.
+ * @return true if the context is initialized.
+ */
 bool uni_hal_tim_is_inited(const uni_hal_tim_context_t *ctx);
 
+/**
+ * Register a timer update callback.
+ *
+ * @param ctx Timer context.
+ * @param callback Callback invoked from the timer interrupt path.
+ * @param callback_ctx User context passed to the callback.
+ * @return true if the callback was registered.
+ */
 bool uni_hal_tim_register_callback(uni_hal_tim_context_t *ctx, uni_hal_tim_callback_fn callback, void *callback_ctx);
 
+/**
+ * Reset the timer counter to zero.
+ *
+ * @param ctx Timer context.
+ * @return true on success, false otherwise.
+ */
 bool uni_hal_tim_clear(uni_hal_tim_context_t* ctx);
 
+/**
+ * Start the timer and enable configured channel interrupts.
+ *
+ * @param ctx Timer context.
+ * @return true on success, false otherwise.
+ */
 bool uni_hal_tim_start(uni_hal_tim_context_t *ctx);
 
+/**
+ * Stop the timer and disable update interrupts.
+ *
+ * @param ctx Timer context.
+ * @return true on success, false otherwise.
+ */
 bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx);
 
+/**
+ * Enable or disable auto-reload preload.
+ *
+ * @param ctx Timer context.
+ * @param val true to enable preload, false to disable it.
+ * @return true on success, false otherwise.
+ */
 bool uni_hal_tim_set_arrpreload(uni_hal_tim_context_t * ctx, bool val);
 
+/**
+ * Enable or disable update DMA requests.
+ *
+ * @param ctx Timer context.
+ * @param val true to enable DMA requests, false to disable them.
+ * @return true on success, false otherwise.
+ */
 bool uni_hal_tim_set_dmarequest(uni_hal_tim_context_t * ctx, bool val);
 
+/**
+ * Handle a timer update interrupt.
+ *
+ * @param periph Timer peripheral identifier.
+ * @return true if the callback requested a context switch.
+ */
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph);
 
-uint32_t uni_hal_tim_get_period_us(uni_hal_tim_context_t *ctx);
+//
+// get_tick_period
+//
 
-uint32_t uni_hal_tim_get_chan_freq(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+/**
+ * Get one timer tick period in nanoseconds.
+ *
+ * @param ctx Timer context.
+ * @return Tick period in nanoseconds, or 0 if unavailable.
+ */
+uint32_t uni_hal_tim_get_tick_period_ns(uni_hal_tim_context_t *ctx);
 
+/**
+ * Get one timer tick period in microseconds.
+ *
+ * @param ctx Timer context.
+ * @return Tick period in microseconds, or 0 if unavailable.
+ */
+uint32_t uni_hal_tim_get_tick_period_us(uni_hal_tim_context_t *ctx);
+
+//
+// get_chan_period
+//
+
+/**
+ * Get the last captured channel period in nanoseconds.
+ *
+ * @param ctx Timer context.
+ * @param chan Channel number.
+ * @return Channel period in nanoseconds, or 0 if unavailable.
+ */
+uint32_t uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+
+/**
+ * Get the last captured channel period in microseconds.
+ *
+ * @param ctx Timer context.
+ * @param chan Channel number.
+ * @return Channel period in microseconds, or 0 if unavailable.
+ */
+uint32_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+
+//
+// get_chan_freq
+//
+
+/**
+ * Get the last captured channel frequency in milli-Hz.
+ *
+ * @param ctx Timer context.
+ * @param chan Channel number.
+ * @return Channel frequency in milli-Hz, or 0 if unavailable.
+ */
+uint32_t uni_hal_tim_get_chan_freq_mhz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+
+/**
+ * Get the last captured channel frequency in Hz.
+ *
+ * @param ctx Timer context.
+ * @param chan Channel number.
+ * @return Channel frequency in Hz, or 0 if unavailable.
+ */
+uint32_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+
+/**
+ * Get the age of the last channel capture.
+ *
+ * @param ctx Timer context.
+ * @param chan Channel number.
+ * @return Age in milliseconds, or UINT32_MAX if unavailable.
+ */
 uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
 
 #if defined(__cplusplus)
