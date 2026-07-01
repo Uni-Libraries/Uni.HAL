@@ -61,6 +61,26 @@ typedef enum
     UNI_HAL_TIM_CHANNEL_6 = 5,
 } uni_hal_tim_channel_num_e;
 
+/**
+ * TIM channel status
+ */
+typedef struct {
+    /** Last captured counter. */
+    uint32_t counter;
+
+    /** System tick in milliseconds when the channel was last captured. */
+    uint32_t timestamp;
+
+    /** Captured period in timer ticks */
+    uint32_t period;
+
+    /** Channel was seen at least one. */
+    bool seen;
+
+    /** Channel contains valid data. */
+    bool valid;
+} uni_hal_tim_channel_state_t;
+
 /** Timer channel configuration. */
 typedef struct
 {
@@ -112,6 +132,7 @@ typedef struct {
     size_t channel_count;
 } uni_hal_tim_config_t;
 
+
 /**
  * TIM status
  */
@@ -119,21 +140,12 @@ typedef struct {
     /** True after successful initialization. */
     bool inited;
 
-    /** Last captured counter value for each channel. */
-    uint32_t chan_cnt[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
-
-    /** System tick in milliseconds when the channel was last captured. */
-    uint32_t chan_ms[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
-
-    /** Captured period in timer ticks for each channel. */
-    uint32_t chan_val[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
-
-    /** Channel was seen at least one. */
-    bool chan_seen[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
-
-    /** Channel contains valid data. */
-    bool chan_valid[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
+    /**
+     * Channel status
+     */
+    uni_hal_tim_channel_state_t chan[UNI_HAL_TIM_CHANNEL_MAXCOUNT];
 } uni_hal_tim_status_t;
+
 
 /**
  * TIM context
@@ -256,6 +268,12 @@ uint32_t uni_hal_tim_get_tick_period_ns(uni_hal_tim_context_t *ctx);
 uint32_t uni_hal_tim_get_tick_period_us(uni_hal_tim_context_t *ctx);
 
 //
+// chan
+//
+
+bool uni_hal_tim_get_chan_state(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e channel, uni_hal_tim_channel_state_t *out);
+
+//
 // get_chan_period
 //
 
@@ -263,19 +281,19 @@ uint32_t uni_hal_tim_get_tick_period_us(uni_hal_tim_context_t *ctx);
  * Get the last captured channel period in nanoseconds.
  *
  * @param ctx Timer context.
- * @param chan Channel number.
- * @return Channel period in nanoseconds, or 0 if unavailable.
+ * @param chan_state Channel state.
+ * @return Channel period in nanoseconds, or UINT64_MAX if unavailable.
  */
-uint32_t uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+uint64_t uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state);
 
 /**
  * Get the last captured channel period in microseconds.
  *
  * @param ctx Timer context.
- * @param chan Channel number.
- * @return Channel period in microseconds, or 0 if unavailable.
+ * @param chan_state Channel state.
+ * @return Channel period in microseconds, or UINT64_MAX if unavailable.
  */
-uint32_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+uint64_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state);
 
 //
 // get_chan_freq
@@ -285,28 +303,28 @@ uint32_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_
  * Get the last captured channel frequency in milli-Hz.
  *
  * @param ctx Timer context.
- * @param chan Channel number.
- * @return Channel frequency in milli-Hz, or 0 if unavailable.
+ * @param chan_state Channel state.
+ * @return Channel frequency in milli-Hz, or UINT64_MAX if unavailable.
  */
-uint32_t uni_hal_tim_get_chan_freq_mhz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+uint64_t uni_hal_tim_get_chan_freq_mhz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state);
 
 /**
  * Get the last captured channel frequency in Hz.
  *
  * @param ctx Timer context.
- * @param chan Channel number.
- * @return Channel frequency in Hz, or 0 if unavailable.
+ * @param chan_state Channel state.
+ * @return Channel frequency in Hz, or UINT64_MAX if unavailable.
  */
-uint32_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+uint64_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state);
 
 /**
  * Get the age of the last channel capture.
  *
  * @param ctx Timer context.
- * @param chan Channel number.
+ * @param chan_state Channel state.
  * @return Age in milliseconds, or UINT32_MAX if unavailable.
  */
-uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan);
+uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state);
 
 #if defined(__cplusplus)
 }

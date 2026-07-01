@@ -257,34 +257,24 @@ static uint32_t _uni_hal_tim_get_capture_delta(TIM_TypeDef *handle, uint32_t cur
     return result;
 }
 
-static uint64_t _uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan)
-{
-    uint64_t result = 0U;
-
-    if (uni_hal_tim_is_inited(ctx) && uni_hal_tim_is_channel_valid(ctx, chan))
-    {
-        result = (uint64_t)ctx->status.chan_val[chan] * uni_hal_tim_get_tick_period_ns(ctx);
-    }
-
-    return result;
-}
-
 static void _uni_hal_tim_irq_cc_chan(uni_hal_tim_context_t* ctx, TIM_TypeDef* handle, uni_hal_tim_channel_num_e chan)
 {
     uint32_t value = _uni_hal_tim_get_capture_raw(handle, chan);
-    if(ctx->status.chan_seen[chan]){
-        uint32_t delta = _uni_hal_tim_get_capture_delta(handle, value, ctx->status.chan_cnt[chan]);
-        ctx->status.chan_cnt[chan] = value;
+    uni_hal_tim_channel_state_t* chan_st = &ctx->status.chan[chan];
+
+    if(chan_st->seen){
+        uint32_t delta = _uni_hal_tim_get_capture_delta(handle, value, chan_st->counter);
+        chan_st->counter = value;
 
         if (delta != 0U) {
-            ctx->status.chan_val[chan] = delta;
-            ctx->status.chan_ms[chan]  = uni_hal_systick_get_ms();
-            ctx->status.chan_valid[chan] = true;
+            chan_st->period = delta;
+            chan_st->timestamp = uni_hal_systick_get_ms();
+            chan_st->valid = true;
         }
     }
     else{
-        ctx->status.chan_cnt[chan] = value;
-        ctx->status.chan_seen[chan] = true;
+        chan_st->counter = value;
+        chan_st->seen = true;
     }
 }
 
@@ -464,8 +454,7 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
     if (uni_hal_tim_is_inited(ctx)) {
         TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
         if (handle != NULL) {
-            memset(ctx->status.chan_seen, 0, sizeof(ctx->status.chan_seen));
-            memset(ctx->status.chan_valid, 0, sizeof(ctx->status.chan_valid));
+            memset(ctx->status.chan, 0, sizeof(ctx->status.chan));
 
             for (size_t i = 0; i < ctx->config.channel_count; i++)
             {
@@ -560,7 +549,7 @@ bool uni_hal_tim_is_channel_valid(uni_hal_tim_context_t *ctx, uni_hal_tim_channe
 {
     bool result = false;
     if(ctx != NULL){
-        result = ((uint32_t)channel < UNI_HAL_TIM_CHANNEL_MAXCOUNT) && ctx->status.chan_valid[channel];
+        result = ((uint32_t)channel < UNI_HAL_TIM_CHANNEL_MAXCOUNT) && ctx->status.chan[channel].valid;
     }
     return result;
 }
@@ -591,36 +580,49 @@ uint32_t uni_hal_tim_get_tick_period_ns(uni_hal_tim_context_t *ctx) {
 }
 
 uint32_t uni_hal_tim_get_tick_period_us(uni_hal_tim_context_t *ctx) {
-    return uni_hal_tim_get_tick_period_ns(ctx) / 1000;
+    return uni_hal_tim_get_tick_period_ns(ctx) / 1'000;
 }
 
+
+bool uni_hal_tim_get_chan_state(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e channel, uni_hal_tim_channel_state_t *out){
+    bool result = false;
+
+    if (uni_hal_tim_is_inited(ctx) && out != NULL)
+    {
+        uint32_t primask = uni_hal_core_irq_pause();
+        if(uni_hal_tim_is_channel_valid(ctx, channel)){
+            memcpy(out, &ctx->status.chan[channel], sizeof(uni_hal_tim_channel_state_t));
+            result = true;
+        }
+        uni_hal_core_irq_resume(primask);
+    }
+
+    return result;
+}
 
 
 //
 // get_chan_period
 //
 
-uint32_t uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan) {
-    uint32_t result = 0U;
-    uint64_t period_ns = _uni_hal_tim_get_chan_period_ns(ctx, chan);
+uint64_t uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state) {
+    uint64_t result = UINT64_MAX;
 
-    if (period_ns > UINT32_MAX)
+    if (uni_hal_tim_is_inited(ctx) && chan_state != NULL && chan_state->valid)
     {
-        result = UINT32_MAX;
-    }
-    else
-    {
-        result = (uint32_t)period_ns;
+        result = (uint64_t)chan_state->period * uni_hal_tim_get_tick_period_ns(ctx);
     }
 
     return result;
 }
 
-uint32_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan) {
-    uint32_t result = 0U;
-    uint64_t period_ns = _uni_hal_tim_get_chan_period_ns(ctx, chan);
+uint64_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state) {
+    uint64_t result = UINT64_MAX;
 
-    result = (uint32_t)((period_ns / 1000U) > UINT32_MAX ? UINT32_MAX : (period_ns / 1000U));
+    uint64_t period_ns = uni_hal_tim_get_chan_period_ns(ctx, chan_state);
+    if(period_ns < UINT64_MAX){
+        result = period_ns / 1'000;
+    }
 
     return result;
 }
@@ -630,37 +632,36 @@ uint32_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_
 // get_chan_freq
 //
 
-uint32_t uni_hal_tim_get_chan_freq_mhz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_num_e chan) {
-    uint32_t result = 0U;
-    uint64_t period_ns = _uni_hal_tim_get_chan_period_ns(ctx, chan);
+uint64_t uni_hal_tim_get_chan_freq_mhz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state) {
+    uint64_t result = UINT64_MAX;
 
-    if (period_ns != 0U)
+    uint64_t period_ns = uni_hal_tim_get_chan_period_ns(ctx, chan_state);
+    if (period_ns != 0U && period_ns != UINT64_MAX)
     {
-        uint64_t freq_mhz = (1000000000000ULL + (period_ns / 2U)) / period_ns;
-        if (freq_mhz > UINT32_MAX)
-        {
-            result = UINT32_MAX;
-        }
-        else
-        {
-            result = (uint32_t)freq_mhz;
-        }
+        result = (1'000'000'000'000 + (period_ns / 2U)) / period_ns;
     }
 
     return result;
 }
 
-uint32_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_num_e chan)
+uint64_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_state_t* chan_state)
 {
-    return uni_hal_tim_get_chan_freq_mhz(ctx, chan) / 1000;
+    uint64_t result = UINT64_MAX;
+
+    uint64_t freq_mhz = uni_hal_tim_get_chan_freq_mhz(ctx, chan_state);
+    if(freq_mhz != UINT64_MAX){
+        result = freq_mhz / 1'000;
+    }
+
+    return result;
 }
 
-uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_num_e chan)
+uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_state_t* chan_state)
 {
     uint32_t result = UINT32_MAX;
-    if (uni_hal_tim_is_inited(ctx) && uni_hal_tim_is_channel_valid(ctx, chan))
+    if (uni_hal_tim_is_inited(ctx) && chan_state != NULL &&  chan_state->valid)
     {
-        result = uni_hal_systick_get_ms() - ctx->status.chan_ms[chan];
+        result = uni_hal_systick_get_ms() - chan_state->timestamp;
     }
     return result;
 }
