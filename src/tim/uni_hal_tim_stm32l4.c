@@ -15,6 +15,7 @@
 
 // Uni.HAL
 #include "core/uni_hal_core.h"
+#include "core/uni_hal_core_enum.h"
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
 #include "tim/uni_hal_tim.h"
@@ -359,6 +360,39 @@ static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
     return result;
 }
 
+static bool _uni_hal_tim_prescaler_valid(uint32_t value){
+    return value <= UINT16_MAX;
+}
+
+
+static bool _uni_hal_tim_reloadvalue_valid(uni_hal_core_periph_e periph, uint32_t value){
+    bool result = false;
+
+    switch(periph){
+        case UNI_HAL_CORE_PERIPH_TIM_1:
+        case UNI_HAL_CORE_PERIPH_TIM_3:
+        case UNI_HAL_CORE_PERIPH_TIM_4:
+        case UNI_HAL_CORE_PERIPH_TIM_6:
+        case UNI_HAL_CORE_PERIPH_TIM_7:
+        case UNI_HAL_CORE_PERIPH_TIM_8:
+        case UNI_HAL_CORE_PERIPH_TIM_15:
+        case UNI_HAL_CORE_PERIPH_TIM_16:
+        case UNI_HAL_CORE_PERIPH_TIM_17:
+            result = value <= UINT16_MAX;
+            break;
+        case UNI_HAL_CORE_PERIPH_TIM_2:
+        case UNI_HAL_CORE_PERIPH_TIM_5:
+            result = true;
+            break;
+        default:
+            break;
+    }
+
+    return result;
+}
+
+
+
 //
 // Handlers/CC
 //
@@ -457,41 +491,45 @@ UNI_COMMON_COMPILER_WEAK void TIM7_IRQHandler(void) {
 
 bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL)
-    {
-        result = uni_hal_rcc_clk_set(ctx->config.instance, true);
-
-        TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
-        if (handle != NULL) {
-            LL_TIM_InitTypeDef tim_init;
-            tim_init.Prescaler = ctx->config.prescaler;
-            tim_init.CounterMode = LL_TIM_COUNTERMODE_UP;
-            tim_init.Autoreload = ctx->config.reload_value;
-            tim_init.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
-            tim_init.RepetitionCounter = 0x00;
-            result = result && (LL_TIM_Init(handle, &tim_init) == SUCCESS);
-        }
-
-        if (ctx->config.channel_count > 0 && ctx->config.channel != NULL)
+    if (ctx != NULL){
+        ctx->status.inited = false;
+        if(_uni_hal_tim_prescaler_valid(ctx->config.prescaler)
+            && _uni_hal_tim_reloadvalue_valid(ctx->config.instance, ctx->config.reload_value))
         {
-            for (size_t i = 0; i < ctx->config.channel_count; i++)
+            TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
+            if (handle != NULL)
             {
-                result = result && _uni_hal_tim_init_channel(ctx, ctx->config.channel[i]);
+                result = uni_hal_rcc_clk_set(ctx->config.instance, true);
+
+                LL_TIM_InitTypeDef tim_init;
+                tim_init.Prescaler = ctx->config.prescaler;
+                tim_init.CounterMode = LL_TIM_COUNTERMODE_UP;
+                tim_init.Autoreload = ctx->config.reload_value;
+                tim_init.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
+                tim_init.RepetitionCounter = 0x00;
+                result = result && (LL_TIM_Init(handle, &tim_init) == SUCCESS);
+
+                if (ctx->config.channel_count > 0 && ctx->config.channel != NULL)
+                {
+                    for (size_t i = 0; i < ctx->config.channel_count; i++)
+                    {
+                        result = result && _uni_hal_tim_init_channel(ctx, ctx->config.channel[i]);
+                    }
+                }
+
+                uint32_t id = _uni_hal_tim_get_number(ctx->config.instance);
+                if ((id > 0U) && (id <= UNI_HAL_TIM_MAXTIMERS))
+                {
+                    g_uni_hal_tim_ctx[id - 1U] = ctx;
+                }
+                else
+                {
+                    result = false;
+                }
+                ctx->status.inited = result;
             }
         }
-
-        uint32_t id = _uni_hal_tim_get_number(ctx->config.instance);
-        if ((id > 0U) && (id <= UNI_HAL_TIM_MAXTIMERS))
-        {
-            g_uni_hal_tim_ctx[id - 1U] = ctx;
-        }
-        else
-        {
-            result = false;
-        }
-        ctx->status.inited = result;
     }
-
     return result;
 }
 
@@ -709,7 +747,7 @@ bool uni_hal_tim_is_channel_valid(uni_hal_tim_context_t *ctx, uni_hal_tim_channe
 uint32_t uni_hal_tim_get_tick_period_ns(uni_hal_tim_context_t *ctx) {
     uint32_t result = 0U;
 
-    if (uni_hal_tim_is_inited(ctx))
+    if (uni_hal_tim_is_inited(ctx) && _uni_hal_tim_prescaler_valid(ctx->config.prescaler))
     {
         result = uni_hal_rcc_clk_get_freq(ctx->config.instance);
         result = result / (ctx->config.prescaler + 1);
