@@ -76,14 +76,17 @@ typedef enum
  * TIM channel status
  */
 typedef struct {
-    /** Last captured counter. */
+    /** Last captured counter value from CCR. */
     uint32_t counter;
+
+    /** Overflow counter value at the last capture. */
+    uint32_t overflow_count;
+
+    /** Captured period in timer ticks. */
+    uint32_t period;
 
     /** System tick in milliseconds when the channel was last captured. */
     uint32_t timestamp;
-
-    /** Captured period in timer ticks */
-    uint32_t period;
 
     /** Channel was seen at least one. */
     bool seen;
@@ -153,6 +156,9 @@ typedef struct {
 typedef struct {
     /** True after successful initialization. */
     bool inited;
+
+    /** Number of timer update overflows since start/clear. */
+    uint32_t overflow_count;
 
     /**
      * Channel status
