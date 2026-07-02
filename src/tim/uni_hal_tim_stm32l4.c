@@ -7,6 +7,9 @@
 #include <stdint.h>
 #include <string.h>
 
+// FreeRTOS
+#include <FreeRTOS.h>
+
 // ST
 #include <stm32l4xx_ll_tim.h>
 
@@ -529,6 +532,9 @@ static void _uni_hal_tim_irq_cc_chan(uni_hal_tim_context_t* ctx, TIM_TypeDef* ha
                 chan_st->timestamp = uni_hal_systick_get_ms();
                 chan_st->valid = true;
             }
+            else {
+                chan_st->valid = false;
+            }
         }
         else{
             chan_st->counter = capture.counter;
@@ -582,6 +588,72 @@ static void _uni_hal_tim_irq_update(TIM_TypeDef* handle){
 }
 
 
+static bool _uni_hal_tim_irq_update_callback(TIM_TypeDef* handle, uni_hal_core_periph_e periph)
+{
+    bool result = false;
+
+    if (LL_TIM_IsActiveFlag_UPDATE(handle))
+    {
+        if (LL_TIM_IsEnabledIT_UPDATE(handle))
+        {
+            result = uni_hal_tim_period_elapsed(periph);
+        }
+        else
+        {
+            LL_TIM_ClearFlag_UPDATE(handle);
+        }
+    }
+
+    return result;
+}
+
+
+static bool _uni_hal_tim_update_callback_registered(uni_hal_tim_context_t* ctx)
+{
+    bool result = false;
+
+    if (ctx != NULL)
+    {
+        uint32_t id = _uni_hal_tim_get_number(ctx->config.instance);
+        result = id > 0U && id <= UNI_HAL_TIM_MAXTIMERS && _callback_fn[id - 1U] != NULL;
+    }
+
+    return result;
+}
+
+
+static bool _uni_hal_tim_enable_update_irq(uni_hal_tim_context_t* ctx, TIM_TypeDef* handle)
+{
+    bool result = false;
+
+    if (ctx != NULL && handle != NULL)
+    {
+        switch (ctx->config.instance)
+        {
+        case UNI_HAL_CORE_PERIPH_TIM_1:
+        case UNI_HAL_CORE_PERIPH_TIM_16:
+            result = uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_1_UP, 5, 0);
+            break;
+        case UNI_HAL_CORE_PERIPH_TIM_15:
+            result = uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_15, 5, 0);
+            break;
+        case UNI_HAL_CORE_PERIPH_TIM_17:
+            result = uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_17, 5, 0);
+            break;
+        default:
+            break;
+        }
+
+        if (result)
+        {
+            LL_TIM_EnableIT_UPDATE(handle);
+        }
+    }
+
+    return result;
+}
+
+
 
 //
 // Handlers
@@ -592,11 +664,31 @@ void TIM1_CC_IRQHandler(void) {
 }
 
 
+void TIM1_BRK_TIM15_IRQHandler(void) {
+    portYIELD_FROM_ISR(_uni_hal_tim_irq_update_callback(TIM15, UNI_HAL_CORE_PERIPH_TIM_15));
+}
+
+
 void TIM1_UP_TIM16_IRQHandler(void) {
+    bool higher_priority_woken = false;
+
     if (LL_TIM_IsActiveFlag_UPDATE(TIM1)) {
-        _uni_hal_tim_irq_update(TIM1);
-        LL_TIM_ClearFlag_UPDATE(TIM1);
+        if (LL_TIM_IsEnabledIT_UPDATE(TIM1)) {
+            _uni_hal_tim_irq_update(TIM1);
+            higher_priority_woken |= uni_hal_tim_period_elapsed(UNI_HAL_CORE_PERIPH_TIM_1);
+        }
+        else {
+            LL_TIM_ClearFlag_UPDATE(TIM1);
+        }
     }
+
+    higher_priority_woken |= _uni_hal_tim_irq_update_callback(TIM16, UNI_HAL_CORE_PERIPH_TIM_16);
+    portYIELD_FROM_ISR(higher_priority_woken);
+}
+
+
+void TIM1_TRG_COM_TIM17_IRQHandler(void) {
+    portYIELD_FROM_ISR(_uni_hal_tim_irq_update_callback(TIM17, UNI_HAL_CORE_PERIPH_TIM_17));
 }
 
 void TIM2_IRQHandler(void) {
@@ -644,7 +736,14 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
                 uint32_t id = _uni_hal_tim_get_number(ctx->config.instance);
                 if ((id > 0U) && (id <= UNI_HAL_TIM_MAXTIMERS))
                 {
-                    g_uni_hal_tim_ctx[id - 1U] = ctx;
+                    if (result)
+                    {
+                        g_uni_hal_tim_ctx[id - 1U] = ctx;
+                    }
+                    else if (g_uni_hal_tim_ctx[id - 1U] == ctx)
+                    {
+                        g_uni_hal_tim_ctx[id - 1U] = nullptr;
+                    }
                 }
                 else
                 {
@@ -687,6 +786,7 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
             LL_TIM_ClearFlag_UPDATE(handle);
 
             bool has_inputcapture = false;
+            bool has_update_callback = _uni_hal_tim_update_callback_registered(ctx);
             if (ctx->config.channel != NULL)
             {
                 for (size_t i = 0; i < ctx->config.channel_count; i++)
@@ -708,14 +808,28 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
             if (ctx->config.instance == UNI_HAL_CORE_PERIPH_TIM_1)
             {
                 uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_1, 5, 0);
-                if (has_inputcapture)
+                if (has_inputcapture || has_update_callback)
                 {
-                    LL_TIM_EnableIT_UPDATE(handle);
-                    uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_1_UP, 5, 0);
+                    result = _uni_hal_tim_enable_update_irq(ctx, handle);
+                }
+                else
+                {
+                    result = true;
                 }
             }
-            LL_TIM_EnableCounter(handle);
-            result = true;
+            else if (has_update_callback)
+            {
+                result = _uni_hal_tim_enable_update_irq(ctx, handle);
+            }
+            else
+            {
+                result = true;
+            }
+
+            if (result)
+            {
+                LL_TIM_EnableCounter(handle);
+            }
         }
     }
 
@@ -794,7 +908,6 @@ bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
             if (ctx->config.instance == UNI_HAL_CORE_PERIPH_TIM_1)
             {
                 uni_hal_core_irq_disable(UNI_HAL_CORE_IRQ_TIM_1);
-                uni_hal_core_irq_disable(UNI_HAL_CORE_IRQ_TIM_1_UP);
             }
 
             result = true;
@@ -929,7 +1042,7 @@ uint64_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
 
     uint64_t freq_mhz = uni_hal_tim_get_chan_freq_mhz(ctx, chan_state);
     if(freq_mhz != UINT64_MAX){
-        result = freq_mhz / 1'000;
+        result = (freq_mhz + 500U) / 1'000;
     }
 
     return result;
