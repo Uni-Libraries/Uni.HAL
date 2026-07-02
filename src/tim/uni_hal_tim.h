@@ -110,7 +110,7 @@ typedef struct
     /** Optional GPIO pin used by the channel. */
     uni_hal_gpio_pin_context_t* gpio;
 
-    /** Digital filter settings */
+    /** Raw 4-bit STM32 TIM ICxF digital filter value. */
     uint32_t filter;
 } uni_hal_tim_channel_t;
 

@@ -370,6 +370,8 @@ static _uni_hal_tim_capture_t _uni_hal_tim_get_capture(TIM_TypeDef *handle, uni_
         uint32_t half_period = period / 2U;
         uint32_t current_counter = LL_TIM_GetCounter(handle);
 
+        // TIM1 update and capture IRQs must use the same preempt priority: this
+        // helper relies on UIF/overflow_count staying stable while CC IRQ runs.
         if (LL_TIM_IsActiveFlag_UPDATE(handle))
         {
             if (counter < half_period)
@@ -438,7 +440,7 @@ static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_ch
                 .ICPolarity = _uni_hal_tim_get_polarity(channel->polarity),
                 .ICActiveInput = LL_TIM_ACTIVEINPUT_DIRECTTI,
                 .ICPrescaler = LL_TIM_ICPSC_DIV1,
-                .ICFilter = (channel->filter & 0b1111) << 16U,
+                .ICFilter = (channel->filter & 0xFU) << 20U,
             };
             result = result && (LL_TIM_IC_Init(_uni_hal_tim_get_handle(ctx->config.instance), _uni_hal_tim_get_channel(channel->channel_number), &ic_config) == SUCCESS);
         }
@@ -510,6 +512,7 @@ static void _uni_hal_tim_irq_cc_chan(uni_hal_tim_context_t* ctx, TIM_TypeDef* ha
         chan_st->seen = false;
         chan_st->valid = false;
         _uni_hal_tim_ll_overcapture_clear(handle, chan);
+        _uni_hal_tim_ll_capture_clear(handle, chan);
     }
     else{
         uint32_t value = _uni_hal_tim_ll_capture_get(handle, chan);
@@ -543,22 +546,18 @@ static void _uni_hal_tim_irq_cc(TIM_TypeDef* handle)
         if (ctx != NULL) {
             if (LL_TIM_IsActiveFlag_CC1(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_1);
-                LL_TIM_ClearFlag_CC1(handle);
             }
 
             if (LL_TIM_IsActiveFlag_CC2(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_2);
-                LL_TIM_ClearFlag_CC2(handle);
             }
 
             if (LL_TIM_IsActiveFlag_CC3(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_3);
-                LL_TIM_ClearFlag_CC3(handle);
             }
 
             if (LL_TIM_IsActiveFlag_CC4(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_4);
-                LL_TIM_ClearFlag_CC4(handle);
             }
 
             // CC5 / CC6 cannot be used here
