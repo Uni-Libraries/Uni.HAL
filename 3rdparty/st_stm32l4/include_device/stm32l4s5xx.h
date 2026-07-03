@@ -8889,7 +8889,7 @@ typedef struct
 
 /*******************  Bits definition for FLASH_ECCR register  ***************/
 #define FLASH_ECCR_ADDR_ECC_Pos           (0U)
-#define FLASH_ECCR_ADDR_ECC_Msk           (0xFFFFFUL << FLASH_ECCR_ADDR_ECC_Pos) /*!< 0x000FFFFF */
+#define FLASH_ECCR_ADDR_ECC_Msk           (0x1FFFFFUL << FLASH_ECCR_ADDR_ECC_Pos) /*!< 0x001FFFFF */
 #define FLASH_ECCR_ADDR_ECC               FLASH_ECCR_ADDR_ECC_Msk
 #define FLASH_ECCR_BK_ECC_Pos             (21U)
 #define FLASH_ECCR_BK_ECC_Msk             (0x1UL << FLASH_ECCR_BK_ECC_Pos)     /*!< 0x00200000 */
