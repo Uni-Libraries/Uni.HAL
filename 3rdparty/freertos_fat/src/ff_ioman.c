@@ -96,9 +96,12 @@ FF_IOManager_t * FF_CreateIOManager( FF_CreationParameters_t * pxParameters,
     /* Normally:
      * ulSectorSize = 512
      * ulCacheSize = N x ulSectorSize. */
-    if( ( ( usSectorSize % 512 ) != 0 ) || ( usSectorSize == 0 ) )
+    if( ( ( usSectorSize % 512 ) != 0 ) || ( usSectorSize == 0 ) ||
+        ( usSectorSize > 0xFFFFU ) )
     {
-        /* ulSectorSize Size not a multiple of 512 or it is zero*/
+        /* ulSectorSize is not a multiple of 512, is zero, or is too large to be
+         * stored in the uint16_t 'usSectorSize' field (which would silently
+         * truncate, e.g. 65536 -> 0). Fail cleanly instead. */
         xError = FF_createERR( FF_ERR_IOMAN_BAD_BLKSIZE, FF_CREATEIOMAN );
     }
     else if( ( ( ulCacheSize % ( uint32_t ) usSectorSize ) != 0 ) || ( ulCacheSize == 0 ) ||
@@ -944,6 +947,14 @@ static FF_Error_t FF_ParseExtended( FF_IOManager_t * pxIOManager,
 
     while( xTryCount-- )
     {
+        /* Stop following the extended-partition (EBR) chain once the
+         * caller's partition array is full, otherwise the loop below
+         * could write past pPartsFound->pxPartitions[ ffconfigMAX_PARTITIONS ]. */
+        if( pPartsFound->iCount >= ffconfigMAX_PARTITIONS )
+        {
+            break;
+        }
+
         if( ( pxBuffer == NULL ) || ( pxBuffer->ulSector != ulThisSector ) )
         {
             /* Moving to a different sector. Release the
@@ -1027,6 +1038,14 @@ static FF_Error_t FF_ParseExtended( FF_IOManager_t * pxIOManager,
                 continue;
             }
 
+            /* Make sure there is room to store the partition before
+             * writing it. The increment below must never index past the
+             * end of pPartsFound->pxPartitions[ ffconfigMAX_PARTITIONS ]. */
+            if( pPartsFound->iCount >= ffconfigMAX_PARTITIONS )
+            {
+                break;
+            }
+
             {
                 /* Store this partition for the caller */
                 FF_Part_t * p = &pPartsFound->pxPartitions[ pPartsFound->iCount++ ];
@@ -1037,11 +1056,6 @@ static FF_Error_t FF_ParseExtended( FF_IOManager_t * pxIOManager,
                 /* and make LBA absolute to sector-0. */
                 p->ulStartLBA += ulThisSector;
                 p->bIsExtended = pdTRUE;
-            }
-
-            if( pPartsFound->iCount >= ffconfigMAX_PARTITIONS )
-            {
-                break;
             }
 
             xTryCount = 100;
@@ -1267,6 +1281,12 @@ done:
 #define FF_GPT_HEAD_CRC                  0x10
 #define FF_GPT_HEAD_LENGTH               0x0C
 
+/* The UEFI specification fixes the minimum GPT header size at 92 bytes. The
+ * 'HeaderSize' field is read from the disk and used as the byte count for the
+ * header CRC, so it must be validated against this minimum and against the
+ * sector buffer size before use. */
+#define FF_GPT_HEAD_MIN_LENGTH           92U
+
 static FF_Error_t FF_GetEfiPartitionEntry( FF_IOManager_t * pxIOManager,
                                            uint32_t ulPartitionNumber )
 {
@@ -1316,6 +1336,23 @@ static FF_Error_t FF_GetEfiPartitionEntry( FF_IOManager_t * pxIOManager,
         ulPartitionEntrySize = FF_getLong( pxBuffer->pucBuffer, FF_GPT_HEAD_ENTRY_SIZE );
         ulGPTHeadCRC = FF_getLong( pxBuffer->pucBuffer, FF_GPT_HEAD_CRC );
         ulGPTHeadLength = FF_getLong( pxBuffer->pucBuffer, FF_GPT_HEAD_LENGTH );
+
+        /* 'ulGPTHeadLength' is read from the (untrusted) GPT header and is used
+         * below as the byte count for FF_GetCRC32() over the sector buffer. The
+         * buffer is exactly one sector (pxIOManager->usSectorSize bytes).
+         */
+        if( ( ulGPTHeadLength < FF_GPT_HEAD_MIN_LENGTH ) ||
+            ( ulGPTHeadLength > pxIOManager->usSectorSize ) )
+        {
+            xError = FF_ReleaseBuffer( pxIOManager, pxBuffer );
+
+            if( FF_isERR( xError ) == pdFALSE )
+            {
+                xError = FF_createERR( FF_ERR_IOMAN_INVALID_FORMAT, FF_GETEFIPARTITIONENTRY );
+            }
+
+            break;
+        }
 
         /* Calculate Head CRC */
         /* Blank CRC field */
