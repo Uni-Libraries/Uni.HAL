@@ -124,6 +124,8 @@ bool uni_hal_pwr_init(void) {
 
 
 bool uni_hal_pwr_set_battery_charging(bool value) {
+    // someone else (RTC, LSE set-up) may rely on the backup domain staying writable
+    bool const backup_access = LL_PWR_IsEnabledBkUpAccess() != 0U;
     uni_hal_pwr_stm_set_backup_access(true);
     if (value) {
         LL_PWR_SetBattChargResistor(LL_PWR_BATT_CHARGRESISTOR_1_5K);
@@ -131,7 +133,7 @@ bool uni_hal_pwr_set_battery_charging(bool value) {
     } else {
         LL_PWR_DisableBatteryCharging();
     }
-    uni_hal_pwr_stm_set_backup_access(false);
+    uni_hal_pwr_stm_set_backup_access(backup_access);
     g_uni_hal_pwr_ctx.battery_charging = value;
 
     return true;
