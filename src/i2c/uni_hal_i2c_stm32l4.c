@@ -554,6 +554,10 @@ bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_
             {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
                 ctx->state.irq_task = xTaskGetCurrentTaskHandle();
+
+                // forget the outcome of an earlier transfer that finished after its timeout
+                (void)xTaskNotifyStateClearIndexed(NULL, 0U);
+                (void)ulTaskNotifyValueClearIndexed(NULL, 0U, UINT32_MAX);
 #endif
 
                 result = HAL_I2C_Mem_Read_IT(handle, _uni_hal_i2c_shiftaddr(dev_addr), mem_addr,
@@ -607,6 +611,10 @@ bool uni_hal_i2c_mem_write(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16
             {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
                 ctx->state.irq_task = xTaskGetCurrentTaskHandle();
+
+                // forget the outcome of an earlier transfer that finished after its timeout
+                (void)xTaskNotifyStateClearIndexed(NULL, 0U);
+                (void)ulTaskNotifyValueClearIndexed(NULL, 0U, UINT32_MAX);
 #endif
 
                 result = HAL_I2C_Mem_Write_IT(handle, _uni_hal_i2c_shiftaddr(dev_addr), mem_addr,
