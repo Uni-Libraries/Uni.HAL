@@ -14,9 +14,16 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
+// Uni.HAL OS layer
+#include "os/uni_hal_os.h"
+
+#if defined(UNI_HAL_USE_FREERTOS)
 // FreeRTOS
-#include <FreeRTOS.h>
 #include <stream_buffer.h>
+#else
+// Uni.Common
+#include "uni_common.h"
+#endif
 
 
 
@@ -80,6 +87,7 @@ typedef struct {
 } uni_hal_io_handlers_t;
 
 typedef struct {
+#if defined(UNI_HAL_USE_FREERTOS)
     /**
      * Buffer handle
      */
@@ -89,6 +97,17 @@ typedef struct {
      * Buffer control block
      */
     StaticStreamBuffer_t cb;
+#else
+    /**
+     * Buffer handle: points to `rb` once the buffer is initialised
+     */
+    uni_common_ringbuffer_context_t *handle;
+
+    /**
+     * Buffer control block
+     */
+    uni_common_ringbuffer_context_t rb;
+#endif
 
     /**
      * Buffer size

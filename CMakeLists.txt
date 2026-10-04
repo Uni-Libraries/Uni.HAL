@@ -13,8 +13,14 @@ project(uni.hal LANGUAGES C CXX ASM)
 
 set(UNI_HAL_TARGET_MCU "" CACHE STRING "Target MCU: STM32H743, STM32L496 or PC")
 set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 PC)
+option(UNI_HAL_USE_FREERTOS     "build the drivers on top of FreeRTOS; OFF for a main loop without an RTOS" ON)
 option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
 option(UNI_HAL_I2C_USE_FREERTOS "use FreeRTOS for I2C driver" ON)
+if(NOT UNI_HAL_USE_FREERTOS)
+    # nothing to build the per-driver RTOS support on
+    set(UNI_HAL_CAN_USE_FREERTOS OFF)
+    set(UNI_HAL_I2C_USE_FREERTOS OFF)
+endif()
 if(NOT DEFINED UNI_HAL_HSE_VALUE)
     set(UNI_HAL_HSE_VALUE "" CACHE STRING "HSE clock value in Hz")
 endif()
@@ -79,7 +85,9 @@ endif()
 # FreeRTOS
 #
 
-add_subdirectory(3rdparty/freertos_kernel)
+if(UNI_HAL_USE_FREERTOS)
+    add_subdirectory(3rdparty/freertos_kernel)
+endif()
 
 
 

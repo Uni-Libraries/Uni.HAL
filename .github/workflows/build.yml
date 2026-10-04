@@ -73,12 +73,13 @@ jobs:
       run: ctest --build-config ${{ matrix.build_type }}
 
   build-arm-gcc:
-    name: arm/gcc (${{ matrix.mcu }}) on ubuntu-latest
+    name: arm/gcc (${{ matrix.mcu }}, FreeRTOS ${{ matrix.freertos }}) on ubuntu-latest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         mcu: [STM32H743, STM32L496]
+        freertos: ["ON", "OFF"]
         build_type: [Release]
 
     steps:
@@ -101,7 +102,7 @@ jobs:
       id: strings
       shell: bash
       run: |
-        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.freertos }}" >> "$GITHUB_OUTPUT"
 
     - name: Configure CMake
       run: >
@@ -110,6 +111,7 @@ jobs:
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
         -DUNI_HAL_HSE_VALUE=8000000
+        -DUNI_HAL_USE_FREERTOS=${{ matrix.freertos }}
         -S ${{ github.workspace }}
 
     - name: Build

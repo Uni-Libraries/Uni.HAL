@@ -5,14 +5,13 @@
 // stdlib
 #include <math.h>
 
-// FreeRTOS
-#include <FreeRTOS.h>
+// Uni.HAL OS layer
+#include "os/uni_hal_os.h"
 
 // Uni.Common
 #include <uni_common.h>
 
 // Uni.HAL
-#include "task.h"
 #include "uni_hal_periph_ads1015.h"
 
 
@@ -101,9 +100,9 @@ int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx)
             _uni_hal_ads1015_write(ctx, UNI_HAL_ADS1015_REG_CONFIG, config_val);
 
             // Wait for the conversion to complete
-            portYIELD();
+            UNI_HAL_OS_YIELD();
             while (uni_hal_ads1015_is_ready(ctx) == UNI_HAL_ADS1015_ANSWER_NOTREADY) {
-                portYIELD();
+                UNI_HAL_OS_YIELD();
             }
         }
 

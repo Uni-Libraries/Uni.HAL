@@ -14,8 +14,10 @@ extern "C" {
 #include <stdint.h>
 
 // FreeRTOS
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
 #include <FreeRTOS.h>
 #include <queue.h>
+#endif
 
 // Uni.Common
 #include "uni_common.h"
