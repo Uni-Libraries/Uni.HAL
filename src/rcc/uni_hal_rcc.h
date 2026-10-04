@@ -44,6 +44,15 @@ uint8_t uni_hal_rcc_get_status_reg(void);
 
 bool uni_hal_rcc_get_status_reg_flag(uint8_t flag);
 
+/**
+ * Called from the NMI handler after the clock security system reported an HSE failure and the
+ * driver has switched the clock tree over to the internal oscillator.
+ * The default implementation does nothing. An application defines its own to record the event
+ * or to re-initialise what depends on exact clocks. It runs in NMI context: keep it short and
+ * do not call RTOS functions from it.
+ */
+void uni_hal_rcc_css_callback(void);
+
 
 
 /**

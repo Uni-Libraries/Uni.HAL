@@ -1245,6 +1245,9 @@ uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e c
 // STM32L4 - Interrupts
 //
 
+UNI_COMMON_COMPILER_WEAK void uni_hal_rcc_css_callback(void) {
+}
+
 void NMI_Handler(void) {
     if (LL_RCC_IsActiveFlag_HSECSS()) {
         LL_RCC_ClearFlag_HSECSS();
@@ -1256,5 +1259,7 @@ void NMI_Handler(void) {
 
         _uni_hal_stm_rcc_pll();
         _uni_hal_stm_rcc_sysclk();
+
+        uni_hal_rcc_css_callback();
     }
 }
