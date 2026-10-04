@@ -301,9 +301,15 @@ bool uni_hal_dma_init(uni_hal_dma_context_t *ctx) {
     if (ctx != NULL) {
         result = uni_hal_rcc_clk_set(ctx->config.instance, true);
 
+        // 0 is returned for an unknown module/stream pair and is not a DMA interrupt
         uint32_t interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);
-        NVIC_SetPriority(interrupt, UNI_HAL_DMA_INTERRUPT_PRIORITY);
-        NVIC_EnableIRQ(interrupt);
+        if (interrupt != 0U) {
+            NVIC_SetPriority(interrupt, UNI_HAL_DMA_INTERRUPT_PRIORITY);
+            NVIC_EnableIRQ(interrupt);
+        }
+        else {
+            result = false;
+        }
 
         ctx->state.initialized = result;
     }
