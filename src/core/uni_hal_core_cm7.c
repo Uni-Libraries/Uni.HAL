@@ -7,6 +7,9 @@
 #include "stm32h7xx_hal_cortex.h"
 #include "stm32h7xx_ll_cortex.h"
 
+// Uni.Common
+#include <uni_common.h>
+
 // Uni.HAL
 #include "core/uni_hal_core_cm7.h"
 
@@ -58,7 +61,9 @@ void uni_hal_core_cm7_mpu_set(bool enable) {
     }
 }
 
-void uni_hal_core_cm7_mpu_config() {
+// Weak: the regions below match the memory layout of one particular board. An application with
+// another layout defines its own uni_hal_core_cm7_mpu_config().
+UNI_COMMON_COMPILER_WEAK void uni_hal_core_cm7_mpu_config() {
     LL_MPU_ConfigRegion(
             LL_MPU_REGION_NUMBER0,
             0x0U,
