@@ -16,7 +16,19 @@ set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 PC)
 option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
 option(UNI_HAL_I2C_USE_FREERTOS "use FreeRTOS for I2C driver" ON)
 if(NOT DEFINED UNI_HAL_HSE_VALUE)
-    set(UNI_HAL_HSE_VALUE 1 CACHE STRING "HSE clock value in Hz")
+    set(UNI_HAL_HSE_VALUE "" CACHE STRING "HSE clock value in Hz")
+endif()
+
+
+
+#
+# Checks
+#
+
+# The clock drivers derive the PLL dividers and every peripheral clock from HSE_VALUE,
+# so there is no usable default: a wrong value gives wrong baud rates without any error.
+if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC" AND NOT UNI_HAL_HSE_VALUE MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "UNI_HAL_HSE_VALUE is not set. Please set it to the HSE frequency of the board in Hz, e.g. -DUNI_HAL_HSE_VALUE=8000000")
 endif()
 
 

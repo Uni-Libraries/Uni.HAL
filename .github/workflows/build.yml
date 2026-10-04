@@ -109,6 +109,7 @@ jobs:
         -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/cmake/toolchain.cmake
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
+        -DUNI_HAL_HSE_VALUE=8000000
         -S ${{ github.workspace }}
 
     - name: Build
@@ -153,6 +154,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=clang++
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
+        -DUNI_HAL_HSE_VALUE=8000000
         -S ${{ github.workspace }}
 
     - name: Build
