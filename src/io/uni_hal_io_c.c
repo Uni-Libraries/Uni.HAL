@@ -6,6 +6,10 @@
 #include <string.h>
 #include <time.h>
 
+// FreeRTOS
+#include <FreeRTOS.h>
+#include <task.h>
+
 // uni_hal
 #include "io/uni_hal_io.h"
 #include "systick/uni_hal_systick.h"
@@ -136,13 +140,21 @@ size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, 
 
     if (ctx != NULL && ctx->buf_tx.handle != NULL && data != NULL) {
         // push to buffer
+        // A stream buffer supports a single writer. Several tasks and interrupts write here
+        // (stdio output for one), so each write runs in a critical section with no block time.
 #if defined(UNI_HAL_TARGET_MCU_PC)
+        taskENTER_CRITICAL();
         result = xStreamBufferSend(ctx->buf_tx.handle, data, data_len, 0U);
+        taskEXIT_CRITICAL();
 #else
         if (xPortIsInsideInterrupt()) {
+            UBaseType_t const saved_mask = taskENTER_CRITICAL_FROM_ISR();
             result = xStreamBufferSendFromISR(ctx->buf_tx.handle, data, data_len, nullptr);
+            taskEXIT_CRITICAL_FROM_ISR(saved_mask);
         } else {
+            taskENTER_CRITICAL();
             result = xStreamBufferSend(ctx->buf_tx.handle, data, data_len, 0U);
+            taskEXIT_CRITICAL();
         }
 #endif
 
