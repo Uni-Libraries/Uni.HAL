@@ -20,6 +20,7 @@ extern "C" {
 #include "pwr/uni_hal_pwr.h"
 #include "rcc/uni_hal_rcc.h"
 #include "rng/uni_hal_rng.h"
+#include "rtc/uni_hal_rtc.h"
 #include "spi/uni_hal_spi.h"
 #include "systick/uni_hal_systick.h"
 #include "tim/uni_hal_tim.h"

@@ -27,6 +27,7 @@ target_sources(st_stm32h7 PRIVATE
     src_hal/stm32h7xx_ll_gpio.c
     src_hal/stm32h7xx_ll_pwr.c
     src_hal/stm32h7xx_ll_rcc.c
+    src_hal/stm32h7xx_ll_rtc.c
     src_hal/stm32h7xx_ll_spi.c
     src_hal/stm32h7xx_ll_tim.c
     src_hal/stm32h7xx_ll_usart.c
