@@ -8,6 +8,7 @@
 // ST
 #include <stm32l4xx_ll_bus.h>
 #include <stm32l4xx_ll_cortex.h>
+#include <stm32l4xx_ll_pwr.h>
 #include <stm32l4xx_ll_rcc.h>
 #include <stm32l4xx_ll_system.h>
 #include <stm32l4xx_ll_utils.h>
@@ -156,6 +157,37 @@ static uint32_t _uni_hal_rcc_get_pclk2_freq(void) {
 static void _uni_hal_stm_rcc_flash(void) {
     LL_FLASH_SetLatency(LL_FLASH_LATENCY_4);
     while (LL_FLASH_GetLatency() != LL_FLASH_LATENCY_4) {
+    }
+}
+
+/**
+ * Lower the flash latency to what the final clock needs.
+ * _uni_hal_stm_rcc_flash() sets the 4 wait states of 80 MHz before the clock is switched; once
+ * HCLK is known the surplus only slows every flash access down.
+ * @param hclk_hz HCLK frequency
+ */
+static void _uni_hal_stm_rcc_flash_adjust(uint32_t hclk_hz) {
+    // the limits below are those of voltage range 1 (RM0351, table 12)
+    if (LL_PWR_GetRegulVoltageScaling() != LL_PWR_REGU_VOLTAGE_SCALE1) {
+        return;
+    }
+
+    uint32_t latency = LL_FLASH_LATENCY_4;
+    if (hclk_hz <= 16'000'000U) {
+        latency = LL_FLASH_LATENCY_0;
+    }
+    else if (hclk_hz <= 32'000'000U) {
+        latency = LL_FLASH_LATENCY_1;
+    }
+    else if (hclk_hz <= 48'000'000U) {
+        latency = LL_FLASH_LATENCY_2;
+    }
+    else if (hclk_hz <= 64'000'000U) {
+        latency = LL_FLASH_LATENCY_3;
+    }
+
+    LL_FLASH_SetLatency(latency);
+    while (LL_FLASH_GetLatency() != latency) {
     }
 }
 
@@ -364,6 +396,9 @@ static bool _uni_hal_stm_rcc_sysclk() {
 
         // Update sysclk value
         SystemCoreClockUpdate();
+
+        // the clock is final now: drop the wait states it does not need
+        _uni_hal_stm_rcc_flash_adjust(_uni_hal_rcc_get_hclk_freq());
 
         // Reconfigure systick
         _uni_hal_rcc_systick();
