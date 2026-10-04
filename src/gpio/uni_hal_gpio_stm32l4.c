@@ -13,8 +13,8 @@
 #include <stm32l4xx_ll_gpio.h>
 #include <stm32l4xx_ll_system.h>
 
-// FreeRTOS
-#include <FreeRTOS.h>
+// Uni.HAL OS layer
+#include "os/uni_hal_os.h"
 
 // Uni.HAL
 #include "core/uni_hal_core.h"
@@ -67,43 +67,43 @@ static inline bool EXTIX_IRQHandler(uint32_t line, size_t index) {
 }
 
 void EXTI0_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(EXTIX_IRQHandler(LL_EXTI_LINE_0, 0));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(EXTIX_IRQHandler(LL_EXTI_LINE_0, 0));
 }
 
 void EXTI1_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(EXTIX_IRQHandler(LL_EXTI_LINE_1, 1));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(EXTIX_IRQHandler(LL_EXTI_LINE_1, 1));
 }
 
 void EXTI2_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(EXTIX_IRQHandler(LL_EXTI_LINE_2, 2));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(EXTIX_IRQHandler(LL_EXTI_LINE_2, 2));
 }
 
 void EXTI3_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(EXTIX_IRQHandler(LL_EXTI_LINE_3, 3));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(EXTIX_IRQHandler(LL_EXTI_LINE_3, 3));
 }
 
 void EXTI4_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(EXTIX_IRQHandler(LL_EXTI_LINE_4, 4));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(EXTIX_IRQHandler(LL_EXTI_LINE_4, 4));
 }
 
 void EXTI9_5_IRQHandler(void) {
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     bool wakeup = false;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_5, 5) || wakeup;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_6, 6) || wakeup;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_7, 7) || wakeup;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_8, 8) || wakeup;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_9, 9) || wakeup;
-    portYIELD_FROM_ISR(wakeup);
+    UNI_HAL_OS_ISR_EXIT(wakeup);
 }
 
 void EXTI15_10_IRQHandler(void) {
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     bool wakeup = false;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_10, 10) || wakeup;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_11, 11) || wakeup;
@@ -111,7 +111,7 @@ void EXTI15_10_IRQHandler(void) {
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_13, 13) || wakeup;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_14, 14) || wakeup;
     wakeup = EXTIX_IRQHandler(LL_EXTI_LINE_15, 15) || wakeup;
-    portYIELD_FROM_ISR(wakeup);
+    UNI_HAL_OS_ISR_EXIT(wakeup);
 }
 
 

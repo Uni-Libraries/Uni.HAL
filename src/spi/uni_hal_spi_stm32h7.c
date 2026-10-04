@@ -13,7 +13,8 @@
 #include <stm32h7xx_ll_spi.h>
 #pragma GCC diagnostic pop
 
-#include <FreeRTOS.h>
+// Uni.HAL OS layer
+#include "os/uni_hal_os.h"
 
 // uni_hal
 #include "core/uni_hal_core_cm7.h"
@@ -897,31 +898,31 @@ bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
 
 
 void SPI1_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[0], SPI1));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(SPIx_IRQHandler(g_uni_hal_spi_ctx[0], SPI1));
 }
 
 void SPI2_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[1], SPI2));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(SPIx_IRQHandler(g_uni_hal_spi_ctx[1], SPI2));
 }
 
 void SPI3_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[2], SPI3));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(SPIx_IRQHandler(g_uni_hal_spi_ctx[2], SPI3));
 }
 
 void SPI4_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[3], SPI4));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(SPIx_IRQHandler(g_uni_hal_spi_ctx[3], SPI4));
 }
 
 void SPI5_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[4], SPI5));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(SPIx_IRQHandler(g_uni_hal_spi_ctx[4], SPI5));
 }
 
 void SPI6_IRQHandler() {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(SPIx_IRQHandler(g_uni_hal_spi_ctx[5], SPI6));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(SPIx_IRQHandler(g_uni_hal_spi_ctx[5], SPI6));
 }

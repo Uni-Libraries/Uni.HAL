@@ -9,8 +9,8 @@
 #include <stm32h7xx_ll_bus.h>
 #include <stm32h7xx_ll_dma.h>
 
-// FreeRTOS
-#include <FreeRTOS.h>
+// Uni.HAL OS layer
+#include "os/uni_hal_os.h"
 
 // uni_hal
 #include "dma/uni_hal_dma.h"
@@ -29,7 +29,7 @@
 //
 
 void DMA1_Stream0_IRQHandler(void) {
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
 
     // transfer complete
     if (LL_DMA_IsActiveFlag_TC0(DMA1)) {
@@ -41,11 +41,11 @@ void DMA1_Stream0_IRQHandler(void) {
         LL_DMA_ClearFlag_TE0(DMA1);
     }
 
-    portYIELD_FROM_ISR(pdFALSE);
+    UNI_HAL_OS_ISR_EXIT(pdFALSE);
 }
 
 void DMA1_Stream1_IRQHandler(void) {
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
 
     // transfer complete
     if (LL_DMA_IsActiveFlag_TC1(DMA1)) {
@@ -57,11 +57,11 @@ void DMA1_Stream1_IRQHandler(void) {
         LL_DMA_ClearFlag_TE1(DMA1);
     }
 
-    portYIELD_FROM_ISR(pdFALSE);
+    UNI_HAL_OS_ISR_EXIT(pdFALSE);
 }
 
 void DMA1_Stream2_IRQHandler(void) {
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
 
     // transfer complete
     if (LL_DMA_IsActiveFlag_TC2(DMA1)) {
@@ -73,11 +73,11 @@ void DMA1_Stream2_IRQHandler(void) {
         LL_DMA_ClearFlag_TE2(DMA1);
     }
 
-    portYIELD_FROM_ISR(pdFALSE);
+    UNI_HAL_OS_ISR_EXIT(pdFALSE);
 }
 
 void DMA1_Stream3_IRQHandler(void) {
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
 
     // transfer complete
     if (LL_DMA_IsActiveFlag_TC3(DMA1)) {
@@ -89,14 +89,14 @@ void DMA1_Stream3_IRQHandler(void) {
         LL_DMA_ClearFlag_TE3(DMA1);
     }
 
-    portYIELD_FROM_ISR(pdFALSE);
+    UNI_HAL_OS_ISR_EXIT(pdFALSE);
 }
 
 // Streams without a dedicated handler above: uni_hal_dma_init() enables their
 // interrupt as well, so they need a handler that acknowledges the flags.
 #define UNI_HAL_DMA_IRQ_HANDLER(module, stream)                 \
     void module##_Stream##stream##_IRQHandler(void) {           \
-        traceISR_ENTER();                                       \
+        UNI_HAL_OS_ISR_ENTER();                                       \
                                                                 \
         if (LL_DMA_IsActiveFlag_TC##stream(module)) {           \
             LL_DMA_ClearFlag_TC##stream(module);                \
@@ -106,7 +106,7 @@ void DMA1_Stream3_IRQHandler(void) {
             LL_DMA_ClearFlag_TE##stream(module);                \
         }                                                       \
                                                                 \
-        portYIELD_FROM_ISR(pdFALSE);                            \
+        UNI_HAL_OS_ISR_EXIT(pdFALSE);                            \
     }
 
 UNI_HAL_DMA_IRQ_HANDLER(DMA1, 4)

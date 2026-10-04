@@ -23,6 +23,7 @@
 #include <uni_common.h>
 
 // Uni.HAL
+#include "os/uni_hal_os.h"
 #include "i2c/uni_hal_i2c.h"
 #include "core/uni_hal_core.h"
 #include "gpio/uni_hal_gpio.h"
@@ -55,112 +56,112 @@ static uni_hal_i2c_context_t *g_uni_hal_i2c_ctx[UNI_HAL_I2C_MAXINSTANCES] = {NUL
 void I2C1_EV_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_EV_IRQHandler(&hi2c1);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 
 void I2C2_EV_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_EV_IRQHandler(&hi2c2);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 
 void I2C3_EV_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_EV_IRQHandler(&hi2c3);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 
 void I2C4_EV_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_EV_IRQHandler(&hi2c4);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 
 void I2C1_ER_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_ER_IRQHandler(&hi2c1);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 
 void I2C2_ER_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_ER_IRQHandler(&hi2c2);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 
 void I2C3_ER_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_ER_IRQHandler(&hi2c3);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 
 void I2C4_ER_IRQHandler(void)
 {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
     HAL_I2C_ER_IRQHandler(&hi2c4);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
-    portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
+    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
 #endif
 }
 

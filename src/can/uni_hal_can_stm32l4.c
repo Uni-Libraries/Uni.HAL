@@ -12,6 +12,7 @@
 
 // uni_hal
 #include "can/uni_hal_can.h"
+#include "os/uni_hal_os.h"
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
 
@@ -49,56 +50,56 @@ static BaseType_t _uni_hal_can_irq_wake = false;
 void CAN1_RX0_IRQHandler(void)
 {
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     _uni_hal_can_irq_wake = pdFALSE;
 #endif
 
     HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
 #endif
 }
 
 void CAN1_RX1_IRQHandler(void)
 {
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     _uni_hal_can_irq_wake = pdFALSE;
 #endif
 
     HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
 #endif
 }
 
 void CAN2_RX0_IRQHandler(void)
 {
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     _uni_hal_can_irq_wake = pdFALSE;
 #endif
 
     HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
 #endif
 }
 
 void CAN2_RX1_IRQHandler(void)
 {
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    traceISR_ENTER();
+    UNI_HAL_OS_ISR_ENTER();
     _uni_hal_can_irq_wake = pdFALSE;
 #endif
 
     HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-    portYIELD_FROM_ISR( _uni_hal_can_irq_wake );
+    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
 #endif
 }
 

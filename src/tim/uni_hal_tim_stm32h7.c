@@ -9,8 +9,8 @@
 // ST
 #include <stm32h7xx_ll_tim.h>
 
-// FreeRTOS
-#include <FreeRTOS.h>
+// Uni.HAL OS layer
+#include "os/uni_hal_os.h"
 
 // uni_hal
 #include "core/uni_hal_core.h"

@@ -13,6 +13,7 @@
 #include "core/uni_hal_core.h"
 #include "io/uni_hal_io_tunnel.h"
 #include "systick/uni_hal_systick.h"
+#include "os/uni_hal_os.h"
 #include "uart/uni_hal_uart.h"
 
 
@@ -350,43 +351,43 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
 }
 
 void USART1_IRQHandler(void) {
-     traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[0]));
+     UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[0]));
 }
 
 void USART2_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[1]));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[1]));
 }
 
 void USART3_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[2]));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[2]));
 }
 
 void UART4_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[3]));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[3]));
 }
 
 void UART5_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[4]));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[4]));
 }
 
 void USART6_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[5]));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[5]));
 }
 
 void UART7_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[6]));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[6]));
 }
 
 void UART8_IRQHandler(void) {
-    traceISR_ENTER();
-    portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[7]));
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(g_uni_hal_usart_ctx[7]));
 }
 
 

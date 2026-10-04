@@ -20,6 +20,7 @@
 #include "io/uni_hal_io_tunnel.h"
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
+#include "os/uni_hal_os.h"
 #include "uart/uni_hal_uart.h"
 
 
@@ -391,17 +392,17 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
     return higher_task_woken;
 }
 
-void LPUART1_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler_lpuart(_uni_hal_lpuart_1_ctx)); }
+void LPUART1_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler_lpuart(_uni_hal_lpuart_1_ctx)); }
 
-void USART1_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni_hal_usart_1_ctx)); }
+void USART1_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_uni_hal_usart_1_ctx)); }
 
-void USART2_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni_hal_usart_2_ctx)); }
+void USART2_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_uni_hal_usart_2_ctx)); }
 
-void USART3_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni_hal_usart_3_ctx)); }
+void USART3_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_uni_hal_usart_3_ctx)); }
 
-void UART4_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni_hal_uart_4_ctx)); }
+void UART4_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_uni_hal_uart_4_ctx)); }
 
-void UART5_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni_hal_uart_5_ctx)); }
+void UART5_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_uni_hal_uart_5_ctx)); }
 
 
 //

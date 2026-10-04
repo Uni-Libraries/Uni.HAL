@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <string.h>
 
-// FreeRTOS
-#include <FreeRTOS.h>
+// Uni.HAL OS layer
+#include "os/uni_hal_os.h"
 
 // ST
 #include <stm32l4xx_ll_tim.h>
@@ -665,7 +665,7 @@ void TIM1_CC_IRQHandler(void) {
 
 
 void TIM1_BRK_TIM15_IRQHandler(void) {
-    portYIELD_FROM_ISR(_uni_hal_tim_irq_update_callback(TIM15, UNI_HAL_CORE_PERIPH_TIM_15));
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_tim_irq_update_callback(TIM15, UNI_HAL_CORE_PERIPH_TIM_15));
 }
 
 
@@ -683,12 +683,12 @@ void TIM1_UP_TIM16_IRQHandler(void) {
     }
 
     higher_priority_woken |= _uni_hal_tim_irq_update_callback(TIM16, UNI_HAL_CORE_PERIPH_TIM_16);
-    portYIELD_FROM_ISR(higher_priority_woken);
+    UNI_HAL_OS_ISR_EXIT(higher_priority_woken);
 }
 
 
 void TIM1_TRG_COM_TIM17_IRQHandler(void) {
-    portYIELD_FROM_ISR(_uni_hal_tim_irq_update_callback(TIM17, UNI_HAL_CORE_PERIPH_TIM_17));
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_tim_irq_update_callback(TIM17, UNI_HAL_CORE_PERIPH_TIM_17));
 }
 
 void TIM2_IRQHandler(void) {
