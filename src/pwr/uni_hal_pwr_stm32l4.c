@@ -55,6 +55,27 @@ bool uni_hal_pwr_init() {
 }
 
 
+bool uni_hal_pwr_set_battery_charging(bool value) {
+    // someone else (RTC, LSE set-up) may rely on the backup domain staying writable
+    bool const backup_access = LL_PWR_IsEnabledBkUpAccess() != 0U;
+    LL_PWR_EnableBkUpAccess();
+
+    if (value) {
+        LL_PWR_SetBattChargResistor(LL_PWR_BATT_CHARGRESISTOR_1_5K);
+        LL_PWR_EnableBatteryCharging();
+    } else {
+        LL_PWR_DisableBatteryCharging();
+    }
+
+    if (!backup_access) {
+        LL_PWR_DisableBkUpAccess();
+    }
+    g_uni_hal_pwr_ctx.battery_charging = value;
+
+    return true;
+}
+
+
 //
 // STM32
 //

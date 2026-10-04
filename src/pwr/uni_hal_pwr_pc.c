@@ -31,3 +31,8 @@ bool uni_hal_pwr_init() {
     return g_uni_hal_pwr_ctx.inited;
 }
 
+
+bool uni_hal_pwr_set_battery_charging(bool value) {
+    g_uni_hal_pwr_ctx.battery_charging = value;
+    return true;
+}
