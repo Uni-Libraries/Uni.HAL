@@ -14,6 +14,13 @@
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
+#include "systick/uni_hal_systick.h"
+
+/**
+ * A blocking master transfer is abandoned when the bus makes no progress for this long.
+ * A slave waits for its master for as long as it takes.
+ */
+#define UNI_HAL_SPI_STALL_TIMEOUT_MS (100U)
 
 
 //
@@ -237,12 +244,25 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
             LL_SPI_SetRxFIFOThreshold(instance, LL_SPI_RX_FIFO_TH_QUARTER);
             LL_SPI_Enable(instance);
 
-            for (size_t idx = 0; idx < len; idx++) {
-                while (!LL_SPI_IsActiveFlag_TXE(instance)) {
+            bool const is_master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
+            bool stalled = false;
+
+            for (size_t idx = 0; idx < len && !stalled; idx++) {
+                uint32_t start_ms = uni_hal_systick_get_ms();
+                while (!stalled && !LL_SPI_IsActiveFlag_TXE(instance)) {
+                    stalled = is_master && (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
+                }
+                if (stalled) {
+                    break;
                 }
                 LL_SPI_TransmitData8(instance, tx_data ? tx_data[idx] : 0U);
 
-                while (!LL_SPI_IsActiveFlag_RXNE(instance)) {
+                start_ms = uni_hal_systick_get_ms();
+                while (!stalled && !LL_SPI_IsActiveFlag_RXNE(instance)) {
+                    stalled = is_master && (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
+                }
+                if (stalled) {
+                    break;
                 }
                 data_rx = LL_SPI_ReceiveData8(instance);
                 if (rx_data) {
@@ -250,11 +270,13 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
                 }
             }
 
-            while (LL_SPI_IsActiveFlag_BSY(instance)) {
+            uint32_t const start_ms = uni_hal_systick_get_ms();
+            while (!stalled && LL_SPI_IsActiveFlag_BSY(instance)) {
+                stalled = is_master && (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
             }
 
             LL_SPI_Disable(instance);
-            result = true;
+            result = !stalled;
         }
     }
 

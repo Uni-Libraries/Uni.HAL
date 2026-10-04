@@ -19,6 +19,7 @@
 #include "core/uni_hal_core_cm7.h"
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
+#include "systick/uni_hal_systick.h"
 #include "core/uni_hal_core_cm7.h"
 
 
@@ -27,6 +28,12 @@
 //
 
 uni_hal_spi_context_t *g_uni_hal_spi_ctx[6] = {NULL};
+
+/**
+ * A blocking master transfer is abandoned when the bus makes no progress for this long.
+ * A slave waits for its master for as long as it takes.
+ */
+#define UNI_HAL_SPI_STALL_TIMEOUT_MS (100U)
 
 
 
@@ -739,10 +746,15 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
             // it shows up only after the last byte has been written to the TX FIFO
             size_t idx_tx = 0U;
             size_t idx_rx = 0U;
-            while (idx_tx < len || idx_rx < len) {
+            bool const is_master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
+            bool stalled = false;
+            uint32_t activity_ms = uni_hal_systick_get_ms();
+            while (!stalled && (idx_tx < len || idx_rx < len)) {
+                bool progress = false;
                 if (idx_tx < len && LL_SPI_IsActiveFlag_TXP(instance) != 0U) {
                     LL_SPI_TransmitData8(instance, (tx_data != NULL) ? tx_data[idx_tx] : (uint8_t) 0U);
                     idx_tx++;
+                    progress = true;
                 }
                 if (idx_rx < len && (LL_SPI_IsActiveFlag_RXP(instance) != 0U)) {
                     data_rx = LL_SPI_ReceiveData8(instance);
@@ -750,15 +762,26 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
                         rx_data[idx_rx] = data_rx;
                     }
                     idx_rx++;
+                    progress = true;
+                }
+
+                if (progress) {
+                    activity_ms = uni_hal_systick_get_ms();
+                }
+                else if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+                    stalled = true;
                 }
             }
 
-            while (LL_SPI_IsActiveFlag_EOT(instance) == 0U) {
+            while (!stalled && LL_SPI_IsActiveFlag_EOT(instance) == 0U) {
+                if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+                    stalled = true;
+                }
             }
             LL_SPI_Disable(instance);
             _uni_hal_spi_clear_flags(ctx->config.instance);
 
-            result = true;
+            result = !stalled;
         }
     }
 
