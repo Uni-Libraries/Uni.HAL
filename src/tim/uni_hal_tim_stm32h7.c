@@ -127,6 +127,32 @@ static TIM_TypeDef *_uni_hal_tim_get_handle(uni_hal_core_periph_e instance) {
     return result;
 }
 
+/**
+ * Get the update interrupt of a timer.
+ * Only the timers with an interrupt handler in tim/uni_hal_tim_i.c are known.
+ * @param instance timer instance
+ * @return interrupt, UNI_HAL_CORE_IRQ_UNKNOWN for a timer without a handler
+ */
+static uni_hal_core_irq_e _uni_hal_tim_get_irq(uni_hal_core_periph_e instance) {
+    uni_hal_core_irq_e result;
+    switch (instance) {
+        case UNI_HAL_CORE_PERIPH_TIM_15:
+            result = UNI_HAL_CORE_IRQ_TIM_15;
+            break;
+        case UNI_HAL_CORE_PERIPH_TIM_16:
+            result = UNI_HAL_CORE_IRQ_TIM_16;
+            break;
+        case UNI_HAL_CORE_PERIPH_TIM_17:
+            result = UNI_HAL_CORE_IRQ_TIM_17;
+            break;
+        default:
+            result = UNI_HAL_CORE_IRQ_UNKNOWN;
+            break;
+    }
+
+    return result;
+}
+
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
     BaseType_t higher_task_woken = false;
 
@@ -201,11 +227,13 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
 
     if (uni_hal_tim_is_inited(ctx)) {
         TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
-        if (handle != NULL) {
-            uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_15, 5, 0);
-            LL_TIM_EnableIT_UPDATE(handle);
-            LL_TIM_EnableCounter(handle);
-            result = true;
+        uni_hal_core_irq_e const irq = _uni_hal_tim_get_irq(ctx->config.instance);
+        if (handle != NULL && irq != UNI_HAL_CORE_IRQ_UNKNOWN) {
+            result = uni_hal_core_irq_enable(irq, 5, 0);
+            if (result) {
+                LL_TIM_EnableIT_UPDATE(handle);
+                LL_TIM_EnableCounter(handle);
+            }
         }
     }
 
