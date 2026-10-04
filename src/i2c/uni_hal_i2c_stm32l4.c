@@ -86,7 +86,7 @@ void I2C3_EV_IRQHandler(void)
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
-    HAL_I2C_EV_IRQHandler(&hi2c4);
+    HAL_I2C_EV_IRQHandler(&hi2c3);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
     portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
@@ -142,7 +142,7 @@ void I2C3_ER_IRQHandler(void)
     g_uni_hal_i2c_highprio_woken = pdFALSE;
 #endif
 
-    HAL_I2C_ER_IRQHandler(&hi2c4);
+    HAL_I2C_ER_IRQHandler(&hi2c3);
 
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
     portYIELD_FROM_ISR( g_uni_hal_i2c_highprio_woken );
