@@ -6,6 +6,7 @@
 #include <stm32l4xx.h>
 
 // uni_hal
+#include "core/uni_hal_core.h"
 #include "core/uni_hal_core_enum.h"
 
 
@@ -14,9 +15,9 @@
 //
 
 
-IRQn_Type uni_hal_core_irq_getnum(uni_hal_core_irq_e irq)
+uint32_t uni_hal_core_irq_getnum(uni_hal_core_irq_e irq)
 {
-    uint16_t result = UINT16_MAX;
+    uint32_t result = INT16_MAX;
 
     switch(irq)
     {

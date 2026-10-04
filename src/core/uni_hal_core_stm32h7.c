@@ -7,6 +7,7 @@
 #include <stm32h7xx_ll_utils.h>
 
 // uni_hal
+#include "core/uni_hal_core.h"
 #include "core/uni_hal_core_enum.h"
 #include "core/uni_hal_core_stm32h7.h"
 
@@ -15,8 +16,8 @@
 // Functions
 //
 
-IRQn_Type uni_hal_core_irq_getnum(uni_hal_core_irq_e irq) {
-    IRQn_Type result;
+uint32_t uni_hal_core_irq_getnum(uni_hal_core_irq_e irq) {
+    uint32_t result;
     switch (irq) {
         case UNI_HAL_CORE_IRQ_ETH:
             result = ETH_IRQn;
