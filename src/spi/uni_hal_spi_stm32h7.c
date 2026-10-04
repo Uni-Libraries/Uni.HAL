@@ -729,10 +729,12 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
             }
 
 
+            // every byte sent clocks one byte in: keep reading until the last one has arrived,
+            // it shows up only after the last byte has been written to the TX FIFO
             size_t idx_tx = 0U;
             size_t idx_rx = 0U;
-            while (idx_tx < len) {
-                if (LL_SPI_IsActiveFlag_TXP(instance) != 0U) {
+            while (idx_tx < len || idx_rx < len) {
+                if (idx_tx < len && LL_SPI_IsActiveFlag_TXP(instance) != 0U) {
                     LL_SPI_TransmitData8(instance, (tx_data != NULL) ? tx_data[idx_tx] : (uint8_t) 0U);
                     idx_tx++;
                 }
