@@ -553,13 +553,14 @@ bool uni_hal_flash_swap_banks(void)
 {
     bool result = false;
 
-    taskENTER_CRITICAL();
+    // Keep other tasks away from the flash, but leave the interrupts on: the HAL option byte
+    // functions time out on the tick, which does not advance inside a critical section.
+    vTaskSuspendAll();
 
     if (_uni_hal_flash_unlock() && _uni_hal_flash_unlock_ob())
     {
         FLASH_OBProgramInitTypeDef OBInit = {0};
 
-        HAL_FLASHEx_OBGetConfig(&OBInit);
         OBInit.Banks = FLASH_BANK_1;
         HAL_FLASHEx_OBGetConfig(&OBInit);
 
@@ -572,9 +573,9 @@ bool uni_hal_flash_swap_banks(void)
         }
 
         result = HAL_FLASHEx_OBProgram(&OBInit) == HAL_OK;
+        result = result && HAL_FLASH_OB_Launch() == HAL_OK;
         if (result)
         {
-            HAL_FLASH_OB_Launch();
             SCB_InvalidateICache();
             NVIC_SystemReset();
         }
@@ -583,7 +584,7 @@ bool uni_hal_flash_swap_banks(void)
     // unreachable on success
     _uni_hal_flash_lock_ob();
     _uni_hal_flash_lock();
-    taskEXIT_CRITICAL();
+    (void)xTaskResumeAll();
 
     return result;
 }
