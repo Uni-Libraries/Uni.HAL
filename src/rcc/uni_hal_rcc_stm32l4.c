@@ -490,7 +490,9 @@ bool uni_hal_rcc_init() {
     _uni_hal_stm_rcc_hsi();
 
     // LSE/LSI
-    _uni_hal_stm_rcc_lse();
+    if (g_uni_hal_rcc_config->lse_enable) {
+        _uni_hal_stm_rcc_lse();
+    }
     g_uni_hal_rcc_status.lse_inited = false; //TODO: remove
     if (!g_uni_hal_rcc_status.lse_inited) {
         _uni_hal_stm_rcc_lsi();
