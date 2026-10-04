@@ -19,12 +19,19 @@
 #include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
+#include "systick/uni_hal_systick.h"
 
 
 
 //
 // Defines
 //
+
+/**
+ * Longest wait for the calibration and for the ADC to become ready.
+ * The linearity calibration of the STM32H7 alone takes about 165000 ADC clock cycles.
+ */
+#define UNI_HAL_ADC_STARTUP_TIMEOUT_MS (500U)
 
 #define UNI_HAL_ADC_VBAT_DIV (3.0f)
 
@@ -458,7 +465,12 @@ bool _uni_hal_adc_powerup(uni_hal_adc_context_t *ctx) {
         LL_ADC_StartCalibration(instance, true);
 
         // Wait for calibration completion
+        // the calibration and the ready flag below need the ADC kernel clock; without it they never finish
+        uint32_t const start_ms = uni_hal_systick_get_ms();
         while (LL_ADC_IsCalibrationOnGoing(instance)) {
+            if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_ADC_STARTUP_TIMEOUT_MS) {
+                return false;
+            }
         }
         uni_hal_dwt_delay_ms(1U);
 
@@ -469,11 +481,18 @@ bool _uni_hal_adc_powerup(uni_hal_adc_context_t *ctx) {
 }
 
 
-void _uni_hal_adc_enable(uni_hal_adc_context_t *ctx) {
+bool _uni_hal_adc_enable(uni_hal_adc_context_t *ctx) {
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
     LL_ADC_Enable(instance);
+
+    uint32_t const start_ms = uni_hal_systick_get_ms();
     while (!LL_ADC_IsActiveFlag_ADRDY(instance)) {
+        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_ADC_STARTUP_TIMEOUT_MS) {
+            return false;
+        }
     }
+
+    return true;
 }
 
 
@@ -538,9 +557,9 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         result = _uni_hal_adc_powerup(ctx) && result;
 
         // enable
+        result = result && _uni_hal_adc_enable(ctx);
         ctx->state.initialized = result;
         if (result) {
-            _uni_hal_adc_enable(ctx);
             _uni_hal_adc_trigger(ctx);
         }
     }
