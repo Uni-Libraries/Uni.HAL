@@ -61,8 +61,10 @@ bool uni_hal_ads1015_init(uni_hal_ads1015_context_t* ctx) {
         if (!result) {
             result = uni_hal_i2c_init(ctx->config.i2c);
         }
+        // configure() needs the flag set, but the device only counts as initialised once it took the config
         ctx->state.initialized = result;
         result = uni_hal_ads1015_configure(ctx);
+        ctx->state.initialized = result;
     }
 
     return result;
