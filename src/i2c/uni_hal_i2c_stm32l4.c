@@ -344,6 +344,8 @@ static void _uni_hal_i2c_callback(I2C_HandleTypeDef* hal_handle, bool success)
     {
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
         xTaskNotifyIndexedFromISR(ctx->state.irq_task, 0, success ? 1U : 0U, eSetBits, &g_uni_hal_i2c_highprio_woken);
+#else
+        (void)success;
 #endif
     }
 }

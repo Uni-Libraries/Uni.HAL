@@ -44,6 +44,8 @@ bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, siz
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
         result = xQueueReceive(ctx->status.queue_rx, msg, timeout_ms == portMAX_DELAY ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms)) == pdPASS;
 #else
+        // the receive buffer is polled: without an RTOS there is nothing to wait on
+        (void)timeout_ms;
         result = uni_common_ringbuffer_pop(ctx->config.buffer_rx, (uint8_t *)msg, 1U);
 #endif
     }

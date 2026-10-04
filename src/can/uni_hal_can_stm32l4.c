@@ -27,7 +27,9 @@ static CAN_HandleTypeDef _uni_hal_can_2_handle = {};
 static uni_hal_can_context_t *_uni_hal_can_1_ctx = NULL;
 static uni_hal_can_context_t *_uni_hal_can_2_ctx = NULL;
 
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
 static BaseType_t _uni_hal_can_irq_wake = false;
+#endif
 
 
 //
