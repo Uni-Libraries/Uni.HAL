@@ -369,7 +369,8 @@ void UART8_IRQHandler(void) {
 
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
-    if (ctx != nullptr && ctx->pin_rx != nullptr && ctx->pin_tx != nullptr) {
+    // the interrupt handler needs the IO context to store what it receives
+    if (ctx != nullptr && ctx->pin_rx != nullptr && ctx->pin_tx != nullptr && ctx->io != nullptr) {
         ctx->callback = nullptr;
         ctx->callback_cookie = nullptr;
         ctx->in_transmission = false;

@@ -382,7 +382,8 @@ void UART5_IRQHandler(void) { portYIELD_FROM_ISR(_uni_hal_usart_irq_handler(_uni
 
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL && ctx->pin_rx != NULL && ctx->pin_tx != NULL) {
+    // the interrupt handler needs the IO context to store what it receives
+    if (ctx != NULL && ctx->pin_rx != NULL && ctx->pin_tx != NULL && ctx->io != NULL) {
         ctx->callback = NULL;
         ctx->callback_cookie = NULL;
 
