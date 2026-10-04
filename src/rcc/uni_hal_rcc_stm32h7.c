@@ -604,6 +604,11 @@ static bool _uni_hal_stm_rcc_pll(void) {
         LL_RCC_PLL1_Disable();
         LL_RCC_PLL2_Disable();
         LL_RCC_PLL3_Disable();
+
+        // none of them runs any more, whatever was locked before
+        g_uni_hal_rcc_status.pll_inited[0] = false;
+        g_uni_hal_rcc_status.pll_inited[1] = false;
+        g_uni_hal_rcc_status.pll_inited[2] = false;
     }
 
     return result;
