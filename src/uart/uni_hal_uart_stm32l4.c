@@ -352,11 +352,11 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
                 ctx_io->handlers.tx_end(ctx_io, ctx_io->handlers.tx_end_ctx);
             }
         }
-    }
 
-    if (ctx->callback) {
-        if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
-            higher_task_woken = pdTRUE;
+        if (ctx->callback) {
+            if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
+                higher_task_woken = pdTRUE;
+            }
         }
     }
 
