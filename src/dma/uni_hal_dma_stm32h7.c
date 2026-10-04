@@ -31,19 +31,14 @@
 void DMA1_Stream0_IRQHandler(void) {
     traceISR_ENTER();
 
-    // transfer complete 0
+    // transfer complete
     if (LL_DMA_IsActiveFlag_TC0(DMA1)) {
         LL_DMA_ClearFlag_TC0(DMA1);
     }
 
-    // transfer complete 1
-    if (LL_DMA_IsActiveFlag_TC1(DMA1)) {
-        LL_DMA_ClearFlag_TC1(DMA1);
-    }
-
     // transfer error
-    if (LL_DMA_IsActiveFlag_TE1(DMA1)) {
-        LL_DMA_ClearFlag_TE1(DMA1);
+    if (LL_DMA_IsActiveFlag_TE0(DMA1)) {
+        LL_DMA_ClearFlag_TE0(DMA1);
     }
 
     portYIELD_FROM_ISR(pdFALSE);
@@ -74,8 +69,8 @@ void DMA1_Stream2_IRQHandler(void) {
     }
 
     // transfer error
-    if (LL_DMA_IsActiveFlag_TE3(DMA1)) {
-        LL_DMA_ClearFlag_TE3(DMA1);
+    if (LL_DMA_IsActiveFlag_TE2(DMA1)) {
+        LL_DMA_ClearFlag_TE2(DMA1);
     }
 
     portYIELD_FROM_ISR(pdFALSE);
