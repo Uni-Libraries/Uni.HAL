@@ -221,12 +221,7 @@ static bool _uni_hal_stm_rcc_hsi() {
  * @return true on success
  */
 static bool _uni_hal_rcc_systick() {
-    // setup SysTick
-    NVIC_SetPriority(SysTick_IRQn, 0U);
-    LL_InitTick(_uni_hal_rcc_get_hclk_freq(), 1000U);
-    LL_SYSTICK_EnableIT();
-
-    return true;
+    return uni_hal_systick_init();
 }
 
 /**
