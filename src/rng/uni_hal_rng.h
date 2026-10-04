@@ -15,6 +15,7 @@ extern "C" {
 
 // uni_hal
 #include "core/uni_hal_core.h"
+#include "rcc/uni_hal_rcc_enum.h"
 
 
 //
@@ -29,6 +30,14 @@ typedef struct {
      * RNG Instance
      */
     uni_hal_core_periph_e instance;
+
+    /**
+     * Kernel clock of the generator.
+     * UNI_HAL_RCC_CLKSRC_UNKNOWN (0) keeps the former behaviour: PLL1Q on the STM32H7, the source
+     * selected by the RCC driver on the STM32L4. UNI_HAL_RCC_CLKSRC_HSI48 also starts the HSI48
+     * oscillator, so the generator does not depend on the PLL configuration.
+     */
+    uni_hal_rcc_clksrc_e clock_source;
 
     /**
      * Inited flag

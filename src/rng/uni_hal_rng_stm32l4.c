@@ -8,6 +8,7 @@
 
 // ST
 #include <stm32l496xx.h>
+#include <stm32l4xx_ll_rcc.h>
 #include <stm32l4xx_ll_rng.h>
 
 // Uni.Common
@@ -45,6 +46,23 @@ enum {
     /** longest wait for one random word */
     UNI_HAL_RNG_TIMEOUT_MS = 100U,
 };
+
+/**
+ * Start the HSI48 oscillator
+ * @return true when it is ready
+ */
+static bool _uni_hal_rng_hsi48_start(void) {
+    uint32_t const start_ms = uni_hal_systick_get_ms();
+
+    LL_RCC_HSI48_Enable();
+    while (LL_RCC_HSI48_IsReady() == 0U) {
+        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_RNG_TIMEOUT_MS) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 /**
  * Read one random word once the generator has it ready
@@ -92,7 +110,23 @@ bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
     if (ctx != NULL) {
         RNG_TypeDef *instance = _uni_hal_rng_get_instance(ctx->instance);
         if (instance != NULL) {
-            result = uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_RNG, true);
+            result = true;
+            switch (ctx->clock_source) {
+            case UNI_HAL_RCC_CLKSRC_UNKNOWN:
+                // keep what the RCC driver selected
+                break;
+            case UNI_HAL_RCC_CLKSRC_HSI48:
+                result = _uni_hal_rng_hsi48_start();
+                if (result) {
+                    LL_RCC_SetRNGClockSource(LL_RCC_RNG_CLKSOURCE_HSI48);
+                }
+                break;
+            default:
+                result = false;
+                break;
+            }
+
+            result = result && uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_RNG, true);
             if (result) {
                 LL_RNG_Enable(instance);
 
