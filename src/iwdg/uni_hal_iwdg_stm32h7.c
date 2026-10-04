@@ -13,6 +13,17 @@
 
 // UNI_HAL
 #include "iwdg/uni_hal_iwdg.h"
+#include "systick/uni_hal_systick.h"
+
+
+//
+// Defines
+//
+
+/**
+ * Longest wait for the prescaler and reload registers to take the new values
+ */
+#define UNI_HAL_IWDG_READY_TIMEOUT_MS (100U)
 
 
 
@@ -79,10 +90,17 @@ bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx) {
             LL_IWDG_SetPrescaler(instance, prescaler);
             // the reload register is 12 bits wide
             LL_IWDG_SetReloadCounter(instance, uni_common_math_min(ctx->watchdog_counter, 0x0FFFU));
+            // PVU/RVU clear a few LSI periods after the write; without LSI they never do
+            uint32_t const start_ms = uni_hal_systick_get_ms();
+            result = true;
             while (LL_IWDG_IsReady(instance) != 1) {
+                if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_IWDG_READY_TIMEOUT_MS) {
+                    result = false;
+                    break;
+                }
             }
 
-            result = true;
+            // the watchdog is running in any case and has to be served
             ctx->inited = true;
             uni_hal_iwdg_reload(ctx);
         }
