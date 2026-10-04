@@ -35,7 +35,7 @@ bool uni_hal_io_tunnel_init(uni_hal_io_tunnel_context_t *ctx, uni_hal_io_context
 }
 
 
-bool bsuat_io_tunnel_is_inited(const uni_hal_io_tunnel_context_t *ctx) {
+bool uni_hal_io_tunnel_is_inited(const uni_hal_io_tunnel_context_t *ctx) {
     bool result = false;
     if(ctx != NULL && ctx->io_first != NULL && ctx->io_second != NULL){
         result = true;

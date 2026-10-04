@@ -66,7 +66,12 @@ bool uni_hal_io_tunnel_init(uni_hal_io_tunnel_context_t *ctx, uni_hal_io_context
  * @param ctx IO tunnel context
  * @return true in case of inited tunnel
  */
-bool bsuat_io_tunnel_is_inited(const uni_hal_io_tunnel_context_t *ctx);
+bool uni_hal_io_tunnel_is_inited(const uni_hal_io_tunnel_context_t *ctx);
+
+/**
+ * Former name of uni_hal_io_tunnel_is_inited(), kept for existing callers
+ */
+#define bsuat_io_tunnel_is_inited uni_hal_io_tunnel_is_inited
 
 
 /**
