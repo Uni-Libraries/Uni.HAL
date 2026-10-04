@@ -45,7 +45,9 @@ FILE* const stdout = NULL;
 
 int *__errno(void) {
 #if defined(__clang__)
-    return NULL;
+    // errno is written through this pointer, also by the stubs below
+    static int errno_value = 0;
+    return &errno_value;
 #else
     return &_REENT->_errno;
 #endif
