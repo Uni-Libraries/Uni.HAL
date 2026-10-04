@@ -296,7 +296,14 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
 bool uni_hal_can_start(uni_hal_can_context_t *ctx) { //-V2009
     bool result = false;
     if (uni_hal_can_is_inited(ctx)) {
-        result = HAL_CAN_Start(_uni_hal_can_get_handle_hal(ctx->config.instance)) == HAL_OK;
+        CAN_HandleTypeDef *handle = _uni_hal_can_get_handle_hal(ctx->config.instance);
+        result = HAL_CAN_Start(handle) == HAL_OK;
+        if (!result) {
+            // HAL_CAN_Start() times out while the bus is not idle (e.g. stuck dominant) and leaves
+            // the handle in its error state, in which no other call works. Bring it back to
+            // 'ready' so that the start can be tried again later.
+            (void)HAL_CAN_Init(handle);
+        }
     }
 
     return result;
