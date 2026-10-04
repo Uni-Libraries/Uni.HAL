@@ -19,7 +19,9 @@
 // Implementation
 //
 
-#if !defined(_MSC_VER)
+// On the host the C library keeps its own allocator: the FreeRTOS heap is far too small
+// for hosted code (the test runner alone needs more) and would make every malloc() fail.
+#if !defined(_MSC_VER) && !defined(UNI_HAL_TARGET_MCU_PC)
 void *calloc(size_t num, size_t size) {
     void *result = NULL;
     if (num > 0U && size > 0U) {
