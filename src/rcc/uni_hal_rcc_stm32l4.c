@@ -31,6 +31,11 @@
 uni_hal_rcc_stm32l4_config_t *g_uni_hal_rcc_config = NULL;
 uni_hal_rcc_stm32l4_status_t g_uni_hal_rcc_status = {0};
 
+/**
+ * Reset flags (upper byte of RCC_CSR) as found at start-up, before they were cleared
+ */
+static uint8_t g_uni_hal_rcc_csr_reg = 0U;
+
 UNI_COMMON_COMPILER_WEAK uint32_t SystemCoreClock = 4'000'000U;
 
 UNI_COMMON_COMPILER_WEAK const uint8_t AHBPrescTable[16] = {
@@ -398,7 +403,7 @@ static void _uni_hal_stm_rcc_peripherials() {
 
 static bool _uni_hal_rcc_update_status_reg() {
     bool result = false;
-    //TODO g_uni_hal_rcc_status.rcc_csr_reg = (uint8_t) ((RCC->CSR) >> 24);
+    g_uni_hal_rcc_csr_reg = (uint8_t) ((RCC->CSR) >> 24);
     LL_RCC_ClearResetFlags();
     result = true;
 
@@ -514,7 +519,7 @@ bool uni_hal_rcc_is_inited() {
 uint8_t uni_hal_rcc_get_status_reg() {
     uint8_t result = 0;
     if (uni_hal_rcc_is_inited()) {
-        result = 0; //TODO: g_uni_hal_rcc_status.rcc_csr_reg;
+        result = g_uni_hal_rcc_csr_reg;
     }
     return result;
 }
@@ -523,7 +528,7 @@ uint8_t uni_hal_rcc_get_status_reg() {
 bool uni_hal_rcc_get_status_reg_flag(uint8_t flag) {
     bool result = false;
     if (uni_hal_rcc_is_inited()) {
-        result = flag != 0; //TODO g_uni_hal_rcc_status.rcc_csr_reg & flag;
+        result = (g_uni_hal_rcc_csr_reg & flag) != 0U;
     }
     return result;
 }
