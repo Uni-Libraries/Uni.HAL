@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -51,3 +55,7 @@ bool uni_hal_flash_erase_bank(uni_hal_flash_bank_e);
 bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_e sector);
 
 bool uni_hal_flash_swap_banks(void);
+
+#if defined(__cplusplus)
+}
+#endif

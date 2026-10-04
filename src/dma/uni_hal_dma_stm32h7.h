@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -26,3 +30,7 @@ DMA_TypeDef *uni_hal_dma_stm32h7_get_module(uni_hal_core_periph_e module);
  * @return DMA channel reg value
  */
 uint32_t uni_hal_dma_stm32h7_get_channel(uni_hal_dma_channel_e channel);
+
+#if defined(__cplusplus)
+}
+#endif

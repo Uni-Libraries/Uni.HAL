@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 
 
 //
@@ -12,3 +16,6 @@
  */
 void uni_hal_pwr_stm_l4_set_vddio2(bool val);
 
+#if defined(__cplusplus)
+}
+#endif

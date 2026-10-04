@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -32,3 +36,7 @@ uint32_t uni_hal_core_irq_getnum(uni_hal_core_irq_e irq);
 uint32_t uni_hal_core_irq_pause(void);
 
 void uni_hal_core_irq_resume(uint32_t primask);
+
+#if defined(__cplusplus)
+}
+#endif

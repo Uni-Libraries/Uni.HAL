@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -43,3 +47,7 @@ bool uni_hal_c15b064j_is_inited(const uni_hal_c15b064j_context_t* ctx);
 bool uni_hal_c15b064j_read(uni_hal_c15b064j_context_t* ctx, uint16_t address, uint16_t len, uint8_t* buf);
 
 bool uni_hal_c15b064j_write(uni_hal_c15b064j_context_t* ctx, uint16_t address, uint16_t len, uint8_t* buf);
+
+#if defined(__cplusplus)
+}
+#endif

@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -24,3 +28,7 @@ void uni_hal_core_cm7_icache_set(bool enable);
 
 void uni_hal_core_cm7_mpu_config(void);
 void uni_hal_core_cm7_mpu_set(bool enable);
+
+#if defined(__cplusplus)
+}
+#endif

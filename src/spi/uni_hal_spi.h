@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -298,3 +302,7 @@ uint32_t uni_hal_spi_get_last_errors(const uni_hal_spi_context_t *ctx);
  * @return true on success
  */
 bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_data, uint8_t *rx_data, uint32_t len);
+
+#if defined(__cplusplus)
+}
+#endif

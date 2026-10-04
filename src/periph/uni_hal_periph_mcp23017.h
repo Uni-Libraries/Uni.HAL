@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -65,3 +69,7 @@ bool uni_hal_mcp23017_get_gpio(uni_hal_mcp23017_context_t* ctx, uni_hal_mcp23017
 bool uni_hal_mcp23017_set_iodir(uni_hal_mcp23017_context_t* ctx, uni_hal_mcp23017_port_e port, uint8_t direction);
 
 bool uni_hal_mcp23017_set_gpio(uni_hal_mcp23017_context_t* ctx, uni_hal_mcp23017_port_e port, uint8_t val);
+
+#if defined(__cplusplus)
+}
+#endif

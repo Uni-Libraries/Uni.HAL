@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -101,3 +105,7 @@ bool uni_hal_dma_set_address(uni_hal_dma_context_t* ctx, uint32_t addr_from, uin
 bool uni_hal_dma_set_length(uni_hal_dma_context_t* ctx, uint32_t length);
 
 bool uni_hal_dma_set_request(uni_hal_dma_context_t* ctx);
+
+#if defined(__cplusplus)
+}
+#endif

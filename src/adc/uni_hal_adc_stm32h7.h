@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -38,3 +42,7 @@ int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx);
  * @note must be called only on ADC3 with enabled measurement of REFINT
  */
 uint32_t uni_hal_adc_stm32h7_get_vdda(uni_hal_adc_context_t* ctx);
+
+#if defined(__cplusplus)
+}
+#endif

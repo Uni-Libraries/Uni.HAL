@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -163,3 +167,7 @@ bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t* config);
 uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get();
 
 uint32_t uni_hal_rcc_stm32h7_clk_get_hclk(void);
+
+#if defined(__cplusplus)
+}
+#endif

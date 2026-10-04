@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -81,3 +85,7 @@ uint32_t uni_hal_rng_get_32u(uni_hal_rng_context_t *ctx);
  * @return true on success, false when the generator does not deliver in time
  */
 bool uni_hal_rng_get(uni_hal_rng_context_t *ctx, uint8_t *buf, size_t buf_len);
+
+#if defined(__cplusplus)
+}
+#endif

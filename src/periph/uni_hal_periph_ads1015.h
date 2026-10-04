@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -119,3 +123,7 @@ int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx);
 int16_t uni_hal_ads1015_get_voltage_mv(uni_hal_ads1015_context_t* ctx);
 
 uni_hal_ads1015_answer_e uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx);
+
+#if defined(__cplusplus)
+}
+#endif

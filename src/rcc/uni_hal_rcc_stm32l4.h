@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 //
 // Includes
 //
@@ -146,3 +150,7 @@ typedef struct {
 //
 
 bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config);
+
+#if defined(__cplusplus)
+}
+#endif
