@@ -597,7 +597,7 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
         }
     }
 
-    return ctx->status.inited;
+    return uni_hal_spi_is_inited(ctx);
 }
 
 
@@ -638,6 +638,12 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx,
                                   uint32_t len) {
     bool result = false;
+    // a buffer can only be transferred through a DMA stream that was configured for it
+    if (uni_hal_spi_is_inited(ctx) && ((data_rx != NULL && ctx->config.dma_rx == NULL) ||
+                                       (data_tx != NULL && ctx->config.dma_tx == NULL))) {
+        return false;
+    }
+
     if (uni_hal_spi_is_inited(ctx) && len > 0U && (data_rx || data_tx)) {
         ctx->status.in_process = true;
         ctx->status.last_rx_data = (uint8_t *) data_rx;
