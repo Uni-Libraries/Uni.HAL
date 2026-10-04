@@ -294,7 +294,13 @@ uint32_t _uni_hal_dma_get_request(uni_hal_dma_request_e request) {
 bool uni_hal_dma_init(uni_hal_dma_context_t *ctx) {
     bool result = false;
 
-    if (ctx != NULL && ctx->state.initialized == false)
+    // a channel that is already set up is not an error
+    if (ctx != NULL && ctx->state.initialized)
+    {
+        return true;
+    }
+
+    if (ctx != NULL)
     {
         result = uni_hal_rcc_clk_set(ctx->config.instance, true);
         if (result) {
