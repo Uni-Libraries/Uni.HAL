@@ -509,8 +509,16 @@ bool uni_hal_flash_erase(size_t addr, size_t size)
         return 0;
     }
 
-    size_t start_sector = (addr - FLASH_BASE) / FLASH_SECTOR_SIZE;
-    size_t nb_sector = (size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
+    // sector numbers restart from 0 in each bank
+    size_t const bank_base = (addr < FLASH_BANK2_BASE) ? FLASH_BANK1_BASE : FLASH_BANK2_BASE;
+    size_t const offset = addr - bank_base;
+    if (size > (FLASH_SECTOR_TOTAL * FLASH_SECTOR_SIZE) - offset) {
+        // the range runs past the end of the bank
+        return 0;
+    }
+
+    size_t start_sector = offset / FLASH_SECTOR_SIZE;
+    size_t nb_sector = ((offset + size - 1U) / FLASH_SECTOR_SIZE) - start_sector + 1U;
 
     status = HAL_FLASH_Unlock();
     if (status != HAL_OK)
