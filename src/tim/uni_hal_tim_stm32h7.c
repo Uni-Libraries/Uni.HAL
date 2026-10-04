@@ -231,6 +231,8 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
         if (handle != NULL && irq != UNI_HAL_CORE_IRQ_UNKNOWN) {
             result = uni_hal_core_irq_enable(irq, 5, 0);
             if (result) {
+                // LL_TIM_Init() latches the prescaler with an update event, which leaves UIF set
+                LL_TIM_ClearFlag_UPDATE(handle);
                 LL_TIM_EnableIT_UPDATE(handle);
                 LL_TIM_EnableCounter(handle);
             }
