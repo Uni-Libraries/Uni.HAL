@@ -8,6 +8,9 @@
 // STM
 #include <stm32h7xx_ll_iwdg.h>
 
+// Uni.Common
+#include <uni_common.h>
+
 // UNI_HAL
 #include "iwdg/uni_hal_iwdg.h"
 
@@ -74,7 +77,8 @@ bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx) {
             LL_IWDG_Enable(instance);
             LL_IWDG_EnableWriteAccess(instance);
             LL_IWDG_SetPrescaler(instance, prescaler);
-            LL_IWDG_SetReloadCounter(instance, ctx->watchdog_counter);
+            // the reload register is 12 bits wide
+            LL_IWDG_SetReloadCounter(instance, uni_common_math_min(ctx->watchdog_counter, 0x0FFFU));
             while (LL_IWDG_IsReady(instance) != 1) {
             }
 
