@@ -28,11 +28,14 @@
 //
 
 static SemaphoreHandle_t xFlashDoneSem;
+static volatile bool flash_op_failed = false;
 BaseType_t flash_wake_up = pdFALSE;
 
 
 enum {
     UNI_HAL_FLASH_LATENCY_TIMEOUT_MS = 100U,
+    // same budget as FLASH_TIMEOUT_VALUE of the ST HAL blocking erase
+    UNI_HAL_FLASH_ERASE_TIMEOUT_MS = 50000U,
 };
 
 
@@ -58,13 +61,13 @@ typedef struct {
 void HAL_FLASH_EndOfOperationCallback(uint32_t ReturnValue)
 {
     (void)ReturnValue;
-    xSemaphoreGiveFromISR(xFlashDoneSem, &flash_wake_up);   /* ✓ safe from ISRs :contentReference[oaicite:0]{index=0} */
-
+    xSemaphoreGiveFromISR(xFlashDoneSem, &flash_wake_up);
 }
 
 void HAL_FLASH_OperationErrorCallback(uint32_t ReturnValue)
 {
     (void)ReturnValue;
+    flash_op_failed = true;
     xSemaphoreGiveFromISR(xFlashDoneSem, &flash_wake_up);
 }
 
@@ -440,6 +443,10 @@ size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst)
 bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_e sector) {
     bool result = false;
 
+    if (xFlashDoneSem == NULL) {
+        return false;
+    }
+
     SCB_CleanInvalidateDCache();
     SCB_InvalidateICache();
     SCB_DisableDCache();
@@ -447,6 +454,10 @@ bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_
 
     HAL_FLASH_Unlock();
     __HAL_FLASH_SET_PSIZE(FLASH_PSIZE_DOUBLE_WORD, FLASH_BANK_2);
+
+    // drop a completion left over from an earlier operation
+    (void)xSemaphoreTake(xFlashDoneSem, 0U);
+    flash_op_failed = false;
 
     FLASH_EraseInitTypeDef ei = {
         .TypeErase    = FLASH_TYPEERASE_SECTORS,
@@ -458,8 +469,8 @@ bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_
 
     if (HAL_FLASHEx_Erase_IT(&ei) == HAL_OK)
     {
-        xSemaphoreTake(xFlashDoneSem, portMAX_DELAY);
-        result = true;
+        bool const done = xSemaphoreTake(xFlashDoneSem, pdMS_TO_TICKS(UNI_HAL_FLASH_ERASE_TIMEOUT_MS)) == pdTRUE;
+        result = done && !flash_op_failed;
     }
 
     HAL_FLASH_Lock();
