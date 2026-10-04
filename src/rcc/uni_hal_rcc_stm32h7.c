@@ -1236,9 +1236,13 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) { //-V2008
 uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
     uint32_t result = 0U;
     switch (target) {
-        case UNI_HAL_CORE_PERIPH_SYSCLK:
-            result = uni_hal_rcc_stm32h7_clk_get_hclk();
+        case UNI_HAL_CORE_PERIPH_SYSCLK: {
+            // HCLK is available from uni_hal_rcc_stm32h7_clk_get_hclk()
+            LL_RCC_ClocksTypeDef clocks;
+            LL_RCC_GetSystemClocksFreq(&clocks);
+            result = clocks.SYSCLK_Frequency;
             break;
+        }
         case UNI_HAL_CORE_PERIPH_SPI_1:
         case UNI_HAL_CORE_PERIPH_SPI_2:
         case UNI_HAL_CORE_PERIPH_SPI_3:
