@@ -161,6 +161,16 @@ bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx);
 bool uni_hal_i2c_reset(uni_hal_i2c_context_t *ctx);
 
 /**
+ * Free a bus that a slave holds: SDA stuck low after a transfer was cut short, e.g. by a reset
+ * of the master. The peripheral is shut down, up to nine clocks and a STOP condition are sent
+ * on the pins as GPIO, then the interface is initialised again.
+ * Blocks for about 1 ms.
+ * @param ctx pointer to the interface context
+ * @return true when both lines are high afterwards and the interface is initialised again
+ */
+bool uni_hal_i2c_recover(uni_hal_i2c_context_t *ctx);
+
+/**
  * Check if target device is ready for communication
  * @param ctx pointer to interface context
  * @param dev_addr target device address

@@ -6,6 +6,8 @@
 #include <stddef.h>
 
 // uni_hal
+#include "dwt/uni_hal_dwt.h"
+#include "gpio/uni_hal_gpio.h"
 #include "i2c/uni_hal_i2c.h"
 
 
@@ -31,6 +33,82 @@ bool uni_hal_i2c_reset(uni_hal_i2c_context_t *ctx) {
     }
 
     return result;
+}
+
+
+
+//
+// Bus recovery
+//
+
+enum {
+    /** half period of the recovery clock: 10 kHz, slow enough for any pull-up */
+    UNI_HAL_I2C_RECOVER_HALF_PERIOD_US = 50U,
+    /** a slave stuck in the middle of a byte lets go of SDA within nine clocks */
+    UNI_HAL_I2C_RECOVER_CLOCKS = 9U,
+};
+
+bool uni_hal_i2c_recover(uni_hal_i2c_context_t *ctx) {
+    if (ctx == NULL || ctx->config.pin_sck == NULL || ctx->config.pin_sda == NULL) {
+        return false;
+    }
+
+    uni_hal_gpio_pin_context_t *const scl = ctx->config.pin_sck;
+    uni_hal_gpio_pin_context_t *const sda = ctx->config.pin_sda;
+
+    if (!uni_hal_dwt_is_inited()) {
+        (void)uni_hal_dwt_init();
+    }
+
+    // take the peripheral off the bus and drive the lines as plain open-drain outputs
+    (void)uni_hal_i2c_deinit(ctx);
+
+    uni_hal_gpio_type_e const scl_type = scl->gpio_type;
+    uni_hal_gpio_type_e const sda_type = sda->gpio_type;
+    bool const scl_level = scl->gpio_init;
+    bool const sda_level = sda->gpio_init;
+
+    (void)uni_hal_gpio_pin_deinit(scl);
+    (void)uni_hal_gpio_pin_deinit(sda);
+    scl->gpio_type = UNI_HAL_GPIO_TYPE_OUT_OD;
+    sda->gpio_type = UNI_HAL_GPIO_TYPE_OUT_OD;
+    scl->gpio_init = true;
+    sda->gpio_init = true;
+    bool result = uni_hal_gpio_pin_init(scl);
+    result = uni_hal_gpio_pin_init(sda) && result;
+
+    if (result) {
+        // clock the slave until it releases SDA
+        for (uint32_t idx = 0U; idx < UNI_HAL_I2C_RECOVER_CLOCKS && !uni_hal_gpio_pin_get(sda); idx++) {
+            uni_hal_gpio_pin_set(scl, false);
+            uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+            uni_hal_gpio_pin_set(scl, true);
+            uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+        }
+
+        // STOP condition: SDA rises while SCL is high
+        uni_hal_gpio_pin_set(scl, false);
+        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+        uni_hal_gpio_pin_set(sda, false);
+        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+        uni_hal_gpio_pin_set(scl, true);
+        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+        uni_hal_gpio_pin_set(sda, true);
+        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+
+        // the bus is free when both lines are high with nobody driving them
+        result = uni_hal_gpio_pin_get(scl) && uni_hal_gpio_pin_get(sda);
+    }
+
+    // hand the pins back to the peripheral
+    (void)uni_hal_gpio_pin_deinit(scl);
+    (void)uni_hal_gpio_pin_deinit(sda);
+    scl->gpio_type = scl_type;
+    sda->gpio_type = sda_type;
+    scl->gpio_init = scl_level;
+    sda->gpio_init = sda_level;
+
+    return uni_hal_i2c_init(ctx) && result;
 }
 
 
