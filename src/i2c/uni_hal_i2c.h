@@ -58,6 +58,12 @@ typedef struct {
     uni_hal_i2c_speed_e speed;
 
     /**
+     * Raw value of the I2C_TIMINGR register, for a bus that needs a timing none of the standard
+     * speeds gives. 0 means: compute the timing for `speed` from the kernel clock.
+     */
+    uint32_t timing;
+
+    /**
      * SCK pin
      */
     uni_hal_gpio_pin_context_t *pin_sck;
@@ -123,6 +129,15 @@ typedef struct {
  * @return true on success
  */
 bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx);
+
+/**
+ * Compute the I2C_TIMINGR value of the STM32 I2C peripheral (analog filter on, digital filter off)
+ * @param clock_hz frequency of the I2C kernel clock
+ * @param speed bus speed
+ * @return register value; 0 when the clock is too slow for this speed
+ * @note the bus never runs faster than `speed`; it runs slower by what the SCL edges take
+ */
+uint32_t uni_hal_i2c_timing_calc(uint32_t clock_hz, uni_hal_i2c_speed_e speed);
 
 /**
  * Checks taht I2C interface was properly inited

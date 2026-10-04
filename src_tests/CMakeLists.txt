@@ -47,3 +47,4 @@ endfunction()
 
 #uni_hal_add_test(io)
 uni_hal_add_test(dwt)
+uni_hal_add_test(i2c)
