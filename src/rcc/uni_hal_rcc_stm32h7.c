@@ -409,6 +409,24 @@ static bool _uni_hal_stm_rcc_pll_reset(void){
 }
 
 /**
+ * Get the M divider for the clock source that actually feeds the PLLs.
+ * The configured dividers are written for HSE. With HSI or CSI as the source M is scaled by
+ * source/HSE, so that the PLL reference frequency and with it every PLL output stays the same.
+ * @param pll_m configured M divider
+ * @param source_hz frequency of the PLL clock source
+ * @return M divider, 0 when the reference frequency cannot be reproduced from this source
+ */
+static uint32_t _uni_hal_stm_rcc_pll_get_m(uint32_t pll_m, uint32_t source_hz) {
+    uint64_t const scaled = (uint64_t)pll_m * (uint64_t)source_hz;
+    if ((pll_m == 0U) || ((scaled % (uint64_t)HSE_VALUE) != 0U)) {
+        return 0U;
+    }
+
+    uint64_t const result = scaled / (uint64_t)HSE_VALUE;
+    return (result > 63U) ? 0U : (uint32_t)result;
+}
+
+/**
  * Configure phase locked loops
  * @param ctx RCC context
  * @return true on success
@@ -416,7 +434,6 @@ static bool _uni_hal_stm_rcc_pll_reset(void){
 static bool _uni_hal_stm_rcc_pll(void) {
     uint32_t clock_source = LL_RCC_PLLSOURCE_HSI;
     uint32_t source_hz = HSI_VALUE;
-    uint32_t pll_division = 1U;
 
     if (g_uni_hal_rcc_status.hse_inited) {
         clock_source = LL_RCC_PLLSOURCE_HSE;
@@ -429,7 +446,6 @@ static bool _uni_hal_stm_rcc_pll(void) {
     else if (g_uni_hal_rcc_status.hsi_inited) {
         clock_source = LL_RCC_PLLSOURCE_HSI;
         source_hz = HSI_VALUE;
-        pll_division = HSI_VALUE / HSE_VALUE;
     }
     else {
         return false;
@@ -445,8 +461,8 @@ static bool _uni_hal_stm_rcc_pll(void) {
 
     // PLL1
     {
-        uint32_t const pll_m = g_uni_hal_rcc_config->pll[0].m;
-        if ((pll_m == 0U) || (pll_m > 63U)) {
+        uint32_t const pll_m = _uni_hal_stm_rcc_pll_get_m(g_uni_hal_rcc_config->pll[0].m, source_hz);
+        if (pll_m == 0U) {
             g_uni_hal_rcc_status.pll_inited[0] = false;
             result = false;
         }
@@ -468,7 +484,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
 
             LL_RCC_PLL1_SetVCOInputRange(pll_input_range);
             LL_RCC_PLL1_SetVCOOutputRange(LL_RCC_PLLVCORANGE_WIDE);
-            LL_RCC_PLL1_SetM(pll_m * pll_division);
+            LL_RCC_PLL1_SetM(pll_m);
             LL_RCC_PLL1_SetN(g_uni_hal_rcc_config->pll[0].n);
 
             if (g_uni_hal_rcc_config->pll[0].fracn != 0U) {
@@ -504,8 +520,8 @@ static bool _uni_hal_stm_rcc_pll(void) {
         }
 
         if (start_pll_2) {
-            uint32_t const pll_m = g_uni_hal_rcc_config->pll[1].m;
-            if ((pll_m == 0U) || (pll_m > 63U)) {
+            uint32_t const pll_m = _uni_hal_stm_rcc_pll_get_m(g_uni_hal_rcc_config->pll[1].m, source_hz);
+            if (pll_m == 0U) {
                 g_uni_hal_rcc_status.pll_inited[1] = false;
                 result = false;
             }
@@ -514,7 +530,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
 
                 LL_RCC_PLL2_SetVCOInputRange(pll_input_range);
                 LL_RCC_PLL2_SetVCOOutputRange(LL_RCC_PLLVCORANGE_WIDE);
-                LL_RCC_PLL2_SetM(pll_m * pll_division);
+                LL_RCC_PLL2_SetM(pll_m);
                 LL_RCC_PLL2_SetN(g_uni_hal_rcc_config->pll[1].n);
 
                 if (g_uni_hal_rcc_config->pll[1].fracn != 0U) {
@@ -554,8 +570,8 @@ static bool _uni_hal_stm_rcc_pll(void) {
         }
 
         if (start_pll_3) {
-            uint32_t const pll_m = g_uni_hal_rcc_config->pll[2].m;
-            if ((pll_m == 0U) || (pll_m > 63U)) {
+            uint32_t const pll_m = _uni_hal_stm_rcc_pll_get_m(g_uni_hal_rcc_config->pll[2].m, source_hz);
+            if (pll_m == 0U) {
                 g_uni_hal_rcc_status.pll_inited[2] = false;
                 result = false;
             }
@@ -564,7 +580,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
 
                 LL_RCC_PLL3_SetVCOInputRange(pll_input_range);
                 LL_RCC_PLL3_SetVCOOutputRange(LL_RCC_PLLVCORANGE_WIDE);
-                LL_RCC_PLL3_SetM(pll_m * pll_division);
+                LL_RCC_PLL3_SetM(pll_m);
                 LL_RCC_PLL3_SetN(g_uni_hal_rcc_config->pll[2].n);
 
                 if (g_uni_hal_rcc_config->pll[2].fracn != 0U) {
