@@ -1009,6 +1009,10 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
             case UNI_HAL_CORE_PERIPH_SYSCLK:
                 result = _uni_hal_rcc_get_hclk_freq();
                 break;
+            case UNI_HAL_CORE_PERIPH_CAN_1:
+            case UNI_HAL_CORE_PERIPH_CAN_2:
+                result = _uni_hal_rcc_get_pclk1_freq();
+                break;
             case UNI_HAL_CORE_PERIPH_I2C_1:
                 result = LL_RCC_GetI2CClockFreq(LL_RCC_I2C1_CLKSOURCE);
                 break;

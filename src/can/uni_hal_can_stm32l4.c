@@ -233,19 +233,26 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         CAN_HandleTypeDef *instance_hal = _uni_hal_can_get_handle_hal(ctx->config.instance);
         CAN_TypeDef *instance = _uni_hal_can_get_handle(ctx->config.instance);
         if (result && instance != NULL && instance_hal != NULL) {
+            // the former fixed timing, used when no bit rate is configured
+            uni_hal_can_timing_t timing = {.prescaler = 10U, .bs1 = 8U, .bs2 = 1U, .sjw = 1U};
+            if (ctx->config.bitrate != 0U) {
+                result = uni_hal_can_timing_calc(uni_hal_rcc_clk_get_freq(ctx->config.instance), ctx->config.bitrate,
+                                                 &timing);
+            }
+
             instance_hal->Instance = instance;
-            instance_hal->Init.Prescaler = 10;
+            instance_hal->Init.Prescaler = timing.prescaler;
             instance_hal->Init.Mode = CAN_MODE_NORMAL;
-            instance_hal->Init.SyncJumpWidth = CAN_SJW_1TQ;
-            instance_hal->Init.TimeSeg1 = CAN_BS1_8TQ;
-            instance_hal->Init.TimeSeg2 = CAN_BS2_1TQ;
+            instance_hal->Init.SyncJumpWidth = (timing.sjw - 1U) << CAN_BTR_SJW_Pos;
+            instance_hal->Init.TimeSeg1 = (timing.bs1 - 1U) << CAN_BTR_TS1_Pos;
+            instance_hal->Init.TimeSeg2 = (timing.bs2 - 1U) << CAN_BTR_TS2_Pos;
             instance_hal->Init.TimeTriggeredMode = DISABLE;
-            instance_hal->Init.AutoBusOff = DISABLE;
-            instance_hal->Init.AutoWakeUp = DISABLE;
-            instance_hal->Init.AutoRetransmission = DISABLE;
+            instance_hal->Init.AutoBusOff = ctx->config.auto_bus_off ? ENABLE : DISABLE;
+            instance_hal->Init.AutoWakeUp = ctx->config.auto_wake_up ? ENABLE : DISABLE;
+            instance_hal->Init.AutoRetransmission = ctx->config.auto_retransmission ? ENABLE : DISABLE;
             instance_hal->Init.ReceiveFifoLocked = DISABLE;
-            instance_hal->Init.TransmitFifoPriority = DISABLE;
-            result = HAL_CAN_Init(instance_hal) == HAL_OK;
+            instance_hal->Init.TransmitFifoPriority = ctx->config.tx_fifo_priority ? ENABLE : DISABLE;
+            result = result && (HAL_CAN_Init(instance_hal) == HAL_OK);
             ctx->status.count_rx = 0U;
             ctx->status.count_tx = 0U;
             ctx->status.count_err = 0U;
