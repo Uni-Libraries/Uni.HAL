@@ -100,6 +100,17 @@ void CAN2_RX1_IRQHandler(void)
 #endif
 }
 
+// status change / error
+void CAN1_SCE_IRQHandler(void)
+{
+    HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
+}
+
+void CAN2_SCE_IRQHandler(void)
+{
+    HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
+}
+
 
 //
 // Private functions
@@ -119,6 +130,9 @@ bool _uni_hal_can_interrupt_enable(uni_hal_core_periph_e instance, uint32_t prio
 
         NVIC_SetPriority(CAN1_RX1_IRQn, priority);
         NVIC_EnableIRQ(CAN1_RX1_IRQn);
+
+        NVIC_SetPriority(CAN1_SCE_IRQn, priority);
+        NVIC_EnableIRQ(CAN1_SCE_IRQn);
         result = true;
         break;
     case UNI_HAL_CORE_PERIPH_CAN_2:
@@ -127,6 +141,9 @@ bool _uni_hal_can_interrupt_enable(uni_hal_core_periph_e instance, uint32_t prio
 
         NVIC_SetPriority(CAN2_RX1_IRQn, priority);
         NVIC_EnableIRQ(CAN2_RX1_IRQn);
+
+        NVIC_SetPriority(CAN2_SCE_IRQn, priority);
+        NVIC_EnableIRQ(CAN2_SCE_IRQn);
         result = true;
         break;
     default:
@@ -253,9 +270,20 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             instance_hal->Init.ReceiveFifoLocked = DISABLE;
             instance_hal->Init.TransmitFifoPriority = ctx->config.tx_fifo_priority ? ENABLE : DISABLE;
             result = result && (HAL_CAN_Init(instance_hal) == HAL_OK);
+            // Report the changes of the error state and lost frames. The per-frame error code
+            // interrupt (LEC) is left off: on a bus without a partner it would fire for every
+            // retransmission.
+            if (result) {
+                result = HAL_CAN_ActivateNotification(instance_hal, CAN_IT_ERROR | CAN_IT_ERROR_WARNING |
+                                                      CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF |
+                                                      CAN_IT_RX_FIFO0_OVERRUN | CAN_IT_RX_FIFO1_OVERRUN) == HAL_OK;
+            }
+
             ctx->status.count_rx = 0U;
             ctx->status.count_tx = 0U;
             ctx->status.count_err = 0U;
+            ctx->status.count_rx_dropped = 0U;
+            ctx->status.errors = UNI_HAL_CAN_ERROR_NONE;
             ctx->status.inited = result;
         }
     }
@@ -380,19 +408,40 @@ static void _uni_hal_can_callback_msgpending(uni_hal_can_context_t *ctx, uint32_
             msg.dlc = rx_header.DLC;
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
-            xQueueSendFromISR(ctx->status.queue_rx, &msg, &_uni_hal_can_irq_wake);
+            bool const queued = xQueueSendFromISR(ctx->status.queue_rx, &msg, &_uni_hal_can_irq_wake) == pdPASS;
 #else
-            uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U);
+            bool const queued = uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U) == 1U;
 #endif
 
-            ctx->status.count_rx++;
+            if (queued) {
+                ctx->status.count_rx++;
+            }
+            else {
+                ctx->status.count_rx_dropped++;
+            }
         }
     }
 }
 
-static void _uni_hal_can_callback_error(uni_hal_can_context_t *ctx) {
+static void _uni_hal_can_callback_error(uni_hal_can_context_t *ctx, CAN_HandleTypeDef *hcan) {
+    uint32_t const hal_errors = HAL_CAN_GetError(hcan);
+    (void)HAL_CAN_ResetError(hcan);
+
     if (ctx != NULL) {
         ctx->status.count_err++;
+
+        if ((hal_errors & HAL_CAN_ERROR_EWG) != 0U) {
+            ctx->status.errors |= UNI_HAL_CAN_ERROR_WARNING;
+        }
+        if ((hal_errors & HAL_CAN_ERROR_EPV) != 0U) {
+            ctx->status.errors |= UNI_HAL_CAN_ERROR_PASSIVE;
+        }
+        if ((hal_errors & HAL_CAN_ERROR_BOF) != 0U) {
+            ctx->status.errors |= UNI_HAL_CAN_ERROR_BUS_OFF;
+        }
+        if ((hal_errors & (HAL_CAN_ERROR_RX_FOV0 | HAL_CAN_ERROR_RX_FOV1)) != 0U) {
+            ctx->status.errors |= UNI_HAL_CAN_ERROR_RX_OVERRUN;
+        }
     }
 }
 
@@ -407,4 +456,4 @@ void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 }
 
 
-void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan) { _uni_hal_can_callback_error(_uni_hal_can_get_context(hcan)); }
+void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan) { _uni_hal_can_callback_error(_uni_hal_can_get_context(hcan), hcan); }

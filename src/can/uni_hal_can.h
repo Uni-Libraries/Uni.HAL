@@ -98,6 +98,22 @@ typedef struct
 
 
 /**
+ * CAN bus errors, combined as bits in uni_hal_can_status_t::errors
+ */
+typedef enum {
+    UNI_HAL_CAN_ERROR_NONE       = 0,
+    /** an error counter reached the warning limit (96) */
+    UNI_HAL_CAN_ERROR_WARNING    = 1 << 0,
+    /** the node is error passive (an error counter above 127) */
+    UNI_HAL_CAN_ERROR_PASSIVE    = 1 << 1,
+    /** the node went bus-off */
+    UNI_HAL_CAN_ERROR_BUS_OFF    = 1 << 2,
+    /** a hardware receive FIFO overflowed and a frame was lost */
+    UNI_HAL_CAN_ERROR_RX_OVERRUN = 1 << 3,
+} uni_hal_can_error_e;
+
+
+/**
  * CAN status
  */
 typedef struct {
@@ -107,6 +123,17 @@ typedef struct {
     uint32_t count_tx;
 
     uint32_t count_err;
+
+    /**
+     * Received frames that were dropped because the receive queue was full
+     */
+    uint32_t count_rx_dropped;
+
+    /**
+     * Bus errors seen since the initialisation, bits of uni_hal_can_error_e.
+     * The application may clear the field after reading it.
+     */
+    uint32_t errors;
 
     bool inited;
 
