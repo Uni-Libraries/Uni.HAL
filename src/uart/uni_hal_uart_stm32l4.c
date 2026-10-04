@@ -19,6 +19,7 @@
 #include "core/uni_hal_core.h"
 #include "io/uni_hal_io_tunnel.h"
 #include "rcc/uni_hal_rcc.h"
+#include "systick/uni_hal_systick.h"
 #include "uart/uni_hal_uart.h"
 
 
@@ -64,6 +65,33 @@ static void* _uni_hal_uart_handle_get(uni_hal_core_periph_e instance) {
     }
     return result;
 }
+
+/**
+ * Longest wait for the transmitter and receiver to acknowledge that they are enabled
+ */
+#define UNI_HAL_USART_ENABLE_TIMEOUT_MS (100U)
+
+/**
+ * Wait until the directions that are switched on report being enabled
+ * @param handle USART or LPUART instance
+ * @return false when the peripheral did not come up in time, e.g. without a kernel clock
+ */
+static bool _uni_hal_usart_wait_enabled(const USART_TypeDef *handle) {
+    uint32_t const direction = LL_USART_GetTransferDirection(handle);
+    bool const wait_tx = (direction & LL_USART_DIRECTION_TX) != 0U;
+    bool const wait_rx = (direction & LL_USART_DIRECTION_RX) != 0U;
+
+    uint32_t const start_ms = uni_hal_systick_get_ms();
+    while ((wait_tx && LL_USART_IsActiveFlag_TEACK(handle) == 0U) ||
+           (wait_rx && LL_USART_IsActiveFlag_REACK(handle) == 0U)) {
+        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_USART_ENABLE_TIMEOUT_MS) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 
 /**
  * Enable NVIC interrupts
@@ -450,15 +478,13 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 if (handle == LPUART1)
                 {
                     LL_LPUART_Enable(handle);
-                    while ((!(LL_LPUART_IsActiveFlag_TEACK(handle))) ||
-                           (!(LL_LPUART_IsActiveFlag_REACK(handle)))) { }
+                    result = _uni_hal_usart_wait_enabled(handle);
                 }
                 else
                 {
                     LL_USART_ConfigAsyncMode(handle);
                     LL_USART_Enable(handle);
-                    while ((!(LL_USART_IsActiveFlag_TEACK(handle))) ||
-                           (!(LL_USART_IsActiveFlag_REACK(handle)))) { }
+                    result = _uni_hal_usart_wait_enabled(handle);
                 }
             }
         }
@@ -502,7 +528,7 @@ bool uni_hal_usart_baudrate_set(uni_hal_usart_context_t *ctx, uint32_t baudrate)
                 LL_LPUART_SetBaudRate(instance, uni_hal_rcc_clk_get_freq(ctx->instance), baudrate);
                 LL_LPUART_Enable(instance);
 
-                while ((!(LL_LPUART_IsActiveFlag_TEACK(instance))) || (!(LL_LPUART_IsActiveFlag_REACK(instance)))) {}
+                result = _uni_hal_usart_wait_enabled(instance);
             }
             else
             {
@@ -511,10 +537,8 @@ bool uni_hal_usart_baudrate_set(uni_hal_usart_context_t *ctx, uint32_t baudrate)
                                      LL_USART_GetOverSampling(instance), baudrate);
                 LL_USART_Enable(instance);
 
-                while ((!(LL_USART_IsActiveFlag_TEACK(instance))) || (!(LL_USART_IsActiveFlag_REACK(instance)))) {}
+                result = _uni_hal_usart_wait_enabled(instance);
             }
-
-            result = true;
         }
     }
 
