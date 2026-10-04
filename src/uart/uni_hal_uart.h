@@ -28,7 +28,10 @@ extern "C" {
 typedef enum {
     UNI_HAL_USART_CALLBACK_UNKNOWN = 0,
     UNI_HAL_USART_CALLBACK_TC      = 1,
-    UNI_HAL_USART_CALLBAKC_IDLE    = 2,
+    UNI_HAL_USART_CALLBACK_IDLE    = 2,
+
+    /** misspelt former name of UNI_HAL_USART_CALLBACK_IDLE, kept for existing callers */
+    UNI_HAL_USART_CALLBAKC_IDLE    = UNI_HAL_USART_CALLBACK_IDLE,
 } uni_hal_usart_callback_e;
 
 //

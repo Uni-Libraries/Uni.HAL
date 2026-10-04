@@ -312,7 +312,7 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
     if (LL_USART_IsEnabledIT_IDLE(dev_handle) && LL_USART_IsActiveFlag_IDLE(dev_handle)) {
         LL_USART_ClearFlag_IDLE(dev_handle);
         if (ctx->callback) {
-            if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBAKC_IDLE)) {
+            if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_IDLE)) {
                 higher_task_woken = pdTRUE;
             }
         }
