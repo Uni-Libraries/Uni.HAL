@@ -608,7 +608,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
 
 uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t channel) {
     uint16_t result = UINT16_MAX;
-    if (uni_hal_adc_is_inited(ctx)) {
+    if (uni_hal_adc_has_channel(ctx, channel)) {
         result = __LL_ADC_CALC_DATA_TO_VOLTAGE(ctx->config.v_ref, uni_hal_adc_get_channel_raw(ctx, channel), LL_ADC_RESOLUTION_16B);
     }
 
@@ -658,7 +658,8 @@ static int32_t _uni_hal_adc_calc_temperature(const uni_hal_adc_state_t *state,
 
 int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
     int32_t result = INT32_MAX;
-    if (uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
+    if (uni_hal_adc_has_channel(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR) &&
+        ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
         result = _uni_hal_adc_calc_temperature(&ctx->state,
                                                ctx->config.v_ref,
                                                uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR),
@@ -669,7 +670,8 @@ int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
 
 uint32_t uni_hal_adc_stm32h7_get_vdda(uni_hal_adc_context_t* ctx) {
     uint32_t result = UINT32_MAX;
-    if(uni_hal_adc_is_inited(ctx) && ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3 && ctx->state.cal.valid != false) {
+    if(uni_hal_adc_has_channel(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT) &&
+       ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3 && ctx->state.cal.valid != false) {
         const uint16_t vrefint_raw = uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT);
         if (vrefint_raw != 0U) {
             result = (3300U * ctx->state.cal.vref_int) / (uint32_t)vrefint_raw;

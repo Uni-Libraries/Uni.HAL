@@ -550,8 +550,8 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
 
 
 uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t channel) {
-    uint32_t result = 0U;
-    if (uni_hal_adc_is_inited(ctx)) {
+    uint32_t result = UINT16_MAX;
+    if (uni_hal_adc_has_channel(ctx, channel)) {
         result = __LL_ADC_CALC_DATA_TO_VOLTAGE(ctx->config.v_ref, uni_hal_adc_get_channel_raw(ctx, channel), LL_ADC_RESOLUTION_12B);
     }
 

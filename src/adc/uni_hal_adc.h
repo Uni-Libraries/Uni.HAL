@@ -60,6 +60,16 @@ uint16_t uni_hal_adc_get_rank_raw(const uni_hal_adc_context_t *ctx, uint32_t ran
 uint16_t uni_hal_adc_get_channel_raw(const uni_hal_adc_context_t *ctx, uint32_t channel);
 
 /**
+ * Check that a channel is part of the conversion sequence of this ADC.
+ * The getters return UINT16_MAX for a channel that is not, which on a 16-bit ADC is also a
+ * valid full-scale sample; this tells the two apart.
+ * @param ctx pointer to the ADC context
+ * @param channel channel number
+ * @return true when the channel is converted by this ADC
+ */
+bool uni_hal_adc_has_channel(const uni_hal_adc_context_t *ctx, uint32_t channel);
+
+/**
  * Get ADC value in millivolts
  * @param ctx ADC context
  * @param channel ADC channel
