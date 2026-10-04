@@ -528,9 +528,12 @@ bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx, un
                     EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING_FALLING;
                     break;
             }
-            LL_EXTI_Init(&EXTI_InitStruct);
-            LL_EXTI_EnableIT_0_31(exti_line);
+            // route the line to this port first, and drop whatever the previously selected
+            // port has latched, so that the interrupt does not fire for a stale edge
             LL_SYSCFG_SetEXTISource(exti_port, exti_line_syscfg);
+            LL_EXTI_Init(&EXTI_InitStruct);
+            LL_EXTI_ClearFlag_0_31(exti_line);
+            LL_EXTI_EnableIT_0_31(exti_line);
             uni_hal_core_irq_enable(exti_irqn, UNI_HAL_GPIO_IT_PRIORITY, 0);
             result = true;
         }
