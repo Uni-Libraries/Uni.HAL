@@ -347,20 +347,69 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
 }
 
 
+/**
+ * Put a frame into a free TX mailbox
+ * @param ctx CAN context, must be initialised
+ * @param msg frame to send
+ * @param tx_mailbox receives the mailbox the frame went into
+ * @return false when all mailboxes are taken or the peripheral is not started
+ */
+static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg_t *msg, uint32_t *tx_mailbox) {
+    CAN_TxHeaderTypeDef tx_msg_header = {.StdId = msg->standard_id ? msg->id : 0U,
+            .ExtId = msg->standard_id ? 0U : msg->id,
+            .IDE = msg->standard_id ? CAN_ID_STD : CAN_ID_EXT,
+            .RTR = CAN_RTR_DATA,
+            .DLC = msg->dlc,
+            .TransmitGlobalTime = DISABLE};
+
+    CAN_HandleTypeDef* instance = _uni_hal_can_get_handle_hal(ctx->config.instance);
+    return instance != NULL && HAL_CAN_AddTxMessage(instance, &tx_msg_header, msg->data, tx_mailbox) == HAL_OK;
+}
+
+
+uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
+    uint32_t result = 0U;
+    if (uni_hal_can_is_inited(ctx)) {
+        result = HAL_CAN_GetTxMailboxesFreeLevel(_uni_hal_can_get_handle_hal(ctx->config.instance));
+    }
+    return result;
+}
+
+
+bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_msg_t *msg) {
+    bool result = false;
+
+    if (uni_hal_can_is_inited(ctx) && msg != NULL) {
+        uint32_t tx_mailbox = 0U;
+        result = _uni_hal_can_queue(ctx, msg, &tx_mailbox);
+        if (result) {
+            // counted when queued: the outcome of the frame is not followed up here
+            ctx->status.count_tx++;
+        }
+    }
+
+    return result;
+}
+
+
+bool uni_hal_can_transmit_abort(uni_hal_can_context_t *ctx) {
+    bool result = false;
+    if (uni_hal_can_is_inited(ctx)) {
+        result = HAL_CAN_AbortTxRequest(_uni_hal_can_get_handle_hal(ctx->config.instance),
+                                        CAN_TX_MAILBOX0 | CAN_TX_MAILBOX1 | CAN_TX_MAILBOX2) == HAL_OK;
+    }
+    return result;
+}
+
+
 bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
     bool result = false;
 
     if (uni_hal_can_is_inited(ctx) && msg != NULL) {
-        CAN_TxHeaderTypeDef tx_msg_header = {.StdId = msg->standard_id ? msg->id : 0U,
-                .ExtId = msg->standard_id ? 0U : msg->id,
-                .IDE = msg->standard_id ? CAN_ID_STD : CAN_ID_EXT,
-                .RTR = CAN_RTR_DATA,
-                .DLC = msg->dlc,
-                .TransmitGlobalTime = DISABLE};
         uint32_t tx_mailbox = 0;
 
         CAN_HandleTypeDef* instance = _uni_hal_can_get_handle_hal(ctx->config.instance);
-        if(instance != NULL && HAL_CAN_AddTxMessage(instance, &tx_msg_header, msg->data, &tx_mailbox) == HAL_OK) {
+        if(_uni_hal_can_queue(ctx, msg, &tx_mailbox)) {
             // wait until the mailbox is done with the frame; in bus-off it never is
             uint32_t const start_ms = uni_hal_systick_get_ms();
             bool timed_out = false;

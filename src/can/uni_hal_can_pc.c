@@ -66,3 +66,19 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg){
     }
     return result;
 }
+
+
+bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_msg_t *msg) {
+    (void)msg;
+    return uni_hal_can_is_inited(ctx);
+}
+
+
+uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
+    return uni_hal_can_is_inited(ctx) ? 3U : 0U;
+}
+
+
+bool uni_hal_can_transmit_abort(uni_hal_can_context_t *ctx) {
+    return uni_hal_can_is_inited(ctx);
+}

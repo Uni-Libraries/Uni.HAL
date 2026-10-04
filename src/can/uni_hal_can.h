@@ -214,7 +214,35 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
 
 bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, size_t timeout_ms);
 
+/**
+ * Send a frame and wait until it has left its mailbox
+ * @param ctx CAN context
+ * @param msg frame to send
+ * @return true when the frame was transmitted and acknowledged
+ */
 bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg);
+
+/**
+ * Queue a frame for transmission and return at once
+ * @param ctx CAN context
+ * @param msg frame to send
+ * @return false when no TX mailbox is free, see uni_hal_can_transmit_free()
+ */
+bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_msg_t *msg);
+
+/**
+ * Get the number of free TX mailboxes
+ * @param ctx CAN context
+ * @return 0..3
+ */
+uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx);
+
+/**
+ * Drop every frame that is still waiting in a TX mailbox, e.g. after the bus went away
+ * @param ctx CAN context
+ * @return true on success
+ */
+bool uni_hal_can_transmit_abort(uni_hal_can_context_t *ctx);
 
 #if defined(__cplusplus)
 }
