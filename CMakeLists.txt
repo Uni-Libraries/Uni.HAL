@@ -11,7 +11,8 @@ project(uni.hal LANGUAGES C CXX ASM)
 # Options
 #
 
-option(UNI_HAL_TARGET_MCU       "Target MCU"                  "")
+set(UNI_HAL_TARGET_MCU "" CACHE STRING "Target MCU: STM32H743, STM32L496 or PC")
+set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 PC)
 option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
 option(UNI_HAL_I2C_USE_FREERTOS "use FreeRTOS for I2C driver" ON)
 if(NOT DEFINED UNI_HAL_HSE_VALUE)
