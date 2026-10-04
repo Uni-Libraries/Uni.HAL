@@ -132,18 +132,11 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
                 if(result) {
                     handle_hal->Instance = handle;
 
-                    switch(ctx->config.speed) {
-                    case UNI_HAL_I2C_SPEED_400KHZ:
-                        handle_hal->Init.Timing = 0x009034B6;
-                        break;
-                    case UNI_HAL_I2C_SPEED_1MHZ:
-                        handle_hal->Init.Timing = 0x00401242;
-                        break;
-                    case UNI_HAL_I2C_SPEED_100KHZ:
-                    default:
-                        handle_hal->Init.Timing = 0x10C0ECFF;
-                        break;
-                    }
+                    // the timing depends on the clock that feeds the peripheral, so it is computed from it
+                    handle_hal->Init.Timing = ctx->config.timing != 0U
+                            ? ctx->config.timing
+                            : uni_hal_i2c_timing_calc(uni_hal_rcc_clk_get_freq(ctx->config.instance), ctx->config.speed);
+                    result = handle_hal->Init.Timing != 0U;
 
                     handle_hal->Init.OwnAddress1 = 0;
                     handle_hal->Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -152,7 +145,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
                     handle_hal->Init.OwnAddress2Masks = I2C_OA2_NOMASK;
                     handle_hal->Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
                     handle_hal->Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-                    result = HAL_I2C_Init(handle_hal) == HAL_OK;
+                    result = result && (HAL_I2C_Init(handle_hal) == HAL_OK);
 
                     if(result) {
                         result = HAL_I2CEx_ConfigAnalogFilter(handle_hal, I2C_ANALOGFILTER_ENABLE) == HAL_OK;
