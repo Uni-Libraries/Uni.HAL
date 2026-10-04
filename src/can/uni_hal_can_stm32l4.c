@@ -221,6 +221,11 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
 #endif
 
         result = result && uni_hal_rcc_clk_set(ctx->config.instance, true);
+
+        // CAN2 is the slave of CAN1: its acceptance filters live in the CAN1 registers
+        if (ctx->config.instance == UNI_HAL_CORE_PERIPH_CAN_2) {
+            result = result && uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_CAN_1, true);
+        }
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_rx);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_tx);
         result = result && _uni_hal_can_interrupt_enable(ctx->config.instance, 4U);
