@@ -13,6 +13,7 @@
 // uni_hal
 #include "can/uni_hal_can.h"
 #include "rcc/uni_hal_rcc.h"
+#include "systick/uni_hal_systick.h"
 
 
 
@@ -27,6 +28,16 @@ static uni_hal_can_context_t *_uni_hal_can_1_ctx = NULL;
 static uni_hal_can_context_t *_uni_hal_can_2_ctx = NULL;
 
 static BaseType_t _uni_hal_can_irq_wake = false;
+
+
+//
+// Defines
+//
+
+/**
+ * Longest wait for one frame to leave its TX mailbox
+ */
+#define UNI_HAL_CAN_TX_TIMEOUT_MS (100U)
 
 
 //
@@ -300,14 +311,42 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
         uint32_t tx_mailbox = 0;
 
         CAN_HandleTypeDef* instance = _uni_hal_can_get_handle_hal(ctx->config.instance);
-        if(instance != NULL) {
-            HAL_CAN_AddTxMessage(instance, &tx_msg_header, msg->data, &tx_mailbox);
+        if(instance != NULL && HAL_CAN_AddTxMessage(instance, &tx_msg_header, msg->data, &tx_mailbox) == HAL_OK) {
+            // wait until the mailbox is done with the frame; in bus-off it never is
+            uint32_t const start_ms = uni_hal_systick_get_ms();
+            bool timed_out = false;
             while (HAL_CAN_IsTxMessagePending(instance, tx_mailbox)) {
-            } // TODO: implement timeout
-            ctx->status.count_tx++;
+                if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_TX_TIMEOUT_MS) {
+                    (void)HAL_CAN_AbortTxRequest(instance, tx_mailbox);
+                    timed_out = true;
+                    break;
+                }
+            }
+
+            // the request also completes when the frame was lost (error, arbitration): check TXOK
+            uint32_t txok_mask = 0U;
+            switch (tx_mailbox) {
+            case CAN_TX_MAILBOX0:
+                txok_mask = CAN_TSR_TXOK0;
+                break;
+            case CAN_TX_MAILBOX1:
+                txok_mask = CAN_TSR_TXOK1;
+                break;
+            case CAN_TX_MAILBOX2:
+                txok_mask = CAN_TSR_TXOK2;
+                break;
+            default:
+                break;
+            }
+            result = !timed_out && (instance->Instance->TSR & txok_mask) != 0U;
         }
 
-        result = true;
+        if (result) {
+            ctx->status.count_tx++;
+        }
+        else {
+            ctx->status.count_err++;
+        }
     }
 
     return result;
