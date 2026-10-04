@@ -405,12 +405,15 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
 
         void* handle = _uni_hal_uart_handle_get(ctx->instance);
 
+        // 115200 is what the driver used before the field was honoured, keep it for a zeroed context
+        uint32_t const baudrate = ctx->baudrate != 0U ? ctx->baudrate : 115200U;
+
         if(result && handle != NULL) {
             // init
             if (handle == LPUART1)
             {
                 LL_LPUART_InitTypeDef LPUART_InitStruct = {0};
-                LPUART_InitStruct.BaudRate = 115200;
+                LPUART_InitStruct.BaudRate = baudrate;
                 LPUART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
                 LPUART_InitStruct.StopBits = LL_USART_STOPBITS_1;
                 LPUART_InitStruct.Parity = LL_USART_PARITY_NONE;
@@ -421,7 +424,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
             else
             {
                 LL_USART_InitTypeDef USART_InitStruct = {0};
-                USART_InitStruct.BaudRate = 115200;
+                USART_InitStruct.BaudRate = baudrate;
                 USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
                 USART_InitStruct.StopBits = LL_USART_STOPBITS_1;
                 USART_InitStruct.Parity = LL_USART_PARITY_NONE;
