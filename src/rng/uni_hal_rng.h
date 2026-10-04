@@ -69,7 +69,7 @@ uint16_t uni_hal_rng_get_16u(uni_hal_rng_context_t *ctx);
 /**
  * Receives four bytes of random values
  * @param ctx pointer to the RNG context
- * @return random value
+ * @return random value, 0 when the generator does not deliver one in time
  */
 uint32_t uni_hal_rng_get_32u(uni_hal_rng_context_t *ctx);
 
@@ -78,6 +78,6 @@ uint32_t uni_hal_rng_get_32u(uni_hal_rng_context_t *ctx);
  * @param ctx pointer to the RNG context
  * @param buf pointer to the buffer which should be filled with random values
  * @param buf_len buffer size
- * @return true on success
+ * @return true on success, false when the generator does not deliver in time
  */
 bool uni_hal_rng_get(uni_hal_rng_context_t *ctx, uint8_t *buf, size_t buf_len);

@@ -10,9 +10,13 @@
 #include <stm32l496xx.h>
 #include <stm32l4xx_ll_rng.h>
 
+// Uni.Common
+#include <uni_common.h>
+
 // Uni.HAL
 #include "rcc/uni_hal_rcc.h"
 #include "rng/uni_hal_rng.h"
+#include "systick/uni_hal_systick.h"
 
 
 //
@@ -35,6 +39,47 @@ static RNG_TypeDef *_uni_hal_rng_get_instance(uni_hal_core_periph_e instance) {
     }
     return result;
 }
+
+
+enum {
+    /** longest wait for one random word */
+    UNI_HAL_RNG_TIMEOUT_MS = 100U,
+};
+
+/**
+ * Read one random word once the generator has it ready
+ * @param instance RNG instance
+ * @param out receives the random word
+ * @return false when no valid word showed up in time (no kernel clock, seed or clock error)
+ */
+static bool _uni_hal_rng_read_32u(RNG_TypeDef *instance, uint32_t *out) {
+    uint32_t const start_ms = uni_hal_systick_get_ms();
+
+    for (;;) {
+        if (LL_RNG_IsActiveFlag_SEIS(instance) != 0U) {
+            // seed error: the data on hand must not be used, restart the generator
+            LL_RNG_ClearFlag_SEIS(instance);
+            LL_RNG_Disable(instance);
+            LL_RNG_Enable(instance);
+        }
+        else if (LL_RNG_IsActiveFlag_DRDY(instance) != 0U) {
+            break;
+        }
+
+        if (LL_RNG_IsActiveFlag_CEIS(instance) != 0U) {
+            LL_RNG_ClearFlag_CEIS(instance);
+        }
+
+        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_RNG_TIMEOUT_MS) {
+            return false;
+        }
+    }
+
+    uint32_t const value = LL_RNG_ReadRandData32(instance);
+    *out = value;
+    return true;
+}
+
 
 
 //
@@ -79,7 +124,8 @@ uint32_t uni_hal_rng_get_32u(uni_hal_rng_context_t *ctx) {
     if (uni_hal_rng_is_inited(ctx)) {
         RNG_TypeDef *instance = _uni_hal_rng_get_instance(ctx->instance);
         if (instance != NULL) {
-            result = LL_RNG_ReadRandData32(instance);
+            // result stays 0 when the generator does not deliver
+            (void)_uni_hal_rng_read_32u(instance, &result);
         }
     }
     return result;
@@ -89,19 +135,21 @@ uint32_t uni_hal_rng_get_32u(uni_hal_rng_context_t *ctx) {
 bool uni_hal_rng_get(uni_hal_rng_context_t *ctx, uint8_t* buf, size_t buf_len) {
     bool result = false;
 
-    if (uni_hal_rng_is_inited(ctx) && buf != NULL) {
+    if (buf != NULL && uni_hal_rng_is_inited(ctx)) {
         RNG_TypeDef *instance = _uni_hal_rng_get_instance(ctx->instance);
         if (instance != NULL) {
-            size_t offset = 0;
-            uint32_t *buf_32 = (uint32_t *)buf;
-            for (offset = 0; offset < buf_len / sizeof(uint32_t); offset++) {
-                buf_32[offset] = LL_RNG_ReadRandData32(instance);
-            }
-
-            uint32_t rng_val = LL_RNG_ReadRandData32(instance);
-            memcpy(&buf[offset * sizeof(uint32_t)], &rng_val, buf_len % sizeof(uint32_t));
-
             result = true;
+
+            size_t offset = 0U;
+            while (result && offset < buf_len) {
+                uint32_t rng_val = 0U;
+                result = _uni_hal_rng_read_32u(instance, &rng_val);
+                if (result) {
+                    size_t const chunk = uni_common_math_min(buf_len - offset, sizeof(rng_val));
+                    memcpy(&buf[offset], &rng_val, chunk);
+                    offset += chunk;
+                }
+            }
         }
     }
     return result;
