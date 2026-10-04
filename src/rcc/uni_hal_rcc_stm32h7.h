@@ -87,6 +87,12 @@ typedef struct {
     bool                                 csi_enable;
     bool                                 lse_enable;
 
+    /**
+     * Reset the backup domain and retry once when LSE does not start.
+     * This erases the RTC and the backup registers, so it is off unless asked for.
+     */
+    bool                                 lse_backup_reset;
+
     uni_hal_rcc_stm32h7_config_pll_t      pll[3];
     uni_hal_rcc_stm32h7_config_timeout_t  timeout;
 } uni_hal_rcc_stm32h7_config_t;

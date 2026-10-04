@@ -80,6 +80,12 @@ typedef struct {
     bool                                 hse_bypass;
     bool                                 hse_css;
     bool                                 lse_enable;
+
+    /**
+     * Reset the backup domain and retry once when LSE does not start.
+     * This erases the RTC and the backup registers, so it is off unless asked for.
+     */
+    bool                                 lse_backup_reset;
     uni_hal_rcc_stm32l4_config_pll_t      pll[1]; //TODO: add support for PLL2 and PLL3
     uni_hal_rcc_stm32l4_config_timeout_t  timeout;
 } uni_hal_rcc_stm32l4_config_t;

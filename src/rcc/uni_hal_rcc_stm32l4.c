@@ -255,7 +255,7 @@ static bool _uni_hal_stm_rcc_lse() {
         result = g_uni_hal_rcc_status.lse_inited = LL_RCC_LSE_IsReady();
 
         // Try one time to reset Backup Domain and init LSE again
-        if (!result && !g_uni_hal_rcc_status.lse_backup_reseted) {
+        if (!result && g_uni_hal_rcc_config->lse_backup_reset && !g_uni_hal_rcc_status.lse_backup_reseted) {
             uni_hal_rcc_reset(UNI_HAL_RCC_RESET_BACKUP);
             g_uni_hal_rcc_status.lse_backup_reseted = true;
             result = _uni_hal_stm_rcc_lse();
