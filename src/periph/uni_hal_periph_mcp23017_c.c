@@ -70,7 +70,8 @@ bool uni_hal_mcp23017_get_gpio(uni_hal_mcp23017_context_t* ctx, uni_hal_mcp23017
         reg = UNI_HAL_MCP23017_REG_GPIO_B;
         break;
     default:
-        break;
+        // not a port of this device: do not fall through to register 0x00 (IODIRA)
+        return false;
     }
 
     return _uni_hal_mcp23017_read(ctx, reg, val, sizeof(*val));
@@ -89,7 +90,8 @@ bool uni_hal_mcp23017_set_iodir(uni_hal_mcp23017_context_t* ctx, uni_hal_mcp2301
             reg = UNI_HAL_MCP23017_REG_IODIR_B;
             break;
         default:
-            break;
+            // not a port of this device: do not fall through to register 0x00 (IODIRA)
+            return false;
     }
 
     return _uni_hal_mcp23017_write(ctx, reg, &val, sizeof(val));
@@ -108,7 +110,8 @@ bool uni_hal_mcp23017_set_gpio(uni_hal_mcp23017_context_t* ctx, uni_hal_mcp23017
         reg = UNI_HAL_MCP23017_REG_GPIO_B;
         break;
     default:
-        break;
+        // not a port of this device: do not fall through to register 0x00 (IODIRA)
+        return false;
     }
 
     return _uni_hal_mcp23017_write(ctx, reg, &val, sizeof(val));
