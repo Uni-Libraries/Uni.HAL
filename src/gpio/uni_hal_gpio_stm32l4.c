@@ -236,6 +236,28 @@ bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *ctx) {
 
 
 
+bool uni_hal_gpio_pin_deinit(uni_hal_gpio_pin_context_t *ctx) {
+    bool result = false;
+
+    if (ctx != NULL) {
+        result = true;
+        if (ctx->inited && ctx->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
+            GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx->gpio_bank);
+            if (bank != NULL) {
+                LL_GPIO_SetPinMode(bank, (uint32_t)ctx->gpio_pin, LL_GPIO_MODE_ANALOG);
+                LL_GPIO_SetPinPull(bank, (uint32_t)ctx->gpio_pin, LL_GPIO_PULL_NO);
+            }
+            else {
+                result = false;
+            }
+        }
+        ctx->inited = false;
+    }
+
+    return result;
+}
+
+
 bool uni_hal_gpio_pin_is_inited(const uni_hal_gpio_pin_context_t *ctx) {
     bool result =false;
     if(ctx != NULL){

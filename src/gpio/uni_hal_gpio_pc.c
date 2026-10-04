@@ -65,3 +65,14 @@ uni_hal_gpio_speed_e uni_hal_gpio_pin_speed_get(const uni_hal_gpio_pin_context_t
     }
     return UNI_HAL_GPIO_SPEED_0;
 }
+
+
+bool uni_hal_gpio_pin_deinit(uni_hal_gpio_pin_context_t* ctx_pin) {
+    bool result = false;
+    if (ctx_pin != NULL) {
+        ctx_pin->inited = false;
+        result = true;
+    }
+
+    return result;
+}

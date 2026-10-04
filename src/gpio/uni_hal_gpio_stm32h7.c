@@ -459,6 +459,37 @@ bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *ctx) {
 
 
 
+bool uni_hal_gpio_pin_deinit(uni_hal_gpio_pin_context_t *ctx) {
+    bool result = false;
+
+    if (ctx != NULL) {
+        result = true;
+        if (ctx->inited && ctx->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
+            GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx->gpio_bank);
+            if (bank != NULL) {
+                // stop the interrupt of this pin, if it has one
+                uint32_t const exti_index = _uni_hal_gpio_index(ctx->gpio_pin);
+                if (exti_index != UINT32_MAX && g_uni_hal_gpio_ctx[exti_index] == ctx) {
+                    LL_EXTI_DisableIT_0_31(_uni_hal_gpio_exti_line(ctx->gpio_pin));
+                    g_uni_hal_gpio_ctx[exti_index] = NULL;
+                    ctx->callback = NULL;
+                    ctx->callback_cookie = NULL;
+                }
+
+                LL_GPIO_SetPinMode(bank, (uint32_t)ctx->gpio_pin, LL_GPIO_MODE_ANALOG);
+                LL_GPIO_SetPinPull(bank, (uint32_t)ctx->gpio_pin, LL_GPIO_PULL_NO);
+            }
+            else {
+                result = false;
+            }
+        }
+        ctx->inited = false;
+    }
+
+    return result;
+}
+
+
 bool uni_hal_gpio_pin_is_inited(const uni_hal_gpio_pin_context_t *ctx) {
     bool result = false;
     if(ctx != NULL){

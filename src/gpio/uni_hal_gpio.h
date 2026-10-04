@@ -250,6 +250,15 @@ bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t* ctx_pin);
 bool uni_hal_gpio_pin_is_inited(const uni_hal_gpio_pin_context_t* ctx_pin);
 
 /**
+ * Return a pin to its reset state (analog, no pull) and mark the context as not initialised,
+ * so that uni_hal_gpio_pin_init() can configure it again, possibly with another type.
+ * An interrupt callback registered for the pin is removed.
+ * @param ctx_pin pointer to the pin context
+ * @return true on success
+ */
+bool uni_hal_gpio_pin_deinit(uni_hal_gpio_pin_context_t* ctx_pin);
+
+/**
  * Gets current pin status
  * @param ctx_pin pointer to GPIO pint context structure
  * @return true for HIGH, false for LOW
