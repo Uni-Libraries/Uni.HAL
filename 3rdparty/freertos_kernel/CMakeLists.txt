@@ -11,7 +11,14 @@ add_library(freertos_kernel STATIC)
 if(NOT DEFINED UNI_HAL_RTOS_HEAP_SIZE)
     set(UNI_HAL_RTOS_HEAP_SIZE 100*1024 CACHE STRING "FreeRTOS Heap Size")
 endif()
-option(UNI_HAL_RTOS_HEAP_APP "FreeRTOS Heap Size"  1)
+option(UNI_HAL_RTOS_HEAP_APP "FreeRTOS heap array (ucHeap) is defined by the application" OFF)
+
+# FreeRTOSConfig.h needs 1/0: the preprocessor reads ON/OFF/TRUE as undefined identifiers, i.e. as 0
+if(UNI_HAL_RTOS_HEAP_APP)
+    set(UNI_HAL_RTOS_HEAP_APP_VALUE 1)
+else()
+    set(UNI_HAL_RTOS_HEAP_APP_VALUE 0)
+endif()
 
 
 
@@ -111,7 +118,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "extern void vAssertCalled(uint32_t ulLine, const char *pcFile);                \n"
         "                                                                               \n"
         "#define configTOTAL_HEAP_SIZE                   (${UNI_HAL_RTOS_HEAP_SIZE})    \n"
-        "#define configAPPLICATION_ALLOCATED_HEAP        (${UNI_HAL_RTOS_HEAP_APP})     \n"
+        "#define configAPPLICATION_ALLOCATED_HEAP        (${UNI_HAL_RTOS_HEAP_APP_VALUE})     \n"
         "                                                                               \n"
         "#define configCPU_CLOCK_HZ                      (SystemCoreClock)              \n"
         "                                                                               \n"
