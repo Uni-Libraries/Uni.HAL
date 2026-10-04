@@ -27,6 +27,7 @@
 #include "core/uni_hal_core.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
+#include "systick/uni_hal_systick.h"
 
 
 
@@ -481,7 +482,8 @@ bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t
 
     if (uni_hal_i2c_is_inited(ctx)) {
         HAL_StatusTypeDef status = HAL_BUSY;
-        while (status == HAL_BUSY) {
+        uint32_t const start_ms = uni_hal_systick_get_ms();
+        while (status == HAL_BUSY && (uni_hal_systick_get_ms() - start_ms) <= timeout) {
             status = HAL_I2C_IsDeviceReady(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr), trials, timeout);
         }
 
@@ -497,7 +499,8 @@ bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, u
 
     if (uni_hal_i2c_is_inited(ctx)) {
         HAL_StatusTypeDef status = HAL_BUSY;
-        while (status == HAL_BUSY) {
+        uint32_t const start_ms = uni_hal_systick_get_ms();
+        while (status == HAL_BUSY && (uni_hal_systick_get_ms() - start_ms) <= timeout) {
             status =
                 HAL_I2C_Master_Receive(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, timeout);
         }
@@ -514,7 +517,8 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
 
     if (uni_hal_i2c_is_inited(ctx)) {
         HAL_StatusTypeDef status = HAL_BUSY;
-        while (status == HAL_BUSY) {
+        uint32_t const start_ms = uni_hal_systick_get_ms();
+        while (status == HAL_BUSY && (uni_hal_systick_get_ms() - start_ms) <= timeout) {
             status =
                 HAL_I2C_Master_Transmit(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, timeout);
         }
@@ -534,8 +538,13 @@ bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_
         I2C_HandleTypeDef* handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
         if (handle)
         {
+            uint32_t const start_ms = uni_hal_systick_get_ms();
             while (HAL_I2C_GetState(handle) != HAL_I2C_STATE_READY)
             {
+                if ((uni_hal_systick_get_ms() - start_ms) > timeout)
+                {
+                    return false;
+                }
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
                 taskYIELD();
 #endif
@@ -582,8 +591,13 @@ bool uni_hal_i2c_mem_write(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16
         I2C_HandleTypeDef* handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
         if (handle)
         {
+            uint32_t const start_ms = uni_hal_systick_get_ms();
             while (HAL_I2C_GetState(handle) != HAL_I2C_STATE_READY)
             {
+                if ((uni_hal_systick_get_ms() - start_ms) > timeout)
+                {
+                    return false;
+                }
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
                 taskYIELD();
 #endif
