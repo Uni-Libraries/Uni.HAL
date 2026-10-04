@@ -123,8 +123,16 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
                 return true;
             }
         } else {
-            // Overlap handling: if current char equals first pattern byte, keep 1, else reset.
-            match_idx = (ch == data[0]) ? 1U : 0U;
+            // Overlap handling: continue from the longest prefix of the pattern that the bytes
+            // received so far (the matched part plus this byte) still end with.
+            size_t next_idx = 0U;
+            for (size_t keep = match_idx; keep > 0U; keep--) {
+                if (ch == data[keep - 1U] && memcmp(data, &data[match_idx - (keep - 1U)], keep - 1U) == 0) {
+                    next_idx = keep;
+                    break;
+                }
+            }
+            match_idx = next_idx;
         }
     }
 }
