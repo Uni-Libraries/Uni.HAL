@@ -70,11 +70,32 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
     size_t received = 0;
 
     if (ctx != NULL && ctx->buf_rx.handle != NULL && data != NULL) {
-        size_t ticktime = uni_hal_systick_get_ms();
+        uint32_t const t_start = uni_hal_systick_get_ms();
 
-        do {
-            received += xStreamBufferReceive(ctx->buf_rx.handle, &data[received], data_len - received, 0U);
-        } while (received < data_len && uni_hal_systick_get_ms() - ticktime < timeout);
+        // A task sleeps until data arrives. Before the scheduler runs and inside an interrupt
+        // there is nothing to switch to, so the buffer is polled there.
+        bool can_block = xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
+#if !defined(UNI_HAL_TARGET_MCU_PC)
+        can_block = can_block && !xPortIsInsideInterrupt();
+#endif
+
+        for (;;) {
+            uint32_t const elapsed = uni_hal_systick_get_ms() - t_start;
+
+            TickType_t ticks_to_wait = 0U;
+            if (can_block && elapsed < timeout) {
+                ticks_to_wait = pdMS_TO_TICKS(timeout - elapsed);
+                if (ticks_to_wait == 0U) {
+                    ticks_to_wait = 1U;
+                }
+            }
+
+            received += xStreamBufferReceive(ctx->buf_rx.handle, &data[received], data_len - received, ticks_to_wait);
+
+            if (received >= data_len || (uni_hal_systick_get_ms() - t_start) >= timeout) {
+                break;
+            }
+        }
     }
 
     return received;
