@@ -265,7 +265,7 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
 
         // send to our ringbuffer in case we failed to tunnel data
         if (tunnel_result == UNI_HAL_IO_TUNNEL_TRANSPARENT || tunnel_result == UNI_HAL_IO_TUNNEL_FAIL) {
-            if (xStreamBufferSendFromISR(ctx_io->buf_rx.handle, &data, 1U, &higher_task_woken)) {
+            if (uni_hal_io_buffer_push_isr(&ctx_io->buf_rx, &data, 1U, &higher_task_woken)) {
                 ctx_io->stats.rx_received++;
             }
             else {
@@ -277,7 +277,7 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
     if (LL_USART_IsEnabledIT_TXE_TXFNF(dev_handle) && LL_USART_IsActiveFlag_TXE_TXFNF(dev_handle)) {
         uint8_t data = 0U;
 
-        if (xStreamBufferReceiveFromISR(ctx_io->buf_tx.handle, &data, 1U, &higher_task_woken)) {
+        if (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
             // We have data to send -> TXE path is active, TC interrupt must be off.
             LL_USART_DisableIT_TC(dev_handle);
 
@@ -313,7 +313,7 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
             // Nothing to complete, but do not keep TC interrupt enabled (TC is often 1 when idle).
             LL_USART_DisableIT_TC(dev_handle);
         }
-        else if (xStreamBufferIsEmpty(ctx_io->buf_tx.handle)) {
+        else if (uni_hal_io_buffer_is_empty(&ctx_io->buf_tx)) {
             // no more bytes pending, end transmission
             LL_USART_DisableIT_TXE_TXFNF(dev_handle);
             LL_USART_DisableIT_TC(dev_handle);

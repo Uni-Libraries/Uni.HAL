@@ -43,7 +43,7 @@ bool _uni_hal_segger_rtt_stdio_timer(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_ti
 
                 // send to our ringbuffer in case we failed to tunnel data
                 if (tunnel_result == UNI_HAL_IO_TUNNEL_FAIL || tunnel_result == UNI_HAL_IO_TUNNEL_TRANSPARENT) {
-                    if (xStreamBufferSendFromISR(ctx_io->buf_rx.handle, &data, 1U, &higher_task_woken)) {
+                    if (uni_hal_io_buffer_push_isr(&ctx_io->buf_rx, &data, 1U, &higher_task_woken)) {
                         ctx_io->stats.rx_received++;
                     }
                     else {
@@ -53,7 +53,7 @@ bool _uni_hal_segger_rtt_stdio_timer(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_ti
             }
 
             // TX
-            while (xStreamBufferReceiveFromISR(ctx_io->buf_tx.handle, &data, 1U, &higher_task_woken)) {
+            while (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
                 SEGGER_RTT_PutChar(ctx_fn->buffer_index_up, data);
                 ctx_io->stats.tx_transmited++;
             }

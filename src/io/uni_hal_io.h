@@ -180,6 +180,40 @@ bool uni_hal_io_init(uni_hal_io_context_t *ctx);
 
 
 //
+// Functions/Buffer
+//
+// For the drivers that fill and drain the buffers from their interrupt handlers.
+//
+
+/**
+ * Store bytes in a buffer from an interrupt handler
+ * @param buf IO buffer
+ * @param data bytes to store
+ * @param data_len number of bytes
+ * @param woken set to pdTRUE when a task of higher priority became ready
+ * @return number of bytes stored, less than data_len when the buffer is full
+ */
+size_t uni_hal_io_buffer_push_isr(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len, BaseType_t *woken);
+
+/**
+ * Take bytes out of a buffer from an interrupt handler
+ * @param buf IO buffer
+ * @param data receives the bytes
+ * @param data_len number of bytes wanted
+ * @param woken set to pdTRUE when a task of higher priority became ready
+ * @return number of bytes taken, 0 when the buffer is empty
+ */
+size_t uni_hal_io_buffer_pop_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, BaseType_t *woken);
+
+/**
+ * Check whether a buffer holds no data
+ * @param buf IO buffer
+ * @return true when empty
+ */
+bool uni_hal_io_buffer_is_empty(const uni_hal_io_buffer_t *buf);
+
+
+//
 // Functions/Receive
 //
 

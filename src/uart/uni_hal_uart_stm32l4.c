@@ -280,7 +280,7 @@ static bool _uni_hal_usart_irq_handler_lpuart(uni_hal_usart_context_t *ctx) {
 
         // send to our ringbuffer in case we failed to tunnel data
         if (tunnel_result == UNI_HAL_IO_TUNNEL_FAIL || tunnel_result == UNI_HAL_IO_TUNNEL_TRANSPARENT) {
-            if (xStreamBufferSendFromISR(ctx_io->buf_rx.handle, &data, 1U, &higher_task_woken)) {
+            if (uni_hal_io_buffer_push_isr(&ctx_io->buf_rx, &data, 1U, &higher_task_woken)) {
                 ctx_io->stats.rx_received++;
             }
             else {
@@ -299,7 +299,7 @@ static bool _uni_hal_usart_irq_handler_lpuart(uni_hal_usart_context_t *ctx) {
             ctx->in_transmission = true;
         }
 
-        if (xStreamBufferReceiveFromISR(ctx_io->buf_tx.handle, &data, 1U, &higher_task_woken)) {
+        if (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
             LL_LPUART_TransmitData8(dev_handle, data);
             ctx_io->stats.tx_transmited++;
         }
@@ -347,7 +347,7 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
 
         // send to our ringbuffer in case we failed to tunnel data
         if (tunnel_result == UNI_HAL_IO_TUNNEL_FAIL || tunnel_result == UNI_HAL_IO_TUNNEL_TRANSPARENT) {
-            if (xStreamBufferSendFromISR(ctx_io->buf_rx.handle, &data, 1U, &higher_task_woken)) {
+            if (uni_hal_io_buffer_push_isr(&ctx_io->buf_rx, &data, 1U, &higher_task_woken)) {
                 ctx_io->stats.rx_received++;
             }
             else {
@@ -366,7 +366,7 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
             ctx->in_transmission = true;
         }
 
-        if (xStreamBufferReceiveFromISR(ctx_io->buf_tx.handle, &data, 1U, &higher_task_woken)) {
+        if (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
             LL_USART_TransmitData8(dev_handle, data);
             ctx_io->stats.tx_transmited++;
         }

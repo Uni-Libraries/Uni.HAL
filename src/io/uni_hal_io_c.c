@@ -44,6 +44,33 @@ bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
 
 //
 // Receive
+
+//
+// Functions/Buffer
+//
+
+size_t uni_hal_io_buffer_push_isr(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len, BaseType_t *woken) {
+    size_t result = 0U;
+    if (buf != NULL && buf->handle != NULL && data != NULL) {
+        result = xStreamBufferSendFromISR(buf->handle, data, data_len, woken);
+    }
+    return result;
+}
+
+
+size_t uni_hal_io_buffer_pop_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, BaseType_t *woken) {
+    size_t result = 0U;
+    if (buf != NULL && buf->handle != NULL && data != NULL) {
+        result = xStreamBufferReceiveFromISR(buf->handle, data, data_len, woken);
+    }
+    return result;
+}
+
+
+bool uni_hal_io_buffer_is_empty(const uni_hal_io_buffer_t *buf) {
+    return buf == NULL || buf->handle == NULL || xStreamBufferIsEmpty(buf->handle) != pdFALSE;
+}
+
 //
 
 size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
