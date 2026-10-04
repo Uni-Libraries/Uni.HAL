@@ -642,6 +642,7 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
         ctx->status.in_process = true;
         ctx->status.last_rx_data = (uint8_t *) data_rx;
         ctx->status.last_len = len;
+        ctx->status.last_errors = UNI_HAL_SPI_ERROR_NONE;
 
         if (!ctx->config.nss_hard) {
             uni_hal_gpio_pin_set(ctx->config.pin_nss, false);
@@ -785,10 +786,28 @@ bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
         uni_hal_core_cm7_dcache_invalidate(ctx->status.last_rx_data, ctx->status.last_len);
     }
 
+    // keep the error flags for the callback before they get cleared
+    uint32_t errors = UNI_HAL_SPI_ERROR_NONE;
+    if (LL_SPI_IsActiveFlag_CRCERR(instance) != 0U) {
+        errors |= UNI_HAL_SPI_ERROR_CRC;
+    }
+    if (LL_SPI_IsActiveFlag_OVR(instance) != 0U) {
+        errors |= UNI_HAL_SPI_ERROR_OVERRUN;
+    }
+    if (LL_SPI_IsActiveFlag_UDR(instance) != 0U) {
+        errors |= UNI_HAL_SPI_ERROR_UNDERRUN;
+    }
+    if (LL_SPI_IsActiveFlag_MODF(instance) != 0U) {
+        errors |= UNI_HAL_SPI_ERROR_MODE_FAULT;
+    }
+    ctx->status.last_errors = errors;
+
     LL_SPI_ClearFlag_EOT(instance);
     LL_SPI_ClearFlag_TXTF(instance);
     LL_SPI_ClearFlag_UDR(instance);
     LL_SPI_ClearFlag_CRCERR(instance);
+    LL_SPI_ClearFlag_OVR(instance);
+    LL_SPI_ClearFlag_MODF(instance);
 
     LL_SPI_Disable(instance);
 

@@ -153,6 +153,18 @@ typedef struct {
 
 
 /**
+ * SPI transfer errors, combined as bits in uni_hal_spi_status_t::last_errors
+ */
+typedef enum {
+    UNI_HAL_SPI_ERROR_NONE       = 0,
+    UNI_HAL_SPI_ERROR_CRC        = 1 << 0,
+    UNI_HAL_SPI_ERROR_OVERRUN    = 1 << 1,
+    UNI_HAL_SPI_ERROR_UNDERRUN   = 1 << 2,
+    UNI_HAL_SPI_ERROR_MODE_FAULT = 1 << 3,
+} uni_hal_spi_error_e;
+
+
+/**
  * SPI callback
  */
 typedef bool (*uni_hal_spi_callback_t)(void *cookie);
@@ -177,6 +189,11 @@ typedef struct {
     void *callback_cookie;
 uint8_t *last_rx_data;
     size_t last_len;
+
+    /**
+     * Errors of the last asynchronous transfer, bits of uni_hal_spi_error_e
+     */
+    uint32_t last_errors;
 } uni_hal_spi_status_t;
 
 
@@ -261,6 +278,15 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
 
 
 bool uni_hal_spi_set_callback(uni_hal_spi_context_t *ctx, uni_hal_spi_callback_t callback, void *cookie);
+
+
+/**
+ * Get the errors of the last asynchronous transfer.
+ * The value is valid from the completion callback on, until the next transfer is started.
+ * @param ctx SPI context
+ * @return bits of uni_hal_spi_error_e, UNI_HAL_SPI_ERROR_NONE when the transfer was clean
+ */
+uint32_t uni_hal_spi_get_last_errors(const uni_hal_spi_context_t *ctx);
 
 
 /**
