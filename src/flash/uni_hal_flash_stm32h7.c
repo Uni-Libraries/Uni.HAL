@@ -404,6 +404,11 @@ size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *dst)
         return 0;
     }
 
+    // a flash word is 32 bytes: the address must be aligned and the range must stay inside the flash
+    if (addr % 32 != 0 || size > (FLASH_END - addr) + 1U) {
+        return 0;
+    }
+
     status = HAL_FLASH_Unlock();
     if (status != HAL_OK) {
         return 0;
