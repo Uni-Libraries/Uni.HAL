@@ -122,6 +122,15 @@ typedef struct {
 // Functions
 //
 
+/*
+ * Device addresses
+ *
+ * Every function takes the plain 7-bit address of the device, as data sheets give it, and
+ * shifts it into the address byte itself. A value of 0x80 or above cannot be a 7-bit address
+ * and is taken as an address byte that is already shifted left (e.g. 0xA0 for the device 0x50).
+ * A shifted address below 0x80 cannot be told apart from a 7-bit one, so never pass those.
+ */
+
 
 /**
  * Initializes I2C interface
@@ -173,7 +182,7 @@ bool uni_hal_i2c_recover(uni_hal_i2c_context_t *ctx);
 /**
  * Check if target device is ready for communication
  * @param ctx pointer to interface context
- * @param dev_addr target device address
+ * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param trials number of trials before error
  * @param timeout operation timeout in msecs
  * @return true if device is ready
@@ -184,7 +193,7 @@ bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t
 /**
  * Receives data in master blocking mode.
  * @param ctx pointer to interface context
- * @param dev_addr target device address, must be aligned to left
+ * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param buf pointer to receive buffer
  * @param buf_len receive buffer length
  * @param timeout operation timeout in msecs
@@ -196,7 +205,7 @@ bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, u
 /**
  * Transmits data in master blocking mode.
  * @param ctx pointer to interface context
- * @param dev_addr target device address, must be aligned to left
+ * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param buf pointer to transmit buffer
  * @param buf_len transmit buffer length
  * @param timeout operation timeout in msecs
@@ -208,7 +217,7 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
 /**
  * Reads data from specific memory address in blocking mode
  * @param ctx pointer to interface context
- * @param dev_addr target device address
+ * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param mem_addr target device memory address
  * @param mem_addr_size target device memory address size in bytes (1 or 2)
  * @param buf pointer to receive buffer
@@ -223,7 +232,7 @@ bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_
 /**
  * Writes data to specific memory address in blocking mode
  * @param ctx pointer to interface context
- * @param dev_addr target device address
+ * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param mem_addr target device memory address
  * @param mem_addr_size target device memory address size in bytes (1 or 2)
  * @param buf pointer to transmit buffer
