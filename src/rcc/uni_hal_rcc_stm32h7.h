@@ -166,6 +166,13 @@ bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t* config);
 
 uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get();
 
+/**
+ * Get the reason for the last reset
+ * @return RCC_RSR as it was when uni_hal_rcc_init() ran: test it with the RCC_RSR_xxxRSTF
+ *         masks, e.g. RCC_RSR_IWDG1RSTF for an independent watchdog reset. 0 before the init.
+ */
+uint32_t uni_hal_rcc_stm32h7_reset_flags_get(void);
+
 uint32_t uni_hal_rcc_stm32h7_clk_get_hclk(void);
 
 #if defined(__cplusplus)

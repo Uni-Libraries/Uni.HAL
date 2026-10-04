@@ -711,7 +711,10 @@ bool uni_hal_rcc_init(void) {
     g_uni_hal_rcc_reconfig_in_progress = true;
 
     if (g_uni_hal_rcc_config != nullptr && !g_uni_hal_rcc_status.inited) {
+        // Keep the reason for this boot and clear the flags: they are sticky, and left alone
+        // the next boot would show its own reset on top of this one.
         g_uni_hal_rcc_reset_flags_shadow = RCC->RSR;
+        LL_RCC_ClearResetFlags();
 
         if (!uni_hal_dwt_is_inited()) {
             (void)uni_hal_dwt_init();
@@ -1658,6 +1661,10 @@ bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t *config) {
         result = true;
     }
     return result;
+}
+
+uint32_t uni_hal_rcc_stm32h7_reset_flags_get(void) {
+    return g_uni_hal_rcc_reset_flags_shadow;
 }
 
 uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get() {
