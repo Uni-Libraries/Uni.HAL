@@ -69,7 +69,7 @@ bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
 size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_t data_len, uint32_t timeout) {
     size_t received = 0;
 
-    if (ctx != NULL) {
+    if (ctx != NULL && ctx->buf_rx.handle != NULL && data != NULL) {
         size_t ticktime = uni_hal_systick_get_ms();
 
         do {
