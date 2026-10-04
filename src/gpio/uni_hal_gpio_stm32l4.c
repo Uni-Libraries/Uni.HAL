@@ -190,7 +190,13 @@ static uint32_t _uni_hal_gpio_alternate(uni_hal_gpio_alternate_e alternate){
 
 bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL && !uni_hal_gpio_pin_is_inited(ctx)) {
+
+    // a pin that is already configured is not an error
+    if (uni_hal_gpio_pin_is_inited(ctx)) {
+        return true;
+    }
+
+    if (ctx != NULL) {
         if(ctx->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
             GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx->gpio_bank);
             if (bank != NULL) {

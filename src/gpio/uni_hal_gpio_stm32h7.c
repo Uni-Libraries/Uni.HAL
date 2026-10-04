@@ -422,7 +422,13 @@ static uni_hal_core_irq_e _uni_hal_gpio_irqn(uni_hal_gpio_pin_e pin) {
 
 bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL && !uni_hal_gpio_pin_is_inited(ctx)) {
+
+    // a pin that is already configured is not an error
+    if (uni_hal_gpio_pin_is_inited(ctx)) {
+        return true;
+    }
+
+    if (ctx != NULL) {
         if(ctx->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
             GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx->gpio_bank);
             if (bank != NULL) {
