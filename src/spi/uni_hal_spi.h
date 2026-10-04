@@ -281,6 +281,15 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
                                   uint32_t len);
 
 
+/**
+ * Stop an asynchronous transfer that is still running, for instance a slave transfer whose
+ * master never sent its clocks. The completion callback is not called.
+ * @param ctx SPI context
+ * @return true when a transfer was in progress and has been stopped
+ */
+bool uni_hal_spi_abort(uni_hal_spi_context_t *ctx);
+
+
 bool uni_hal_spi_set_callback(uni_hal_spi_context_t *ctx, uni_hal_spi_callback_t callback, void *cookie);
 
 

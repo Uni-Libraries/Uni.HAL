@@ -705,6 +705,42 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *dat
 }
 
 
+bool uni_hal_spi_abort(uni_hal_spi_context_t *ctx) {
+    bool result = false;
+
+    if (uni_hal_spi_is_busy(ctx)) {
+        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+        if (instance != NULL) {
+            // no completion interrupt from here on
+            LL_SPI_DisableIT_EOT(instance);
+            LL_SPI_DisableIT_TXP(instance);
+
+            // a stream that did not reach its count is still enabled and would ignore the next set-up
+            if (ctx->config.dma_rx != NULL) {
+                (void)uni_hal_dma_enable(ctx->config.dma_rx, false);
+            }
+            if (ctx->config.dma_tx != NULL) {
+                (void)uni_hal_dma_enable(ctx->config.dma_tx, false);
+            }
+            LL_SPI_DisableDMAReq_RX(instance);
+            LL_SPI_DisableDMAReq_TX(instance);
+
+            LL_SPI_Disable(instance);
+            _uni_hal_spi_clear_flags(ctx->config.instance);
+
+            if (!ctx->config.nss_hard) {
+                uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
+            }
+
+            ctx->status.in_process = false;
+            result = true;
+        }
+    }
+
+    return result;
+}
+
+
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len) {
     bool result = false;
     if (uni_hal_spi_is_inited(ctx) && data && len > 0U) {

@@ -223,6 +223,13 @@ uint32_t uni_hal_spi_bitrate_get(uni_hal_spi_context_t *ctx) {
 }
 
 
+bool uni_hal_spi_abort(uni_hal_spi_context_t *ctx) {
+    // this driver has no asynchronous transfers, so there is never one to stop
+    (void)ctx;
+    return false;
+}
+
+
 bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len) {
     return uni_hal_spi_transmitreceive(ctx, NULL, data, len);
 }

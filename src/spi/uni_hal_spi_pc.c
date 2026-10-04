@@ -81,3 +81,13 @@ uint32_t uni_hal_spi_bitrate_get(uni_hal_spi_context_t *ctx) {
     (void)ctx;
     return 0U;
 }
+
+
+bool uni_hal_spi_abort(uni_hal_spi_context_t *ctx) {
+    bool result = false;
+    if (uni_hal_spi_is_inited(ctx) && ctx->status.in_process) {
+        ctx->status.in_process = false;
+        result = true;
+    }
+    return result;
+}
