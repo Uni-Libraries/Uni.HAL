@@ -211,16 +211,6 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 
 
 /**
- * Receive line
- * @param ctx pointer to interface context
- * @param data pointer to data array
- * @param data_len length of data array in bytes
- * @param timeout receive timeout in msecs
- * @return number of received bytes
- */
-size_t uni_hal_io_receive_line(uni_hal_io_context_t *ctx, uint8_t *data, uint32_t data_len, uint32_t timeout);
-
-/**
  * Skip input data until specified data will be found
  * @param ctx pointer to the interface context
  * @param data pointer to the data array
