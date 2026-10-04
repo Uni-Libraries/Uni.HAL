@@ -447,6 +447,9 @@ bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_
         return false;
     }
 
+    bool const dcache_enabled = (SCB->CCR & SCB_CCR_DC_Msk) != 0U;
+    bool const icache_enabled = (SCB->CCR & SCB_CCR_IC_Msk) != 0U;
+
     SCB_CleanInvalidateDCache();
     SCB_InvalidateICache();
     SCB_DisableDCache();
@@ -474,8 +477,14 @@ bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_
     }
 
     HAL_FLASH_Lock();
-    SCB_EnableICache();
-    SCB_EnableDCache();
+
+    // restore the caches to the state the caller had them in
+    if (icache_enabled) {
+        SCB_EnableICache();
+    }
+    if (dcache_enabled) {
+        SCB_EnableDCache();
+    }
 
     return result;
 }
