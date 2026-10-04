@@ -33,7 +33,7 @@ uni_hal_rcc_clksrc_e uni_hal_rtc_clock_source_get(void) {
 
 bool uni_hal_rtc_init(uni_hal_rtc_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL) {
+    if (ctx != nullptr) {
         ctx->inited = true;
         result = true;
     }
@@ -42,13 +42,13 @@ bool uni_hal_rtc_init(uni_hal_rtc_context_t *ctx) {
 
 
 bool uni_hal_rtc_is_inited(const uni_hal_rtc_context_t *ctx) {
-    return ctx != NULL && ctx->inited;
+    return ctx != nullptr && ctx->inited;
 }
 
 
 bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *datetime) {
     bool result = false;
-    if (uni_hal_rtc_is_inited(ctx) && datetime != NULL) {
+    if (uni_hal_rtc_is_inited(ctx) && datetime != nullptr) {
         *datetime = g_uni_hal_rtc_datetime;
         result = true;
     }
@@ -58,7 +58,7 @@ bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *d
 
 bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *datetime) {
     bool result = false;
-    if (uni_hal_rtc_is_inited(ctx) && datetime != NULL) {
+    if (uni_hal_rtc_is_inited(ctx) && datetime != nullptr) {
         g_uni_hal_rtc_datetime = *datetime;
         ctx->calendar_valid = true;
         result = true;

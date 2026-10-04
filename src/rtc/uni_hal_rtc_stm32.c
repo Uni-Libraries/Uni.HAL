@@ -58,7 +58,7 @@ static void _uni_hal_rtc_bus_clock_enable(void) {
 }
 
 static bool _uni_hal_rtc_datetime_is_valid(const uni_hal_rtc_datetime_t *datetime) {
-    return datetime != NULL &&
+    return datetime != nullptr &&
            datetime->year >= UNI_HAL_RTC_YEAR_BASE && datetime->year < (UNI_HAL_RTC_YEAR_BASE + 100U) &&
            datetime->month >= 1U && datetime->month <= 12U &&
            datetime->day >= 1U && datetime->day <= 31U &&
@@ -96,7 +96,7 @@ uni_hal_rcc_clksrc_e uni_hal_rtc_clock_source_get(void) {
 bool uni_hal_rtc_init(uni_hal_rtc_context_t *ctx) {
     bool result = false;
 
-    if (ctx != NULL) {
+    if (ctx != nullptr) {
         _uni_hal_rtc_bus_clock_enable();
         LL_PWR_EnableBkUpAccess();
 
@@ -148,14 +148,14 @@ bool uni_hal_rtc_init(uni_hal_rtc_context_t *ctx) {
 
 
 bool uni_hal_rtc_is_inited(const uni_hal_rtc_context_t *ctx) {
-    return ctx != NULL && ctx->inited;
+    return ctx != nullptr && ctx->inited;
 }
 
 
 bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *datetime) {
     bool result = false;
 
-    if (uni_hal_rtc_is_inited(ctx) && datetime != NULL) {
+    if (uni_hal_rtc_is_inited(ctx) && datetime != nullptr) {
         // reading the time latches the date until the date register is read: this order gives
         // a consistent pair
         uint32_t const time = LL_RTC_TIME_Get(RTC);
