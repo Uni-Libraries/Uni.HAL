@@ -92,6 +92,36 @@ void DMA1_Stream3_IRQHandler(void) {
     portYIELD_FROM_ISR(pdFALSE);
 }
 
+// Streams without a dedicated handler above: uni_hal_dma_init() enables their
+// interrupt as well, so they need a handler that acknowledges the flags.
+#define UNI_HAL_DMA_IRQ_HANDLER(module, stream)                 \
+    void module##_Stream##stream##_IRQHandler(void) {           \
+        traceISR_ENTER();                                       \
+                                                                \
+        if (LL_DMA_IsActiveFlag_TC##stream(module)) {           \
+            LL_DMA_ClearFlag_TC##stream(module);                \
+        }                                                       \
+                                                                \
+        if (LL_DMA_IsActiveFlag_TE##stream(module)) {           \
+            LL_DMA_ClearFlag_TE##stream(module);                \
+        }                                                       \
+                                                                \
+        portYIELD_FROM_ISR(pdFALSE);                            \
+    }
+
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 4)
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 5)
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 6)
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 7)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 0)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 1)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 2)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 3)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 4)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 5)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 6)
+UNI_HAL_DMA_IRQ_HANDLER(DMA2, 7)
+
 
 //
 // Private
