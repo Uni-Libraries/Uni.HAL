@@ -98,5 +98,7 @@ endif()
 add_subdirectory(src)
 
 if(UNI_HAL_TARGET_MCU STREQUAL "PC")
+    # must be called in the top-level directory for ctest to find the tests from the build root
+    enable_testing()
     add_subdirectory(src_tests)
 endif()
