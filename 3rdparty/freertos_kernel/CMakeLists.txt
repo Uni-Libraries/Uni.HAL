@@ -147,7 +147,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "#define xPortPendSVHandler                      PendSV_Handler                 \n"
         "#define vPortSVCHandler                         SVC_Handler                    \n"
         "                                                                               \n"
-        "#define configASSERT(x)  if((x) == 0){vAssertCalled(__LINE__, __FILE__);}      \n"
+        "#define configASSERT(x)  do { if((x) == 0){vAssertCalled(__LINE__, __FILE__);} } while(0) \n"
         "                                                                               \n"
 )
 
