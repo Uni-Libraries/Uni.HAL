@@ -493,7 +493,7 @@ bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_
 bool uni_hal_flash_erase_bank(uni_hal_flash_bank_e bank)
 {
     bool result = true;
-    for (int sector_idx = 0; sector_idx < 9; sector_idx++) {
+    for (uint32_t sector_idx = 0U; sector_idx < FLASH_SECTOR_TOTAL; sector_idx++) {
         result = uni_hal_flash_erase_sector(bank, sector_idx) && result;
     }
     return result;
