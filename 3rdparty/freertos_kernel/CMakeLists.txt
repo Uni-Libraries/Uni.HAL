@@ -13,6 +13,16 @@ if(NOT DEFINED UNI_HAL_RTOS_HEAP_SIZE)
 endif()
 option(UNI_HAL_RTOS_HEAP_APP "FreeRTOS heap array (ucHeap) is defined by the application" OFF)
 
+if(NOT DEFINED UNI_HAL_RTOS_MAX_PRIORITIES)
+    set(UNI_HAL_RTOS_MAX_PRIORITIES 5 CACHE STRING "FreeRTOS configMAX_PRIORITIES")
+endif()
+if(NOT DEFINED UNI_HAL_RTOS_MINIMAL_STACK_SIZE)
+    set(UNI_HAL_RTOS_MINIMAL_STACK_SIZE 512 CACHE STRING "FreeRTOS configMINIMAL_STACK_SIZE of the MCU targets, in words")
+endif()
+if(NOT DEFINED UNI_HAL_RTOS_CONFIG_EXTRA)
+    set(UNI_HAL_RTOS_CONFIG_EXTRA "" CACHE FILEPATH "Header included at the end of FreeRTOSConfig.h, to add or to #undef and redefine settings")
+endif()
+
 # FreeRTOSConfig.h needs 1/0: the preprocessor reads ON/OFF/TRUE as undefined identifiers, i.e. as 0
 if(UNI_HAL_RTOS_HEAP_APP)
     set(UNI_HAL_RTOS_HEAP_APP_VALUE 1)
@@ -130,7 +140,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "                                                                               \n"
         "#define configNUM_THREAD_LOCAL_STORAGE_POINTERS (4)                            \n"
         "                                                                               \n"
-        "#define configMAX_PRIORITIES                    (5)                            \n"
+        "#define configMAX_PRIORITIES                    (${UNI_HAL_RTOS_MAX_PRIORITIES}) \n"
         "#define configUSE_PREEMPTION                    (1)                            \n"
         "#define configUSE_IDLE_HOOK                     (0)                            \n"
         "#define configUSE_TICK_HOOK                     (0)                            \n"
@@ -169,9 +179,18 @@ else()
     #TODO: make configutable
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "// port specific: ARM Cortex-M                                                 \n"
-        "#define configMINIMAL_STACK_SIZE                (512U)                         \n"
+        "#define configMINIMAL_STACK_SIZE                (${UNI_HAL_RTOS_MINIMAL_STACK_SIZE}U) \n"
         "#define configUSE_PORT_OPTIMISED_TASK_SELECTION (1)                            \n"
     #    "#include \"SEGGER_SYSVIEW_FreeRTOS.h\"                                         \n"
+        "                                                                               \n"
+    )
+endif()
+
+if(UNI_HAL_RTOS_CONFIG_EXTRA)
+    get_filename_component(UNI_HAL_RTOS_CONFIG_EXTRA_ABS "${UNI_HAL_RTOS_CONFIG_EXTRA}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
+        "// project specific settings                                                   \n"
+        "#include \"${UNI_HAL_RTOS_CONFIG_EXTRA_ABS}\"                                  \n"
         "                                                                               \n"
     )
 endif()
