@@ -819,7 +819,9 @@ bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
 
     // keep the error flags for the callback before they get cleared
     uint32_t errors = UNI_HAL_SPI_ERROR_NONE;
-    if (LL_SPI_IsActiveFlag_CRCERR(instance) != 0U) {
+    // the CRC check applies to received data: a transfer that only transmits clocks in
+    // whatever is on MISO and has nothing to compare
+    if (ctx->status.last_rx_data != NULL && LL_SPI_IsActiveFlag_CRCERR(instance) != 0U) {
         errors |= UNI_HAL_SPI_ERROR_CRC;
     }
     if (LL_SPI_IsActiveFlag_OVR(instance) != 0U) {
