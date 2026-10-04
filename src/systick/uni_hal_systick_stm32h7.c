@@ -24,7 +24,10 @@ bool uni_hal_systick_init(void) {
         NVIC_EnableIRQ(SysTick_IRQn);
     }
 
-    LL_InitTick(uni_hal_rcc_clk_get_freq(UNI_HAL_CORE_PERIPH_SYSCLK), 1000U);
+    // LL_InitTick() clocks SysTick from the processor clock, which is SystemCoreClock
+    // (sys_ck / D1CPRE) and not HCLK. FreeRTOS reloads SysTick from the same value.
+    SystemCoreClockUpdate();
+    LL_InitTick(SystemCoreClock, 1000U);
     LL_SYSTICK_EnableIT();
 
     return true;
