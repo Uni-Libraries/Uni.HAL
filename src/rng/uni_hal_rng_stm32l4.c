@@ -95,8 +95,11 @@ bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
             result = uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_RNG, true);
             if (result) {
                 LL_RNG_Enable(instance);
-                result = true;
-                ctx->inited = true;
+
+                // without a running kernel clock the generator never delivers
+                uint32_t probe = 0U;
+                result = _uni_hal_rng_read_32u(instance, &probe);
+                ctx->inited = result;
             }
         }
     }
