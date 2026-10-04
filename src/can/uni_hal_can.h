@@ -47,6 +47,12 @@ typedef struct {
     uint8_t dlc;
 
     uint8_t data[8];
+
+    /**
+     * The identifier is a standard 11-bit one. false, the default, means a 29-bit extended
+     * identifier, which is what the driver has always sent.
+     */
+    bool standard_id;
 } uni_hal_can_msg_t;
 
 /**

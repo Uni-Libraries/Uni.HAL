@@ -344,9 +344,9 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
     bool result = false;
 
     if (uni_hal_can_is_inited(ctx) && msg != NULL) {
-        CAN_TxHeaderTypeDef tx_msg_header = {.StdId = 0,
-                .ExtId = msg->id,
-                .IDE = CAN_ID_EXT,
+        CAN_TxHeaderTypeDef tx_msg_header = {.StdId = msg->standard_id ? msg->id : 0U,
+                .ExtId = msg->standard_id ? 0U : msg->id,
+                .IDE = msg->standard_id ? CAN_ID_STD : CAN_ID_EXT,
                 .RTR = CAN_RTR_DATA,
                 .DLC = msg->dlc,
                 .TransmitGlobalTime = DISABLE};
@@ -406,7 +406,8 @@ static void _uni_hal_can_callback_msgpending(uni_hal_can_context_t *ctx, uint32_
         uni_hal_can_msg_t msg;
 
         while (HAL_CAN_GetRxMessage(_uni_hal_can_get_handle_hal(ctx->config.instance), fifo, &rx_header, msg.data) == HAL_OK) {
-            msg.id = rx_header.IDE ? rx_header.ExtId : rx_header.StdId;
+            msg.standard_id = rx_header.IDE == CAN_ID_STD;
+            msg.id = msg.standard_id ? rx_header.StdId : rx_header.ExtId;
             msg.dlc = rx_header.DLC;
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
