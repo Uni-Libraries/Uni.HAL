@@ -106,6 +106,18 @@ typedef struct
 
 
 /**
+ * Called from the CAN transmit interrupt when a frame has left its TX mailbox
+ * @param cookie value given to uni_hal_can_set_tx_callback()
+ * @param mailbox mailbox the frame was in, 0..2
+ * @param success true when the frame was transmitted and acknowledged; false when it was lost
+ *                (bus error or lost arbitration with automatic retransmission off) or aborted
+ * @return true when the callback made a task of higher priority ready
+ * @note runs in interrupt context; uni_hal_can_transmit_nowait() may be called from it
+ */
+typedef bool (*uni_hal_can_tx_callback_t)(void *cookie, uint32_t mailbox, bool success);
+
+
+/**
  * CAN bus errors, combined as bits in uni_hal_can_status_t::errors
  */
 typedef enum {
@@ -144,6 +156,21 @@ typedef struct {
     uint32_t errors;
 
     bool inited;
+
+    /**
+     * Transmit completion callback, see uni_hal_can_set_tx_callback()
+     */
+    uni_hal_can_tx_callback_t tx_callback;
+
+    /**
+     * Value passed to the transmit completion callback
+     */
+    void *tx_callback_cookie;
+
+    /**
+     * Outcome of the last frame of each TX mailbox, kept by the transmit interrupt
+     */
+    volatile bool tx_ok[3];
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
     QueueHandle_t queue_rx;
@@ -238,6 +265,19 @@ bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_m
  * @return 0..3
  */
 uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx);
+
+/**
+ * Register a function that is called whenever a frame has left its TX mailbox, successfully or
+ * not. This is how a caller of uni_hal_can_transmit_nowait() learns what became of its frames
+ * and when a mailbox is free again.
+ * Register it before the first frame is sent: frames that completed earlier are not reported,
+ * and a blocking uni_hal_can_transmit() that is under way in another task loses its result.
+ * @param ctx CAN context, initialised
+ * @param callback function to call; nullptr removes the callback
+ * @param cookie value passed back to the callback
+ * @return true on success
+ */
+bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_callback_t callback, void *cookie);
 
 /**
  * Drop every frame that is still waiting in a TX mailbox, e.g. after the bus went away

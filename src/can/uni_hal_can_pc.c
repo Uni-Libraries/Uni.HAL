@@ -82,3 +82,15 @@ uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
 bool uni_hal_can_transmit_abort(uni_hal_can_context_t *ctx) {
     return uni_hal_can_is_inited(ctx);
 }
+
+
+bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_callback_t callback, void *cookie) {
+    bool result = false;
+    if (uni_hal_can_is_inited(ctx)) {
+        // kept for the caller to inspect; nothing transmits on the host, so it is never called
+        ctx->status.tx_callback = callback;
+        ctx->status.tx_callback_cookie = cookie;
+        result = true;
+    }
+    return result;
+}
