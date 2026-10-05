@@ -25,6 +25,7 @@ extern "C" {
 // Uni.HAL
 #include "core/uni_hal_core.h"
 #include "gpio/uni_hal_gpio.h"
+#include "rcc/uni_hal_rcc_enum.h"
 
 
 
@@ -72,9 +73,17 @@ typedef struct
     uni_hal_gpio_pin_context_t* pin_tx;
 
     /**
+     * Kernel clock of the peripheral, STM32H7 only: UNI_HAL_RCC_CLKSRC_HSE, _PLL1Q or _PLL2Q.
+     * Both FDCAN instances share it. UNI_HAL_RCC_CLKSRC_UNKNOWN (0) keeps the source that is
+     * selected, which is HSE after reset. The bxCAN of the STM32L4 always runs from APB1.
+     */
+    uni_hal_rcc_clksrc_e clock_source;
+
+    /**
      * Bit rate in bit/s. The bit timing is computed from the CAN clock with a sample point
      * near 87.5 %, and the initialisation fails when the clock cannot give this rate exactly.
-     * 0 keeps the former fixed timing: prescaler 10, 10 time quanta per bit.
+     * 0 keeps the former fixed timing on the STM32L4: prescaler 10, 10 time quanta per bit.
+     * The STM32H7 driver has no such default and needs a bit rate.
      */
     uint32_t bitrate;
 
