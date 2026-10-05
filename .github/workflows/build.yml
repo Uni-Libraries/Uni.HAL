@@ -73,14 +73,20 @@ jobs:
       run: ctest --build-config ${{ matrix.build_type }}
 
   build-arm-gcc:
-    name: arm/gcc (${{ matrix.mcu }}, FreeRTOS ${{ matrix.freertos }}) on ubuntu-latest
+    name: arm/gcc (${{ matrix.mcu }}, FreeRTOS ${{ matrix.freertos }}, CAN FD ${{ matrix.can_fd }}) on ubuntu-latest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         mcu: [STM32H743, STM32L496]
         freertos: ["ON", "OFF"]
+        can_fd: ["OFF"]
         build_type: [Release]
+        include:
+          - mcu: STM32H743
+            freertos: "ON"
+            can_fd: "ON"
+            build_type: Release
 
     steps:
     - uses: actions/checkout@v4
@@ -102,7 +108,7 @@ jobs:
       id: strings
       shell: bash
       run: |
-        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.freertos }}" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.freertos }}-${{ matrix.can_fd }}" >> "$GITHUB_OUTPUT"
 
     - name: Configure CMake
       run: >
@@ -112,6 +118,7 @@ jobs:
         -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
         -DUNI_HAL_HSE_VALUE=8000000
         -DUNI_HAL_USE_FREERTOS=${{ matrix.freertos }}
+        -DUNI_HAL_CAN_USE_FD=${{ matrix.can_fd }}
         -S ${{ github.workspace }}
 
     - name: Build

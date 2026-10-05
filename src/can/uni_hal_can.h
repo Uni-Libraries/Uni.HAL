@@ -35,6 +35,17 @@ extern "C" {
 
 #define UNI_HAL_CAN_QUEUE_SIZE (32U)
 
+/**
+ * Number of data bytes a message can hold: 64 when the library is built for CAN FD
+ * (UNI_HAL_CAN_USE_FD), 8 otherwise. The size of a message, and with it the memory of the
+ * receive queue, follows from it.
+ */
+#if defined(UNI_HAL_CAN_USE_FD)
+#define UNI_HAL_CAN_DATA_SIZE (64U)
+#else
+#define UNI_HAL_CAN_DATA_SIZE (8U)
+#endif
+
 
 
 //
@@ -47,9 +58,13 @@ extern "C" {
 typedef struct {
     uint32_t id;
 
+    /**
+     * Number of data bytes: 0..8 in a classic frame. A CAN FD frame can also carry 12, 16, 20,
+     * 24, 32, 48 or 64 bytes; other lengths do not exist on the bus and are refused.
+     */
     uint8_t dlc;
 
-    uint8_t data[8];
+    uint8_t data[UNI_HAL_CAN_DATA_SIZE];
 
     /**
      * The identifier is a standard 11-bit one. false, the default, means a 29-bit extended
@@ -62,6 +77,23 @@ typedef struct {
      * the length that is asked for.
      */
     bool remote;
+
+    /**
+     * CAN FD frame format. Needs a peripheral that speaks CAN FD (the FDCAN of the STM32H7) with
+     * `fd` set in its configuration; a classic frame can be sent and received there as well.
+     */
+    bool fd;
+
+    /**
+     * Bit rate switch: the data phase of a CAN FD frame runs at the data bit rate. Ignored on
+     * transmission when no data bit rate is configured.
+     */
+    bool brs;
+
+    /**
+     * Error state indicator of a received CAN FD frame: its sender was error passive
+     */
+    bool esi;
 } uni_hal_can_msg_t;
 
 /**
@@ -121,6 +153,20 @@ typedef struct
      * The STM32H7 driver has no such default and needs a bit rate.
      */
     uint32_t bitrate;
+
+    /**
+     * Take part in CAN FD traffic, STM32H7 only: frames in FD format are received and can be
+     * sent. The library has to be built with UNI_HAL_CAN_USE_FD. Without this the node is a
+     * classic one, which answers every FD frame on the bus with an error frame.
+     */
+    bool fd;
+
+    /**
+     * Bit rate of the data phase of CAN FD frames in bit/s, for frames sent with `brs`. 0: no
+     * bit rate switching, the whole frame runs at `bitrate`. At a prescaler of 1 or 2 the
+     * transmitter delay compensation is switched on, which the higher rates need.
+     */
+    uint32_t bitrate_data;
 
     /**
      * Retransmit a frame that lost arbitration or was hit by an error (clears NART)
@@ -338,6 +384,22 @@ typedef struct {
  * @return false when no setting gives exactly this bit rate
  */
 bool uni_hal_can_timing_calc(uint32_t clock_hz, uint32_t bitrate, uni_hal_can_timing_t *timing);
+
+/**
+ * Convert a number of data bytes to the data length code of a frame
+ * @param length number of data bytes
+ * @param fd true for a CAN FD frame, which also has the codes for 12 to 64 bytes
+ * @return data length code 0..15; UINT8_MAX when no frame of that kind carries this many bytes
+ */
+uint8_t uni_hal_can_dlc_from_length(uint32_t length, bool fd);
+
+/**
+ * Convert the data length code of a frame to its number of data bytes
+ * @param dlc data length code 0..15
+ * @param fd true for a CAN FD frame; in a classic frame the codes above 8 all mean 8 bytes
+ * @return number of data bytes
+ */
+uint8_t uni_hal_can_dlc_to_length(uint32_t dlc, bool fd);
 
 /**
  * Compute a bit timing for the data phase of CAN FD frames, which is sent at its own, higher

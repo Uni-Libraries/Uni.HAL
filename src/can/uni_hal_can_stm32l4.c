@@ -207,6 +207,11 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
         return false;
     }
 
+    // bxCAN is a classic CAN controller
+    if (msg->fd) {
+        return false;
+    }
+
     uint32_t const tsr = can->TSR;
     if ((tsr & (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2)) == 0U) {
         return false;
@@ -490,6 +495,9 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         }
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_rx);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_tx);
+
+        // bxCAN is a classic CAN controller
+        result = result && !ctx->config.fd;
 
         CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
         if (result && can != nullptr) {

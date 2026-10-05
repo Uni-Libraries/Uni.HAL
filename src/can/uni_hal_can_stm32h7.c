@@ -25,7 +25,8 @@
 //
 // The driver offers the same interface as the bxCAN one, which shapes how FDCAN is used:
 //
-// - classic CAN frames only, up to 8 data bytes;
+// - classic CAN frames, and CAN FD frames of up to 64 data bytes when the library is built with
+//   UNI_HAL_CAN_USE_FD and the configuration sets `fd`;
 // - three TX buffers, which play the part of the three TX mailboxes;
 // - acceptance filters are given in the bxCAN register layout and translated, see
 //   uni_hal_can_set_filter().
@@ -62,11 +63,22 @@
 
 /**
  * Size of the message RAM elements in 32-bit words: a filter for standard identifiers, one for
- * extended identifiers, and an RX or TX element with two header words and 8 data bytes
+ * extended identifiers, and an RX or TX element with two header words and the data bytes
  */
 #define UNI_HAL_CAN_STD_FILTER_WORDS (1U)
 #define UNI_HAL_CAN_EXT_FILTER_WORDS (2U)
-#define UNI_HAL_CAN_ELEMENT_WORDS    (4U)
+#define UNI_HAL_CAN_HEADER_WORDS     (2U)
+#define UNI_HAL_CAN_ELEMENT_WORDS    (UNI_HAL_CAN_HEADER_WORDS + UNI_HAL_CAN_DATA_SIZE / 4U)
+
+/**
+ * Data field size of the RX and TX elements as the element size registers want it:
+ * 0 for 8 bytes, 7 for 64 bytes
+ */
+#if defined(UNI_HAL_CAN_USE_FD)
+#define UNI_HAL_CAN_ELEMENT_SIZE_CODE (7UL)
+#else
+#define UNI_HAL_CAN_ELEMENT_SIZE_CODE (0UL)
+#endif
 
 /**
  * Where the sections of one instance start inside its block of the message RAM, in words
@@ -79,11 +91,18 @@
 #define UNI_HAL_CAN_RAM_USED        (UNI_HAL_CAN_RAM_TX + UNI_HAL_CAN_TX_BUFFERS * UNI_HAL_CAN_ELEMENT_WORDS)
 
 /**
- * The message RAM of 2560 words is shared by both instances; each gets a block of this size
+ * The message RAM of 2560 words is shared by both instances; each gets a block of this size.
+ * With 64-byte elements the two blocks take all of it.
  */
+#define UNI_HAL_CAN_RAM_WORDS (2560U)
+#if defined(UNI_HAL_CAN_USE_FD)
+#define UNI_HAL_CAN_RAM_BLOCK_WORDS (1280U)
+#else
 #define UNI_HAL_CAN_RAM_BLOCK_WORDS (320U)
+#endif
 
 _Static_assert(UNI_HAL_CAN_RAM_USED <= UNI_HAL_CAN_RAM_BLOCK_WORDS, "the message RAM sections do not fit their block");
+_Static_assert(2U * UNI_HAL_CAN_RAM_BLOCK_WORDS <= UNI_HAL_CAN_RAM_WORDS, "the blocks of the two instances do not fit the message RAM");
 
 /**
  * Bits of all TX buffers in the TXBxx registers
@@ -95,6 +114,9 @@ _Static_assert(UNI_HAL_CAN_RAM_USED <= UNI_HAL_CAN_RAM_BLOCK_WORDS, "the message
  */
 #define UNI_HAL_CAN_ELEMENT_XTD      (1UL << 30U) // extended identifier
 #define UNI_HAL_CAN_ELEMENT_RTR      (1UL << 29U) // remote frame
+#define UNI_HAL_CAN_ELEMENT_ESI      (1UL << 31U) // error state indicator
+#define UNI_HAL_CAN_ELEMENT_FDF      (1UL << 21U) // CAN FD frame format
+#define UNI_HAL_CAN_ELEMENT_BRS      (1UL << 20U) // bit rate switch
 #define UNI_HAL_CAN_ELEMENT_STD_POS  (18U)        // a standard identifier sits in bits 28:18
 #define UNI_HAL_CAN_ELEMENT_DLC_POS  (16U)
 #define UNI_HAL_CAN_FILTER_CLASSIC   (2UL << 30U) // identifier and mask
@@ -255,18 +277,46 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
         return false;
     }
 
-    uint32_t const dlc = (msg->dlc <= 8U) ? msg->dlc : 8U;
+    // A classic frame has always been cut at 8 bytes. A CAN FD frame has to name a length that
+    // exists, and needs the node to be an FD one; it has no remote variant.
+    uint32_t length;
+    uint32_t dlc;
+    if (msg->fd) {
+        length = msg->dlc;
+        dlc = uni_hal_can_dlc_from_length(length, true);
+        if (!ctx->config.fd || msg->remote || dlc == UINT8_MAX || length > UNI_HAL_CAN_DATA_SIZE) {
+            return false;
+        }
+    }
+    else {
+        length = (msg->dlc <= 8U) ? msg->dlc : 8U;
+        dlc = length;
+    }
 
     volatile uint32_t *element = _uni_hal_can_ram(inst, UNI_HAL_CAN_RAM_TX, buffer, UNI_HAL_CAN_ELEMENT_WORDS);
     element[0] = (msg->standard_id ? ((msg->id & 0x7FFU) << UNI_HAL_CAN_ELEMENT_STD_POS)
                                    : ((msg->id & 0x1FFFFFFFU) | UNI_HAL_CAN_ELEMENT_XTD)) |
                  (msg->remote ? UNI_HAL_CAN_ELEMENT_RTR : 0U);
-    // classic frame, no bit rate switch, no TX event
-    element[1] = dlc << UNI_HAL_CAN_ELEMENT_DLC_POS;
-    element[2] = ((uint32_t)msg->data[3] << 24U) | ((uint32_t)msg->data[2] << 16U) |
-                 ((uint32_t)msg->data[1] << 8U) | (uint32_t)msg->data[0];
-    element[3] = ((uint32_t)msg->data[7] << 24U) | ((uint32_t)msg->data[6] << 16U) |
-                 ((uint32_t)msg->data[5] << 8U) | (uint32_t)msg->data[4];
+
+    // no TX event; the bit rate switch needs a data bit rate to switch to
+    uint32_t format = 0U;
+    if (msg->fd) {
+        format = UNI_HAL_CAN_ELEMENT_FDF;
+        if (msg->brs && ctx->config.bitrate_data != 0U) {
+            format |= UNI_HAL_CAN_ELEMENT_BRS;
+        }
+    }
+    element[1] = (dlc << UNI_HAL_CAN_ELEMENT_DLC_POS) | format;
+
+    // the message RAM takes 32-bit accesses only: the data bytes go in as whole words, the
+    // first byte in the lowest bits
+    for (uint32_t offset = 0U; offset < length; offset += 4U) {
+        uint32_t word = 0U;
+        for (uint32_t byte = 0U; byte < 4U && (offset + byte) < length; byte++) {
+            word |= (uint32_t)msg->data[offset + byte] << (8U * byte);
+        }
+        element[UNI_HAL_CAN_HEADER_WORDS + offset / 4U] = word;
+    }
 
     // the interrupt clears the same bookkeeping, so the request goes out with it masked
     uint32_t const primask = uni_hal_core_irq_pause();
@@ -331,28 +381,32 @@ static BaseType_t _uni_hal_can_irq_rx(const uni_hal_can_stm32h7_instance_t *inst
 
         uint32_t const r0 = element[0];
         uint32_t const r1 = element[1];
-        uint32_t const data_low = element[2];
-        uint32_t const data_high = element[3];
-
-        // hand the element back to the FIFO
-        *acknowledge = get_index;
 
         uni_hal_can_msg_t msg = {0};
         msg.standard_id = (r0 & UNI_HAL_CAN_ELEMENT_XTD) == 0U;
         msg.remote = (r0 & UNI_HAL_CAN_ELEMENT_RTR) != 0U;
+        msg.esi = (r0 & UNI_HAL_CAN_ELEMENT_ESI) != 0U;
+        msg.fd = (r1 & UNI_HAL_CAN_ELEMENT_FDF) != 0U;
+        msg.brs = (r1 & UNI_HAL_CAN_ELEMENT_BRS) != 0U;
         msg.id = msg.standard_id ? ((r0 >> UNI_HAL_CAN_ELEMENT_STD_POS) & 0x7FFU) : (r0 & 0x1FFFFFFFU);
-        msg.dlc = (uint8_t)((r1 >> UNI_HAL_CAN_ELEMENT_DLC_POS) & 0xFU);
-        if (msg.dlc > 8U) {
-            msg.dlc = 8U;
+
+        // what the element holds is limited by its size, which is also the size of msg.data
+        uint32_t length = uni_hal_can_dlc_to_length((r1 >> UNI_HAL_CAN_ELEMENT_DLC_POS) & 0xFU, msg.fd);
+        if (length > UNI_HAL_CAN_DATA_SIZE) {
+            length = UNI_HAL_CAN_DATA_SIZE;
         }
-        msg.data[0] = (uint8_t)(data_low);
-        msg.data[1] = (uint8_t)(data_low >> 8U);
-        msg.data[2] = (uint8_t)(data_low >> 16U);
-        msg.data[3] = (uint8_t)(data_low >> 24U);
-        msg.data[4] = (uint8_t)(data_high);
-        msg.data[5] = (uint8_t)(data_high >> 8U);
-        msg.data[6] = (uint8_t)(data_high >> 16U);
-        msg.data[7] = (uint8_t)(data_high >> 24U);
+        msg.dlc = (uint8_t)length;
+
+        // the message RAM takes 32-bit accesses only; a remote frame has no data
+        for (uint32_t offset = 0U; offset < length && !msg.remote; offset += 4U) {
+            uint32_t const word = element[UNI_HAL_CAN_HEADER_WORDS + offset / 4U];
+            for (uint32_t byte = 0U; byte < 4U && (offset + byte) < length; byte++) {
+                msg.data[offset + byte] = (uint8_t)(word >> (8U * byte));
+            }
+        }
+
+        // hand the element back to the FIFO
+        *acknowledge = get_index;
 
         if (ctx != nullptr && ctx->status.inited) {
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
@@ -523,10 +577,21 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
 
         // There is no timing to fall back to: the kernel clock is whatever the project selected.
         // The prescaler field is 9 bits wide.
+        uint32_t const clock_hz = uni_hal_rcc_clk_get_freq(ctx->config.instance);
         uni_hal_can_timing_t timing = {0};
         result = result && ctx->config.bitrate != 0U &&
-                 uni_hal_can_timing_calc(uni_hal_rcc_clk_get_freq(ctx->config.instance), ctx->config.bitrate, &timing) &&
-                 timing.prescaler <= 512U;
+                 uni_hal_can_timing_calc(clock_hz, ctx->config.bitrate, &timing) && timing.prescaler <= 512U;
+
+        // CAN FD needs the 64-byte message RAM elements the library is then built with. The data
+        // phase gets its own timing when frames are to switch the bit rate.
+#if !defined(UNI_HAL_CAN_USE_FD)
+        result = result && !ctx->config.fd;
+#endif
+        bool const bit_rate_switch = ctx->config.fd && ctx->config.bitrate_data != 0U;
+        uni_hal_can_timing_t timing_data = {0};
+        if (bit_rate_switch) {
+            result = result && uni_hal_can_timing_calc_data(clock_hz, ctx->config.bitrate_data, &timing_data);
+        }
 
         if (result) {
             // wake the peripheral up, then open the configuration
@@ -557,11 +622,13 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
                 break;
             }
 
-            // classic CAN; DAR disables the automatic retransmission
+            // FDOE makes the node a CAN FD one (ISO 11898-1:2015 frame format), BRSE lets it
+            // switch the bit rate in the data phase; DAR disables the automatic retransmission
             MODIFY_REG(can->CCCR,
                        FDCAN_CCCR_DAR | FDCAN_CCCR_MON | FDCAN_CCCR_TEST | FDCAN_CCCR_ASM | FDCAN_CCCR_FDOE |
-                       FDCAN_CCCR_BRSE | FDCAN_CCCR_TXP | FDCAN_CCCR_PXHD,
-                       cccr_mode | (ctx->config.auto_retransmission ? 0U : FDCAN_CCCR_DAR));
+                       FDCAN_CCCR_BRSE | FDCAN_CCCR_TXP | FDCAN_CCCR_PXHD | FDCAN_CCCR_NISO,
+                       cccr_mode | (ctx->config.auto_retransmission ? 0U : FDCAN_CCCR_DAR) |
+                       (ctx->config.fd ? FDCAN_CCCR_FDOE : 0U) | (bit_rate_switch ? FDCAN_CCCR_BRSE : 0U));
 
             // the test register can only be written with TEST set, and reads as reset otherwise
             if (loopback) {
@@ -570,6 +637,30 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
 
             can->NBTP = ((timing.sjw - 1U) << FDCAN_NBTP_NSJW_Pos) | ((timing.prescaler - 1U) << FDCAN_NBTP_NBRP_Pos) |
                         ((timing.bs1 - 1U) << FDCAN_NBTP_NTSEG1_Pos) | ((timing.bs2 - 1U) << FDCAN_NBTP_NTSEG2_Pos);
+
+            if (bit_rate_switch) {
+                uint32_t dbtp = ((timing_data.sjw - 1U) << FDCAN_DBTP_DSJW_Pos) |
+                                ((timing_data.prescaler - 1U) << FDCAN_DBTP_DBRP_Pos) |
+                                ((timing_data.bs1 - 1U) << FDCAN_DBTP_DTSEG1_Pos) |
+                                ((timing_data.bs2 - 1U) << FDCAN_DBTP_DTSEG2_Pos);
+
+                // Transmitter delay compensation. In the data phase a bit can be shorter than
+                // the way through the transceiver and back, so the transmitter cannot check its
+                // own bits at the normal sample point. It checks them at a secondary one
+                // instead: the measured loop delay plus this offset, here the position of the
+                // sample point within the bit, in kernel clock periods. The peripheral only
+                // offers this at a data prescaler of 1 or 2, which is where it is needed.
+                if (timing_data.prescaler <= 2U) {
+                    uint32_t offset = timing_data.prescaler * (1U + timing_data.bs1);
+                    if (offset > 127U) {
+                        offset = 127U;
+                    }
+                    can->TDCR = offset << FDCAN_TDCR_TDCO_Pos;
+                    dbtp |= FDCAN_DBTP_TDC;
+                }
+
+                can->DBTP = dbtp;
+            }
 
             // message RAM: all filters start out disabled
             volatile uint32_t *ram = _uni_hal_can_ram(inst, 0U, 0U, 1U);
@@ -590,9 +681,11 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             can->RXF1C = (UNI_HAL_CAN_RX_FIFO_SIZE << FDCAN_RXF1C_F1S_Pos) |
                          ((inst->ram_words + UNI_HAL_CAN_RAM_RX_FIFO1) << FDCAN_RXF1C_F1SA_Pos);
             can->RXBC = 0U;
-            // 8 data bytes per element, RX and TX
-            can->RXESC = 0U;
-            can->TXESC = 0U;
+            // size of the data field of an element, RX and TX
+            can->RXESC = (UNI_HAL_CAN_ELEMENT_SIZE_CODE << FDCAN_RXESC_F0DS_Pos) |
+                         (UNI_HAL_CAN_ELEMENT_SIZE_CODE << FDCAN_RXESC_F1DS_Pos) |
+                         (UNI_HAL_CAN_ELEMENT_SIZE_CODE << FDCAN_RXESC_RBDS_Pos);
+            can->TXESC = UNI_HAL_CAN_ELEMENT_SIZE_CODE << FDCAN_TXESC_TBDS_Pos;
             can->TXEFC = 0U;
 
             // Three TX buffers. As dedicated buffers the frame with the lowest identifier goes

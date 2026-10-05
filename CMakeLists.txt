@@ -15,6 +15,7 @@ set(UNI_HAL_TARGET_MCU "" CACHE STRING "Target MCU: STM32H743, STM32L496 or PC")
 set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 PC)
 option(UNI_HAL_USE_FREERTOS     "build the drivers on top of FreeRTOS; OFF for a main loop without an RTOS" ON)
 option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
+option(UNI_HAL_CAN_USE_FD       "CAN messages carry up to 64 data bytes (CAN FD); OFF keeps them at 8" OFF)
 option(UNI_HAL_I2C_USE_FREERTOS "use FreeRTOS for I2C driver" ON)
 if(NOT UNI_HAL_USE_FREERTOS)
     # nothing to build the per-driver RTOS support on

@@ -108,3 +108,30 @@ TEST_CASE("can_timing_nominal_keeps_narrow_jump_width", "[hal_can]") {
     REQUIRE(timing.sjw == 1U);
 }
 
+TEST_CASE("can_dlc_classic", "[hal_can]") {
+    for (uint32_t length = 0U; length <= 8U; length++) {
+        REQUIRE(uni_hal_can_dlc_from_length(length, false) == length);
+        REQUIRE(uni_hal_can_dlc_to_length(length, false) == length);
+    }
+    // a classic frame carries at most 8 bytes, whatever its length code says
+    REQUIRE(uni_hal_can_dlc_from_length(12U, false) == UINT8_MAX);
+    for (uint32_t dlc = 9U; dlc <= 15U; dlc++) {
+        REQUIRE(uni_hal_can_dlc_to_length(dlc, false) == 8U);
+    }
+}
+
+TEST_CASE("can_dlc_fd", "[hal_can]") {
+    const uint32_t lengths[] = {0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 12U, 16U, 20U, 24U, 32U, 48U, 64U};
+
+    // every data length code has exactly one length, and back
+    for (uint32_t dlc = 0U; dlc <= 15U; dlc++) {
+        REQUIRE(uni_hal_can_dlc_to_length(dlc, true) == lengths[dlc]);
+        REQUIRE(uni_hal_can_dlc_from_length(lengths[dlc], true) == dlc);
+    }
+
+    // lengths between the steps do not exist on the bus
+    for (uint32_t length : {9U, 10U, 11U, 13U, 17U, 31U, 33U, 63U, 65U, 100U}) {
+        REQUIRE(uni_hal_can_dlc_from_length(length, true) == UINT8_MAX);
+    }
+}
+

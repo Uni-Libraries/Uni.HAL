@@ -69,6 +69,46 @@ bool uni_hal_can_set_error_callback(uni_hal_can_context_t *ctx, uni_hal_can_erro
 }
 
 
+// data bytes of the CAN FD data length codes 9..15
+static const uint8_t g_uni_hal_can_fd_lengths[] = {12U, 16U, 20U, 24U, 32U, 48U, 64U};
+
+
+uint8_t uni_hal_can_dlc_from_length(uint32_t length, bool fd) {
+    uint8_t result = UINT8_MAX;
+
+    if (length <= 8U) {
+        result = (uint8_t)length;
+    }
+    else if (fd) {
+        for (uint32_t idx = 0U; idx < sizeof(g_uni_hal_can_fd_lengths); idx++) {
+            if (g_uni_hal_can_fd_lengths[idx] == length) {
+                result = (uint8_t)(9U + idx);
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
+
+uint8_t uni_hal_can_dlc_to_length(uint32_t dlc, bool fd) {
+    uint8_t result;
+
+    if (dlc <= 8U) {
+        result = (uint8_t)dlc;
+    }
+    else if (fd && dlc <= 15U) {
+        result = g_uni_hal_can_fd_lengths[dlc - 9U];
+    }
+    else {
+        result = 8U;
+    }
+
+    return result;
+}
+
+
 /**
  * What a bit timing has to fit into and aim for
  */
