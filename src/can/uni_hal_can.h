@@ -222,6 +222,13 @@ typedef enum {
     UNI_HAL_CAN_ERROR_RX_OVERRUN = 1 << 3,
     /** a received frame was dropped because the receive queue of the driver was full */
     UNI_HAL_CAN_ERROR_RX_DROPPED = 1 << 4,
+    /**
+     * Not an error: the node is error active again after it had been error passive or bus-off.
+     * Passed to the error callback only, never kept in uni_hal_can_status_t::errors. FDCAN
+     * (STM32H7) reports it; bxCAN (STM32L4) raises no interrupt when an error state ends, there
+     * the state has to be read with uni_hal_can_bus_status_get().
+     */
+    UNI_HAL_CAN_ERROR_RECOVERED  = 1 << 5,
 } uni_hal_can_error_e;
 
 
@@ -474,7 +481,8 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
 
 /**
  * Register a function that is called when the error state of the node changes (error warning,
- * error passive, bus-off) or a received frame is lost. Without it the application has to poll
+ * error passive, bus-off, and on the STM32H7 the return to error active) or a received frame
+ * is lost. Without it the application has to poll
  * uni_hal_can_status_t::errors.
  * @param ctx CAN context, initialised
  * @param callback function to call; nullptr removes the callback

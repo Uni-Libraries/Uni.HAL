@@ -349,7 +349,8 @@ static BaseType_t _uni_hal_can_report(uni_hal_can_context_t *ctx, uint32_t error
         if (counted) {
             ctx->status.count_err++;
         }
-        ctx->status.errors |= errors;
+        // the return to error active is news for the callback, not an error to keep
+        ctx->status.errors |= errors & ~(uint32_t)UNI_HAL_CAN_ERROR_RECOVERED;
 
         uni_hal_can_error_callback_t const callback = ctx->status.error_callback;
         if (callback != nullptr && callback(ctx->status.error_callback_cookie, errors)) {
@@ -497,7 +498,18 @@ static BaseType_t _uni_hal_can_irq_error(const uni_hal_can_stm32h7_instance_t *i
         }
     }
 
-    return _uni_hal_can_report(ctx, errors, true);
+    BaseType_t woken = _uni_hal_can_report(ctx, errors, true);
+
+    // The status change interrupts also come when a state ends. With neither error passive nor
+    // bus-off left, the node is error active again: after its error counters came down, or
+    // after the bus-off recovery sequence.
+    if ((flags & (FDCAN_IR_EP | FDCAN_IR_BO)) != 0U && (psr & (FDCAN_PSR_EP | FDCAN_PSR_BO)) == 0U) {
+        if (_uni_hal_can_report(ctx, UNI_HAL_CAN_ERROR_RECOVERED, false) != pdFALSE) {
+            woken = pdTRUE;
+        }
+    }
+
+    return woken;
 }
 
 
