@@ -156,10 +156,19 @@ bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *d
     bool result = false;
 
     if (uni_hal_rtc_is_inited(ctx) && datetime != nullptr) {
-        // reading the time latches the date until the date register is read: this order gives
-        // a consistent pair
+        // Reading the sub-second or the time register freezes the higher registers until the
+        // date register is read: in this order the three values belong to the same instant.
+        uint32_t const subsecond = LL_RTC_TIME_GetSubSecond(RTC);
         uint32_t const time = LL_RTC_TIME_Get(RTC);
         uint32_t const date = LL_RTC_DATE_Get(RTC);
+
+        // the sub-second counter runs down from the synchronous prescaler to 0 within a second
+        uint32_t const prescaler = LL_RTC_GetSynchPrescaler(RTC);
+        uint32_t milliseconds = 0U;
+        if (subsecond <= prescaler) {
+            milliseconds = (1000U * (prescaler - subsecond)) / (prescaler + 1U);
+        }
+        datetime->milliseconds = (uint16_t)((milliseconds < 1000U) ? milliseconds : 999U);
 
         datetime->hours = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_HOUR(time));
         datetime->minutes = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_MINUTE(time));

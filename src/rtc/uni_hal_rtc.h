@@ -50,6 +50,12 @@ typedef struct {
     uint8_t minutes;
     /** 0..59 */
     uint8_t seconds;
+    /**
+     * Fraction of the second, 0..999. Read only: it comes from the sub-second counter of the
+     * RTC, in steps of about 4 ms (1/256 s from LSE, 1/250 s from LSI). The calendar is set to
+     * the second; uni_hal_rtc_set() ignores this field.
+     */
+    uint16_t milliseconds;
 } uni_hal_rtc_datetime_t;
 
 

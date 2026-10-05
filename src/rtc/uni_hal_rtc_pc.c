@@ -14,7 +14,7 @@
 // Globals
 //
 
-static uni_hal_rtc_datetime_t g_uni_hal_rtc_datetime = {.year = 2000U, .month = 1U, .day = 1U, .weekday = 6U};
+static uni_hal_rtc_datetime_t g_uni_hal_rtc_datetime = {.year = 2000U, .month = 1U, .day = 1U, .weekday = 6U, .milliseconds = 0U};
 static uint32_t g_uni_hal_rtc_backup[UNI_HAL_RTC_BACKUP_COUNT] = {0U};
 
 
@@ -60,6 +60,8 @@ bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *d
     bool result = false;
     if (uni_hal_rtc_is_inited(ctx) && datetime != nullptr) {
         g_uni_hal_rtc_datetime = *datetime;
+        // the calendar is set to the second
+        g_uni_hal_rtc_datetime.milliseconds = 0U;
         ctx->calendar_valid = true;
         result = true;
     }
