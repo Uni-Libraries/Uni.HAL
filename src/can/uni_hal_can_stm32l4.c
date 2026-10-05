@@ -245,6 +245,31 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
 //
 
 /**
+ * Record errors and tell the application
+ * @param errors bits of uni_hal_can_error_e
+ * @param counted true for what counts as a bus error in count_err; a frame dropped for lack
+ *                of queue space has its own counter
+ * @return not 0 when the callback made a task of higher priority ready
+ */
+static BaseType_t _uni_hal_can_report(uni_hal_can_context_t *ctx, uint32_t errors, bool counted) {
+    BaseType_t woken = pdFALSE;
+
+    if (ctx != nullptr && errors != UNI_HAL_CAN_ERROR_NONE) {
+        if (counted) {
+            ctx->status.count_err++;
+        }
+        ctx->status.errors |= errors;
+
+        uni_hal_can_error_callback_t const callback = ctx->status.error_callback;
+        if (callback != nullptr && callback(ctx->status.error_callback_cookie, errors)) {
+            woken = pdTRUE;
+        }
+    }
+
+    return woken;
+}
+
+/**
  * Receive interrupt of one FIFO: move every pending frame to the receive queue
  * @return not 0 when a task of higher priority became ready
  */
@@ -259,9 +284,8 @@ static BaseType_t _uni_hal_can_irq_rx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
     if ((*rfr & CAN_RF0R_FOVR0) != 0U) {
         // the flags are cleared by writing 1; writing only this one leaves the others alone
         *rfr = CAN_RF0R_FOVR0;
-        if (ctx != nullptr) {
-            ctx->status.count_err++;
-            ctx->status.errors |= UNI_HAL_CAN_ERROR_RX_OVERRUN;
+        if (_uni_hal_can_report(ctx, UNI_HAL_CAN_ERROR_RX_OVERRUN, true) != pdFALSE) {
+            woken = pdTRUE;
         }
     }
 
@@ -305,6 +329,9 @@ static BaseType_t _uni_hal_can_irq_rx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
             }
             else {
                 ctx->status.count_rx_dropped++;
+                if (_uni_hal_can_report(ctx, UNI_HAL_CAN_ERROR_RX_DROPPED, false) != pdFALSE) {
+                    woken = pdTRUE;
+                }
             }
         }
     }
@@ -350,27 +377,38 @@ static BaseType_t _uni_hal_can_irq_tx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
 /**
  * Status change interrupt: the error state of the node changed
  */
-static void _uni_hal_can_irq_sce(uni_hal_can_context_t *ctx, CAN_TypeDef *can) {
+static BaseType_t _uni_hal_can_irq_sce(uni_hal_can_context_t *ctx, CAN_TypeDef *can) {
+    BaseType_t woken = pdFALSE;
+
     if ((can->MSR & CAN_MSR_ERRI) != 0U) {
         uint32_t const esr = can->ESR;
 
         // cleared by writing 1; the other write-1-to-clear bits of MSR are written as 0
         can->MSR = CAN_MSR_ERRI;
 
-        if (ctx != nullptr) {
-            ctx->status.count_err++;
+        uint32_t errors = UNI_HAL_CAN_ERROR_NONE;
+        if ((esr & CAN_ESR_EWGF) != 0U) {
+            errors |= UNI_HAL_CAN_ERROR_WARNING;
+        }
+        if ((esr & CAN_ESR_EPVF) != 0U) {
+            errors |= UNI_HAL_CAN_ERROR_PASSIVE;
+        }
+        if ((esr & CAN_ESR_BOFF) != 0U) {
+            errors |= UNI_HAL_CAN_ERROR_BUS_OFF;
+        }
 
-            if ((esr & CAN_ESR_EWGF) != 0U) {
-                ctx->status.errors |= UNI_HAL_CAN_ERROR_WARNING;
+        if (ctx != nullptr) {
+            if (errors != UNI_HAL_CAN_ERROR_NONE) {
+                woken = _uni_hal_can_report(ctx, errors, true);
             }
-            if ((esr & CAN_ESR_EPVF) != 0U) {
-                ctx->status.errors |= UNI_HAL_CAN_ERROR_PASSIVE;
-            }
-            if ((esr & CAN_ESR_BOFF) != 0U) {
-                ctx->status.errors |= UNI_HAL_CAN_ERROR_BUS_OFF;
+            else {
+                // the interrupt came for a state the node has left again already
+                ctx->status.count_err++;
             }
         }
     }
+
+    return woken;
 }
 
 
@@ -413,12 +451,14 @@ void CAN2_TX_IRQHandler(void)
 // status change / error
 void CAN1_SCE_IRQHandler(void)
 {
-    _uni_hal_can_irq_sce(_uni_hal_can_1_ctx, CAN1);
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_can_irq_sce(_uni_hal_can_1_ctx, CAN1));
 }
 
 void CAN2_SCE_IRQHandler(void)
 {
-    _uni_hal_can_irq_sce(_uni_hal_can_2_ctx, CAN2);
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_can_irq_sce(_uni_hal_can_2_ctx, CAN2));
 }
 
 
@@ -504,6 +544,8 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             ctx->status.errors = UNI_HAL_CAN_ERROR_NONE;
             ctx->status.tx_callback = nullptr;
             ctx->status.tx_callback_cookie = nullptr;
+            ctx->status.error_callback = nullptr;
+            ctx->status.error_callback_cookie = nullptr;
             for (uint32_t mailbox = 0U; mailbox < UNI_HAL_CAN_TX_MAILBOXES; mailbox++) {
                 ctx->status.tx_ok[mailbox] = false;
             }

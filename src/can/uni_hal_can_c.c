@@ -7,6 +7,7 @@
 
 // uni_hal
 #include "can/uni_hal_can.h"
+#include "core/uni_hal_core.h"
 
 
 
@@ -50,6 +51,20 @@ bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, siz
 #endif
     }
 
+    return result;
+}
+
+
+bool uni_hal_can_set_error_callback(uni_hal_can_context_t *ctx, uni_hal_can_error_callback_t callback, void *cookie) {
+    bool result = false;
+    if (uni_hal_can_is_inited(ctx)) {
+        // the interrupts use both values: change them together
+        uint32_t const primask = uni_hal_core_irq_pause();
+        ctx->status.error_callback_cookie = cookie;
+        ctx->status.error_callback = callback;
+        uni_hal_core_irq_resume(primask);
+        result = true;
+    }
     return result;
 }
 

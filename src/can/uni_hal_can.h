@@ -130,7 +130,20 @@ typedef enum {
     UNI_HAL_CAN_ERROR_BUS_OFF    = 1 << 2,
     /** a hardware receive FIFO overflowed and a frame was lost */
     UNI_HAL_CAN_ERROR_RX_OVERRUN = 1 << 3,
+    /** a received frame was dropped because the receive queue of the driver was full */
+    UNI_HAL_CAN_ERROR_RX_DROPPED = 1 << 4,
 } uni_hal_can_error_e;
+
+
+/**
+ * Called from a CAN interrupt when the driver detects a bus error or loses a frame
+ * @param cookie value given to uni_hal_can_set_error_callback()
+ * @param errors what happened, bits of uni_hal_can_error_e. The same bits are also collected in
+ *               uni_hal_can_status_t::errors.
+ * @return true when the callback made a task of higher priority ready
+ * @note runs in interrupt context
+ */
+typedef bool (*uni_hal_can_error_callback_t)(void *cookie, uint32_t errors);
 
 
 /**
@@ -171,6 +184,16 @@ typedef struct {
      * Outcome of the last frame of each TX mailbox, kept by the transmit interrupt
      */
     volatile bool tx_ok[3];
+
+    /**
+     * Error callback, see uni_hal_can_set_error_callback()
+     */
+    uni_hal_can_error_callback_t error_callback;
+
+    /**
+     * Value passed to the error callback
+     */
+    void *error_callback_cookie;
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
     QueueHandle_t queue_rx;
@@ -278,6 +301,17 @@ uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx);
  * @return true on success
  */
 bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_callback_t callback, void *cookie);
+
+/**
+ * Register a function that is called when the error state of the node changes (error warning,
+ * error passive, bus-off) or a received frame is lost. Without it the application has to poll
+ * uni_hal_can_status_t::errors.
+ * @param ctx CAN context, initialised
+ * @param callback function to call; nullptr removes the callback
+ * @param cookie value passed back to the callback
+ * @return true on success
+ */
+bool uni_hal_can_set_error_callback(uni_hal_can_context_t *ctx, uni_hal_can_error_callback_t callback, void *cookie);
 
 /**
  * Drop every frame that is still waiting in a TX mailbox, e.g. after the bus went away
