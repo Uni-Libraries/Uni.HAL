@@ -133,7 +133,12 @@ static size_t _uni_hal_io_buf_read(uni_hal_io_buffer_t *buf, uint8_t *data, size
 
 static size_t _uni_hal_io_buf_write(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len) {
     uint32_t const primask = uni_hal_core_irq_pause();
-    size_t const space = buf->handle->size_total - uni_common_ringbuffer_length(buf->handle);
+    // The ring buffer keeps one element free to tell full from empty, and a push into a full
+    // buffer overwrites the oldest data. Only what fits is pushed, so that new data is refused
+    // instead, as a stream buffer does.
+    size_t const capacity = buf->handle->size_total / buf->handle->size_object - 1U;
+    size_t const used = uni_common_ringbuffer_length(buf->handle);
+    size_t const space = (capacity > used) ? (capacity - used) : 0U;
     size_t const result = uni_common_ringbuffer_push(buf->handle, data, (space < data_len) ? space : data_len);
     uni_hal_core_irq_resume(primask);
     return result;
