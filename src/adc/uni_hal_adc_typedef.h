@@ -89,7 +89,9 @@ typedef struct {
     uint32_t v_ref;
 
     /**
-     * Timeout for ADC calibration and ADC startup
+     * Longest wait in ms for the calibration to finish, and again for the ADC to become ready.
+     * Both need the ADC clock; an ADC without it makes uni_hal_adc_init() fail after this time.
+     * 0: 500 ms.
      */
     uint32_t timeout;
 
