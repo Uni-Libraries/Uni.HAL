@@ -1179,6 +1179,18 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
                 result = true;
                 break;
             }
+            case UNI_HAL_CORE_PERIPH_ADC_1:
+            case UNI_HAL_CORE_PERIPH_ADC_2:
+            case UNI_HAL_CORE_PERIPH_ADC_3:
+                // one kernel clock for the three ADC; PLLSAI1 and PLLSAI2 are not set up by this driver
+                if (source == UNI_HAL_RCC_CLKSRC_SYSCLK) {
+                    LL_RCC_SetADCClockSource(LL_RCC_ADC_CLKSOURCE_SYSCLK);
+                    result = true;
+                } else if (source == UNI_HAL_RCC_CLKSRC_NONE) {
+                    LL_RCC_SetADCClockSource(LL_RCC_ADC_CLKSOURCE_NONE);
+                    result = true;
+                }
+                break;
             default:
                 break;
         }

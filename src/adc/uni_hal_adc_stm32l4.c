@@ -532,8 +532,12 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
             }
         }
 
-        // clk
-        result = uni_hal_rcc_clksrc_set(ctx->config.instance, UNI_HAL_RCC_CLKSRC_PLL2P) && result;
+        // clk: SYSCLK unless the configuration names a source
+        uni_hal_rcc_clksrc_e clock_source = ctx->config.clock_source;
+        if (clock_source == UNI_HAL_RCC_CLKSRC_UNKNOWN) {
+            clock_source = UNI_HAL_RCC_CLKSRC_SYSCLK;
+        }
+        result = uni_hal_rcc_clksrc_set(ctx->config.instance, clock_source) && result;
         result = uni_hal_rcc_clk_set(ctx->config.instance, true) && result;
 
         // irq
