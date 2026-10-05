@@ -46,8 +46,9 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 **Start-up order.** `uni_hal_pwr_init()`, then `uni_hal_core_irq_init()`, then
 `uni_hal_rcc_stmXX_config_set()` and `uni_hal_rcc_init()`. Check the result of
 `uni_hal_rcc_init()`: when it is `false` the MCU runs from its internal oscillator and no
-peripheral clock has its nominal value. SysTick runs from `uni_hal_rcc_init()` on, and the
-drivers use it for their timeouts.
+peripheral clock has its nominal value. The STM32L4 driver does not fail there: without HSE it
+feeds the PLL from HSI, and `uni_hal_rcc_stm32l4_status_get()` tells which oscillators came up.
+SysTick runs from `uni_hal_rcc_init()` on, and the drivers use it for their timeouts.
 
 **Interrupt priorities.** A handler that uses a FreeRTOS `...FromISR()` function must not have
 a priority above `configMAX_SYSCALL_INTERRUPT_PRIORITY`, which is 4 here. Where a driver takes
@@ -85,10 +86,20 @@ can carry 0..8, 12, 16, 20, 24, 32, 48 or 64.
 by DMA in circular mode. `clock_mode`, `clock_divider`, `sampling_cycles` and `resolution_bits`
 set the conversion clock, the sampling time and the resolution; left at zero they give an
 asynchronous clock, the longest sampling time and the full resolution. The initialisation fails
-for a value the ADC does not have.
+for a value the ADC does not have. It waits up to `timeout` ms, 500 when left at zero, for the
+calibration and again for the ADC to become ready: keep that below the period of a watchdog
+that is already running.
+
+**UART output.** `uni_hal_usart_transmit_data()` and with it `printf()` queue the data for the
+interrupt handler and return; what does not fit into the TX buffer is dropped. Output that has
+to be complete, e.g. before a reset, is followed by a loop on `uni_hal_usart_transmit_busy()`.
+An application that wants all of its `printf()` output that way defines its own `_write()`,
+which replaces the one of the library.
 
 **Backup domain.** A failure of LSE to start does not reset the backup domain unless the RCC
 configuration sets `lse_backup_reset`, because that erases the RTC and the backup registers.
+For the same reason the RTC keeps the clock it was given on an earlier boot;
+`clock_source_change` in its context makes `uni_hal_rtc_init()` move it to the configured one.
 
 ## Without an RTOS
 
