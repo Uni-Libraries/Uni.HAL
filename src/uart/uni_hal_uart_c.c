@@ -19,6 +19,17 @@ bool uni_hal_uart_is_inited(const uni_hal_usart_context_t *ctx) {
 }
 
 
+bool uni_hal_usart_transmit_busy(const uni_hal_usart_context_t *ctx) {
+    bool result = false;
+    if (uni_hal_uart_is_inited(ctx)) {
+        // the interrupt handler takes the last byte out of the buffer one or two character
+        // times before that byte has left the transmitter
+        result = !uni_hal_io_buffer_is_empty(&ctx->io->buf_tx) || ctx->in_transmission;
+    }
+    return result;
+}
+
+
 uni_hal_io_context_t* uni_hal_uart_io_get(uni_hal_usart_context_t *ctx) {
     uni_hal_io_context_t *result = NULL;
     if (ctx != NULL) {

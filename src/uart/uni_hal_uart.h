@@ -93,9 +93,9 @@ typedef struct {
     bool initialized;
 
     /**
-     * Was USART in transmission state
+     * Was USART in transmission state. Written by the interrupt handler.
      */
-    bool in_transmission;
+    volatile bool in_transmission;
 
     /**
      * Notification callback
@@ -159,6 +159,19 @@ bool uni_hal_usart_receive_enable(uni_hal_usart_context_t *ctx, bool value);
  * @return true on success
  */
 bool uni_hal_usart_transmit_enable(uni_hal_usart_context_t *ctx, bool value);
+
+/**
+ * Check whether the UART still has something to send: bytes waiting in the TX buffer, or a byte
+ * on its way out of the shift register.
+ *
+ * uni_hal_usart_transmit_data() only queues the data for the interrupt handler. A caller that
+ * needs the output to be complete before it goes on, e.g. before a reset, or before it writes
+ * more than the TX buffer holds, polls this function until it returns false.
+ * @param ctx pointer to interface context
+ * @return true while a transmission is under way
+ * @note the transmission makes no progress while the UART interrupt cannot run
+ */
+bool uni_hal_usart_transmit_busy(const uni_hal_usart_context_t *ctx);
 
 /**
  * Enables/disables USART interrupt sources used by the Uni.HAL driver.
