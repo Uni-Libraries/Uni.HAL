@@ -526,8 +526,25 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
                 MODIFY_REG(can->MCR,
                            CAN_MCR_TTCM | CAN_MCR_ABOM | CAN_MCR_AWUM | CAN_MCR_NART | CAN_MCR_RFLM | CAN_MCR_TXFP, mcr);
 
-                // bit timing, normal mode (neither loop back nor silent)
-                can->BTR = ((timing.sjw - 1U) << CAN_BTR_SJW_Pos) | ((timing.bs1 - 1U) << CAN_BTR_TS1_Pos) |
+                // operating mode: loop back and silent are test modes of the bit timing register
+                uint32_t btr_mode = 0U;
+                switch (ctx->config.mode) {
+                case UNI_HAL_CAN_MODE_SILENT:
+                    btr_mode = CAN_BTR_SILM;
+                    break;
+                case UNI_HAL_CAN_MODE_LOOPBACK:
+                    btr_mode = CAN_BTR_LBKM;
+                    break;
+                case UNI_HAL_CAN_MODE_LOOPBACK_SILENT:
+                    btr_mode = CAN_BTR_LBKM | CAN_BTR_SILM;
+                    break;
+                case UNI_HAL_CAN_MODE_NORMAL:
+                default:
+                    break;
+                }
+
+                // bit timing
+                can->BTR = btr_mode | ((timing.sjw - 1U) << CAN_BTR_SJW_Pos) | ((timing.bs1 - 1U) << CAN_BTR_TS1_Pos) |
                            ((timing.bs2 - 1U) << CAN_BTR_TS2_Pos) | (timing.prescaler - 1U);
 
                 // Report the changes of the error state and lost frames. The per-frame error code

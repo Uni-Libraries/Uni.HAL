@@ -65,6 +65,30 @@ typedef struct {
 } uni_hal_can_msg_t;
 
 /**
+ * How the node takes part in bus traffic
+ */
+typedef enum {
+    /** send and receive */
+    UNI_HAL_CAN_MODE_NORMAL = 0,
+
+    /** listen only: frames are received, but the node sends nothing, not even an acknowledge */
+    UNI_HAL_CAN_MODE_SILENT,
+
+    /**
+     * Every frame that is sent is also received by the node itself. The frames still go out on
+     * the TX pin; the RX pin is ignored.
+     */
+    UNI_HAL_CAN_MODE_LOOPBACK,
+
+    /**
+     * Loop back with nothing reaching the pins: for a self-test of the software without a bus
+     * or a transceiver
+     */
+    UNI_HAL_CAN_MODE_LOOPBACK_SILENT,
+} uni_hal_can_mode_e;
+
+
+/**
  * CAN config
  */
 typedef struct
@@ -84,6 +108,11 @@ typedef struct
      * selected, which is HSE after reset. The bxCAN of the STM32L4 always runs from APB1.
      */
     uni_hal_rcc_clksrc_e clock_source;
+
+    /**
+     * Operating mode; the zero value is normal operation
+     */
+    uni_hal_can_mode_e mode;
 
     /**
      * Bit rate in bit/s. The bit timing is computed from the CAN clock with a sample point

@@ -535,11 +535,38 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         }
 
         if (result) {
-            // classic CAN, normal operation; DAR disables the automatic retransmission
+            // Operating mode. Bus monitoring (MON) makes the node silent; loop back is a test
+            // mode, where LBCK feeds the transmitter back into the receiver. With MON on top
+            // the TX pin stays recessive as well.
+            uint32_t cccr_mode = 0U;
+            bool loopback = false;
+            switch (ctx->config.mode) {
+            case UNI_HAL_CAN_MODE_SILENT:
+                cccr_mode = FDCAN_CCCR_MON;
+                break;
+            case UNI_HAL_CAN_MODE_LOOPBACK:
+                cccr_mode = FDCAN_CCCR_TEST;
+                loopback = true;
+                break;
+            case UNI_HAL_CAN_MODE_LOOPBACK_SILENT:
+                cccr_mode = FDCAN_CCCR_TEST | FDCAN_CCCR_MON;
+                loopback = true;
+                break;
+            case UNI_HAL_CAN_MODE_NORMAL:
+            default:
+                break;
+            }
+
+            // classic CAN; DAR disables the automatic retransmission
             MODIFY_REG(can->CCCR,
                        FDCAN_CCCR_DAR | FDCAN_CCCR_MON | FDCAN_CCCR_TEST | FDCAN_CCCR_ASM | FDCAN_CCCR_FDOE |
                        FDCAN_CCCR_BRSE | FDCAN_CCCR_TXP | FDCAN_CCCR_PXHD,
-                       ctx->config.auto_retransmission ? 0U : FDCAN_CCCR_DAR);
+                       cccr_mode | (ctx->config.auto_retransmission ? 0U : FDCAN_CCCR_DAR));
+
+            // the test register can only be written with TEST set, and reads as reset otherwise
+            if (loopback) {
+                SET_BIT(can->TEST, FDCAN_TEST_LBCK);
+            }
 
             can->NBTP = ((timing.sjw - 1U) << FDCAN_NBTP_NSJW_Pos) | ((timing.prescaler - 1U) << FDCAN_NBTP_NBRP_Pos) |
                         ((timing.bs1 - 1U) << FDCAN_NBTP_NTSEG1_Pos) | ((timing.bs2 - 1U) << FDCAN_NBTP_NTSEG2_Pos);
