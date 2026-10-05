@@ -104,7 +104,14 @@ int _read(int UNI_COMMON_COMPILER_UNUSED_VAR(file), char *ptr, int len) {
 }
 
 
-ssize_t _write(int UNI_COMMON_COMPILER_UNUSED_VAR(file), const void *ptr, size_t len) {
+/**
+ * Output of the C library: printf() and the like end up here.
+ *
+ * The bytes go to the IO context given to uni_hal_io_stdio_init(), which queues them and drops
+ * what does not fit into its TX buffer. The function is weak: an application that wants
+ * something else, e.g. output that waits until it has been sent, defines its own _write().
+ */
+UNI_COMMON_COMPILER_WEAK ssize_t _write(int UNI_COMMON_COMPILER_UNUSED_VAR(file), const void *ptr, size_t len) {
     int result = -1;
 
     if (g_uni_hal_io_stdio_ctx.io_context && ptr) {
