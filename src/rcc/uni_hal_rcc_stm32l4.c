@@ -257,7 +257,31 @@ static bool _uni_hal_rcc_systick() {
 }
 
 /**
- * Configure low speed external clockAHBPrescTable
+ * Get the LSE drive level of the configuration
+ * @return LL_RCC_LSEDRIVE_xx value
+ */
+static uint32_t _uni_hal_stm_rcc_lse_drive(void) {
+    uint32_t result = LL_RCC_LSEDRIVE_LOW;
+    switch (g_uni_hal_rcc_config->lse_drive) {
+    case UNI_HAL_RCC_STM32L4_LSE_DRIVE_MEDIUM_LOW:
+        result = LL_RCC_LSEDRIVE_MEDIUMLOW;
+        break;
+    case UNI_HAL_RCC_STM32L4_LSE_DRIVE_MEDIUM_HIGH:
+        result = LL_RCC_LSEDRIVE_MEDIUMHIGH;
+        break;
+    case UNI_HAL_RCC_STM32L4_LSE_DRIVE_HIGH:
+        result = LL_RCC_LSEDRIVE_HIGH;
+        break;
+    case UNI_HAL_RCC_STM32L4_LSE_DRIVE_LOW:
+    default:
+        break;
+    }
+    return result;
+}
+
+
+/**
+ * Configure low speed external clock
  * @param ctx RCC context
  * @return true on success
  */
@@ -269,7 +293,7 @@ static bool _uni_hal_stm_rcc_lse() {
 
     if (!result) {
         uni_hal_pwr_stm_set_backup_access(true);
-        LL_RCC_LSE_SetDriveCapability(LL_RCC_LSEDRIVE_MEDIUMLOW);
+        LL_RCC_LSE_SetDriveCapability(_uni_hal_stm_rcc_lse_drive());
         LL_RCC_LSE_Enable();
 
         /* Wait till LSE is ready */

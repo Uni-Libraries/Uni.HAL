@@ -77,6 +77,18 @@ typedef struct {
 
 
 /**
+ * Drive level of the LSE oscillator. A crystal with a high load capacitance or a high series
+ * resistance needs a higher level to start; a higher level draws more current.
+ */
+typedef enum {
+    UNI_HAL_RCC_STM32L4_LSE_DRIVE_LOW = 0,
+    UNI_HAL_RCC_STM32L4_LSE_DRIVE_MEDIUM_LOW,
+    UNI_HAL_RCC_STM32L4_LSE_DRIVE_MEDIUM_HIGH,
+    UNI_HAL_RCC_STM32L4_LSE_DRIVE_HIGH,
+} uni_hal_rcc_stm32l4_lse_drive_e;
+
+
+/**
  * STM RCC interface config context
  */
 typedef struct {
@@ -90,6 +102,12 @@ typedef struct {
      * This erases the RTC and the backup registers, so it is off unless asked for.
      */
     bool                                 lse_backup_reset;
+
+    /**
+     * Drive level LSE is started with. An LSE that is already running, kept alive by VBAT
+     * across a reset, is left as it is: the level cannot be raised while the oscillator is on.
+     */
+    uni_hal_rcc_stm32l4_lse_drive_e      lse_drive;
     uni_hal_rcc_stm32l4_config_pll_t      pll[1]; //TODO: add support for PLL2 and PLL3
     uni_hal_rcc_stm32l4_config_timeout_t  timeout;
 } uni_hal_rcc_stm32l4_config_t;
