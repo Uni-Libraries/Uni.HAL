@@ -151,6 +151,14 @@ typedef struct {
 
 bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config);
 
+/**
+ * Get the state of the oscillators and of the clock tree
+ * @return what came up in uni_hal_rcc_init(). The clock security system keeps it current: after
+ *         an HSE failure hse_inited is false, and pll_inited and sys_inited tell whether the
+ *         switch to HSI worked.
+ */
+uni_hal_rcc_stm32l4_status_t uni_hal_rcc_stm32l4_status_get(void);
+
 #if defined(__cplusplus)
 }
 #endif

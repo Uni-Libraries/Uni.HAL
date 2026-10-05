@@ -519,14 +519,13 @@ bool uni_hal_rcc_init() {
     // HSI
     _uni_hal_stm_rcc_hsi();
 
-    // LSE/LSI
+    // LSE
     if (g_uni_hal_rcc_config->lse_enable) {
         _uni_hal_stm_rcc_lse();
     }
-    g_uni_hal_rcc_status.lse_inited = false; //TODO: remove
-    if (!g_uni_hal_rcc_status.lse_inited) {
-        _uni_hal_stm_rcc_lsi();
-    }
+
+    // LSI, with or without LSE: the independent watchdog runs from it
+    _uni_hal_stm_rcc_lsi();
 
     // PLL
     _uni_hal_stm_rcc_pll();
@@ -1198,6 +1197,11 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
 
     return result;
 }
+
+uni_hal_rcc_stm32l4_status_t uni_hal_rcc_stm32l4_status_get(void) {
+    return g_uni_hal_rcc_status;
+}
+
 
 bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config)
 {
