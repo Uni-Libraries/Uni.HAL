@@ -81,6 +81,12 @@ can carry 0..8, 12, 16, 20, 24, 32, 48 or 64.
 
 `UNI_HAL_CAN_MODE_LOOPBACK_SILENT` runs the transmit and receive paths without a bus.
 
+**ADC.** The channels are converted continuously into the `data` array of the configuration,
+by DMA in circular mode. `clock_mode`, `clock_divider`, `sampling_cycles` and `resolution_bits`
+set the conversion clock, the sampling time and the resolution; left at zero they give an
+asynchronous clock, the longest sampling time and the full resolution. The initialisation fails
+for a value the ADC does not have.
+
 **Backup domain.** A failure of LSE to start does not reset the backup domain unless the RCC
 configuration sets `lse_backup_reset`, because that erases the RTC and the backup registers.
 

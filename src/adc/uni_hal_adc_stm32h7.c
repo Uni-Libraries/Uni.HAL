@@ -377,11 +377,168 @@ static ADC_TypeDef *_uni_hal_adc_get_instance(uni_hal_core_periph_e instance) {
 }
 
 
+/**
+ * Get the conversion clock setting of the configuration
+ * @param config ADC configuration
+ * @return LL_ADC_CLOCK_xx value, UINT32_MAX for a divider the clock mode does not have
+ */
+static uint32_t _uni_hal_adc_get_clock(const uni_hal_adc_config_t *config) {
+    uint32_t result = UINT32_MAX;
+
+    if (config->clock_mode == UNI_HAL_ADC_CLOCK_SYNC) {
+        switch (config->clock_divider) {
+        case 0U:
+        case 1U:
+            result = LL_ADC_CLOCK_SYNC_PCLK_DIV1;
+            break;
+        case 2U:
+            result = LL_ADC_CLOCK_SYNC_PCLK_DIV2;
+            break;
+        case 4U:
+            result = LL_ADC_CLOCK_SYNC_PCLK_DIV4;
+            break;
+        default:
+            break;
+        }
+    }
+    else if (config->clock_mode == UNI_HAL_ADC_CLOCK_ASYNC) {
+        switch ((config->clock_divider != 0U) ? config->clock_divider : 8U) {
+        case 1U:
+            result = LL_ADC_CLOCK_ASYNC_DIV1;
+            break;
+        case 2U:
+            result = LL_ADC_CLOCK_ASYNC_DIV2;
+            break;
+        case 4U:
+            result = LL_ADC_CLOCK_ASYNC_DIV4;
+            break;
+        case 6U:
+            result = LL_ADC_CLOCK_ASYNC_DIV6;
+            break;
+        case 8U:
+            result = LL_ADC_CLOCK_ASYNC_DIV8;
+            break;
+        case 10U:
+            result = LL_ADC_CLOCK_ASYNC_DIV10;
+            break;
+        case 12U:
+            result = LL_ADC_CLOCK_ASYNC_DIV12;
+            break;
+        case 16U:
+            result = LL_ADC_CLOCK_ASYNC_DIV16;
+            break;
+        case 32U:
+            result = LL_ADC_CLOCK_ASYNC_DIV32;
+            break;
+        case 64U:
+            result = LL_ADC_CLOCK_ASYNC_DIV64;
+            break;
+        case 128U:
+            result = LL_ADC_CLOCK_ASYNC_DIV128;
+            break;
+        case 256U:
+            result = LL_ADC_CLOCK_ASYNC_DIV256;
+            break;
+        default:
+            break;
+        }
+    }
+    else {
+        // unknown mode
+    }
+
+    return result;
+}
+
+
+/**
+ * Get the shortest sampling time that is at least as long as asked for
+ * @param cycles shortest acceptable sampling time in ADC clock cycles, 0 for the longest
+ * @return LL_ADC_SAMPLINGTIME_xx value, UINT32_MAX when the ADC has no setting that long
+ */
+static uint32_t _uni_hal_adc_get_sampling(uint32_t cycles) {
+    uint32_t result = UINT32_MAX;
+
+    if (cycles == 0U) {
+        result = LL_ADC_SAMPLINGTIME_810CYCLES_5;
+    }
+    else if (cycles <= 1U) {
+        result = LL_ADC_SAMPLINGTIME_1CYCLE_5;
+    }
+    else if (cycles <= 2U) {
+        result = LL_ADC_SAMPLINGTIME_2CYCLES_5;
+    }
+    else if (cycles <= 8U) {
+        result = LL_ADC_SAMPLINGTIME_8CYCLES_5;
+    }
+    else if (cycles <= 16U) {
+        result = LL_ADC_SAMPLINGTIME_16CYCLES_5;
+    }
+    else if (cycles <= 32U) {
+        result = LL_ADC_SAMPLINGTIME_32CYCLES_5;
+    }
+    else if (cycles <= 64U) {
+        result = LL_ADC_SAMPLINGTIME_64CYCLES_5;
+    }
+    else if (cycles <= 387U) {
+        result = LL_ADC_SAMPLINGTIME_387CYCLES_5;
+    }
+    else if (cycles <= 810U) {
+        result = LL_ADC_SAMPLINGTIME_810CYCLES_5;
+    }
+    else {
+        // longer than the ADC can sample
+    }
+
+    return result;
+}
+
+
+/**
+ * Get the resolution setting
+ * @param bits resolution in bits, 0 for the default of the driver
+ * @return LL_ADC_RESOLUTION_xx value, UINT32_MAX for a width the ADC does not have
+ */
+static uint32_t _uni_hal_adc_get_resolution(uint32_t bits) {
+    uint32_t result = UINT32_MAX;
+
+    switch (bits) {
+    case 0U:
+        result = LL_ADC_RESOLUTION_16B;
+        break;
+    case 8U:
+        result = LL_ADC_RESOLUTION_8B;
+        break;
+    case 10U:
+        result = LL_ADC_RESOLUTION_10B;
+        break;
+    case 12U:
+        result = LL_ADC_RESOLUTION_12B;
+        break;
+    case 14U:
+        result = LL_ADC_RESOLUTION_14B;
+        break;
+    case 16U:
+        result = LL_ADC_RESOLUTION_16B;
+        break;
+    default:
+        break;
+    }
+
+    return result;
+}
+
+
 bool _uni_hal_adc_configure_common(uni_hal_adc_context_t *ctx) {
     bool result = false;
 
     ADC_Common_TypeDef * common_instance = __LL_ADC_COMMON_INSTANCE(_uni_hal_adc_get_instance(ctx->config.instance));
-    if (!__LL_ADC_IS_ENABLED_ALL_COMMON_INSTANCE(common_instance)) {
+    uint32_t const clock = _uni_hal_adc_get_clock(&ctx->config);
+
+    if (clock == UINT32_MAX) {
+        // no such clock setting
+    }
+    else if (!__LL_ADC_IS_ENABLED_ALL_COMMON_INSTANCE(common_instance)) {
         // internal path
         uint32_t internal_path = LL_ADC_PATH_INTERNAL_NONE;
         for (uint32_t idx_channel = 0; idx_channel < ctx->config.channels_count; idx_channel++) {
@@ -400,7 +557,7 @@ bool _uni_hal_adc_configure_common(uni_hal_adc_context_t *ctx) {
             }
         }
 
-        LL_ADC_SetCommonClock(common_instance, LL_ADC_CLOCK_ASYNC_DIV8);
+        LL_ADC_SetCommonClock(common_instance, clock);
         LL_ADC_SetMultimode(common_instance, LL_ADC_MULTI_INDEPENDENT);
         LL_ADC_SetCommonPathInternalCh(common_instance, internal_path);
 
@@ -460,14 +617,21 @@ bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
 bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
     bool result = false;
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
-    if (instance != nullptr) {
+    uint32_t const resolution = _uni_hal_adc_get_resolution(ctx->config.resolution_bits);
+    uint32_t const sampling = _uni_hal_adc_get_sampling(ctx->config.sampling_cycles);
+    if (instance != nullptr && resolution != UINT32_MAX && sampling != UINT32_MAX) {
+        ctx->state.resolution = resolution;
+
         // module
         LL_ADC_InitTypeDef adc = {
-                .Resolution = LL_ADC_RESOLUTION_16B,
+                .Resolution = resolution,
                 .LowPowerMode = LL_ADC_LP_MODE_NONE,
                 .LeftBitShift = LL_ADC_LEFT_BIT_SHIFT_NONE,
         };
         LL_ADC_Init(instance, &adc);
+
+        // LL_ADC_Init() writes the value as it is; the encoding of 8 bits depends on the silicon revision
+        LL_ADC_SetResolution(instance, resolution);
 
         // reg
         LL_ADC_REG_InitTypeDef reg = {
@@ -487,7 +651,7 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
             for (uint32_t idx_channel = 0; idx_channel < ctx->config.channels_count; idx_channel++) {
                 uint32_t channel = _uni_hal_adc_get_channel(ctx->config.channels[idx_channel]);
                 LL_ADC_REG_SetSequencerRanks(instance, _uni_hal_adc_get_rank(idx_channel + 1), channel);
-                LL_ADC_SetChannelSamplingTime(instance, channel, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+                LL_ADC_SetChannelSamplingTime(instance, channel, sampling);
                 LL_ADC_SetChannelSingleDiff(instance, channel, LL_ADC_SINGLE_ENDED);
             }
         }
@@ -628,7 +792,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
 uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t channel) {
     uint16_t result = UINT16_MAX;
     if (uni_hal_adc_has_channel(ctx, channel)) {
-        result = __LL_ADC_CALC_DATA_TO_VOLTAGE(ctx->config.v_ref, uni_hal_adc_get_channel_raw(ctx, channel), LL_ADC_RESOLUTION_16B);
+        result = __LL_ADC_CALC_DATA_TO_VOLTAGE(ctx->config.v_ref, uni_hal_adc_get_channel_raw(ctx, channel), ctx->state.resolution);
     }
 
     return result;
@@ -682,7 +846,7 @@ int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
         result = _uni_hal_adc_calc_temperature(&ctx->state,
                                                ctx->config.v_ref,
                                                uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR),
-                                               LL_ADC_RESOLUTION_16B);
+                                               ctx->state.resolution);
     }
     return result;
 }
@@ -691,9 +855,12 @@ uint32_t uni_hal_adc_stm32h7_get_vdda(uni_hal_adc_context_t* ctx) {
     uint32_t result = UINT32_MAX;
     if(uni_hal_adc_has_channel(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT) &&
        ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3 && ctx->state.cal.valid != false) {
-        const uint16_t vrefint_raw = uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT);
+        // the calibration value was taken with 16 bits
+        const uint32_t vrefint_raw = __LL_ADC_CONVERT_DATA_RESOLUTION(
+                (uint32_t)uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT),
+                ctx->state.resolution, LL_ADC_RESOLUTION_16B);
         if (vrefint_raw != 0U) {
-            result = (3300U * ctx->state.cal.vref_int) / (uint32_t)vrefint_raw;
+            result = (3300U * ctx->state.cal.vref_int) / vrefint_raw;
         }
     }
     return result;
