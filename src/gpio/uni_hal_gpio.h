@@ -105,7 +105,9 @@ typedef enum {
 
 
 /**
- * GPIO speed
+ * GPIO speed: the slew rate of an output, from the slowest (0) to the fastest (3).
+ * A pin of a fast interface needs more than the slowest one; see the I/O characteristics in
+ * the datasheet of the MCU for what each setting is good for.
  */
 typedef enum {
     UNI_HAL_GPIO_SPEED_0,

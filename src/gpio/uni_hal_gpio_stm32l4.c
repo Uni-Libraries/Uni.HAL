@@ -205,6 +205,28 @@ static uint32_t _uni_hal_gpio_mode(uni_hal_gpio_type_e type) {
     return result;
 }
 
+static uint32_t _uni_hal_gpio_speed(uni_hal_gpio_speed_e speed) {
+    uint32_t result = LL_GPIO_SPEED_FREQ_LOW;
+    switch (speed) {
+    case UNI_HAL_GPIO_SPEED_1:
+        result = LL_GPIO_SPEED_FREQ_MEDIUM;
+        break;
+    case UNI_HAL_GPIO_SPEED_2:
+        result = LL_GPIO_SPEED_FREQ_HIGH;
+        break;
+    case UNI_HAL_GPIO_SPEED_3:
+        result = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+        break;
+    case UNI_HAL_GPIO_SPEED_0:
+    default:
+        result = LL_GPIO_SPEED_FREQ_LOW;
+        break;
+    }
+
+    return result;
+}
+
+
 static uint32_t _uni_hal_gpio_pull(uni_hal_gpio_pull_e val) {
     uint32_t result = LL_GPIO_PULL_NO;
 
@@ -433,7 +455,7 @@ bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *ctx) {
                 LL_GPIO_InitTypeDef GPIO_InitStruct = {
                     .Pin = ctx->gpio_pin,
                     .Mode = _uni_hal_gpio_type(ctx->gpio_type),
-                    .Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH,
+                    .Speed = _uni_hal_gpio_speed(ctx->gpio_speed),
                     .OutputType = _uni_hal_gpio_mode(ctx->gpio_type),
                     .Pull = _uni_hal_gpio_pull(ctx->gpio_pull),
                     .Alternate = _uni_hal_gpio_alternate(ctx->alternate),

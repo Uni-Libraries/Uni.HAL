@@ -66,6 +66,10 @@ its sample buffer has to be in a non-cacheable region. `uni_hal_core_cm7_mpu_con
 such a region at `0x30000000`; it is a weak function, replace it when the linker script of the
 project places the buffers elsewhere.
 
+**GPIO speed.** A pin gets the output speed of its context, `gpio_speed`, whose zero value is
+the slowest one. That suits a discrete output; the pins of a UART, of SPI or of CAN are
+configured by the application as well and need a faster setting.
+
 **I2C.** Device addresses are 7-bit and not shifted. The bus timing is computed from the kernel
 clock; `config.timing` takes a raw `I2C_TIMINGR` value for a bus that needs something else.
 
