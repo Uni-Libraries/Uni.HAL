@@ -36,9 +36,6 @@
 
 #define UNI_HAL_ADC_VBAT_DIV (3.0f)
 
-#define UNI_HAL_ADC_CHANNEL_REFINT (19U)
-#define UNI_HAL_ADC_CHANNEL_TEMPSENSOR (20U)
-#define UNI_HAL_ADC_CHANNEL_VBAT (21U)
 
 #define UNI_HAL_ADC_INT_PRIO (1U)
 
@@ -508,13 +505,13 @@ bool _uni_hal_adc_configure_common(uni_hal_adc_context_t *ctx) {
         uint32_t internal_path = LL_ADC_PATH_INTERNAL_NONE;
         for (uint32_t idx_channel = 0; idx_channel < ctx->config.channels_count; idx_channel++) {
             switch (ctx->config.channels[idx_channel]) {
-            case UNI_HAL_ADC_CHANNEL_REFINT:
+            case UNI_HAL_ADC_STM32L4_CHANNEL_REFINT:
                 internal_path |= LL_ADC_PATH_INTERNAL_VREFINT;
                 break;
-            case UNI_HAL_ADC_CHANNEL_TEMPSENSOR:
+            case UNI_HAL_ADC_STM32L4_CHANNEL_TEMPSENSOR:
                 internal_path |= LL_ADC_PATH_INTERNAL_TEMPSENSOR;
                 break;
-            case UNI_HAL_ADC_CHANNEL_VBAT:
+            case UNI_HAL_ADC_STM32L4_CHANNEL_VBAT:
                 internal_path |= LL_ADC_PATH_INTERNAL_VBAT;
                 break;
             default:
@@ -762,9 +759,55 @@ float uni_hal_adc_get_channel_voltage(const uni_hal_adc_context_t *ctx, uint32_t
 //
 
 uint16_t uni_hal_adc_mcutemp_raw(const uni_hal_adc_context_t *ctx) {
-    return uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_CHANNEL_TEMPSENSOR);
+    return uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32L4_CHANNEL_TEMPSENSOR);
 }
 
 float uni_hal_adc_mcutemp_get(const uni_hal_adc_context_t *ctx) {
     return __LL_ADC_CALC_TEMPERATURE(ctx->config.v_ref, uni_hal_adc_mcutemp_raw(ctx), ctx->state.resolution);
+}
+
+
+
+//
+// Functions/L4
+//
+
+uint32_t uni_hal_adc_stm32l4_get_vdda(const uni_hal_adc_context_t *ctx) {
+    uint32_t result = UINT32_MAX;
+    if (uni_hal_adc_has_channel(ctx, UNI_HAL_ADC_STM32L4_CHANNEL_REFINT)) {
+        uint32_t const vrefint_raw = uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32L4_CHANNEL_REFINT);
+        if (vrefint_raw != 0U) {
+            result = __LL_ADC_CALC_VREFANALOG_VOLTAGE(vrefint_raw, ctx->state.resolution);
+        }
+    }
+    return result;
+}
+
+
+int32_t uni_hal_adc_stm32l4_get_mcutemp(const uni_hal_adc_context_t *ctx) {
+    int32_t result = INT32_MAX;
+    if (uni_hal_adc_has_channel(ctx, UNI_HAL_ADC_STM32L4_CHANNEL_TEMPSENSOR)) {
+        // the supply voltage scales the reading: take the measured one when there is one
+        uint32_t vdda = uni_hal_adc_stm32l4_get_vdda(ctx);
+        if (vdda == UINT32_MAX) {
+            vdda = ctx->config.v_ref;
+        }
+
+        // the calibration values were taken with 12 bits
+        int32_t const raw = (int32_t)__LL_ADC_CONVERT_DATA_RESOLUTION(
+                (uint32_t)uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32L4_CHANNEL_TEMPSENSOR),
+                ctx->state.resolution, LL_ADC_RESOLUTION_12B);
+        int32_t const cal_1 = (int32_t)(*TEMPSENSOR_CAL1_ADDR);
+        int32_t const cal_2 = (int32_t)(*TEMPSENSOR_CAL2_ADDR);
+        int32_t const cal_vdda = (int32_t)TEMPSENSOR_CAL_VREFANALOG;
+
+        if (cal_2 != cal_1) {
+            // the reading as it would be at the supply voltage of the calibration
+            int32_t const raw_cal = ((raw * (int32_t)vdda) + (cal_vdda / 2)) / cal_vdda;
+            result = ((int32_t)TEMPSENSOR_CAL1_TEMP * 1000) +
+                     (((raw_cal - cal_1) * ((int32_t)TEMPSENSOR_CAL2_TEMP - (int32_t)TEMPSENSOR_CAL1_TEMP) * 1000) /
+                      (cal_2 - cal_1));
+        }
+    }
+    return result;
 }

@@ -20,6 +20,8 @@ extern "C" {
 #include "gpio/uni_hal_gpio.h"
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
     #include "adc/uni_hal_adc_stm32h7.h"
+#elif defined(UNI_HAL_TARGET_MCU_STM32L496)
+    #include "adc/uni_hal_adc_stm32l4.h"
 #endif
 
 
