@@ -21,7 +21,10 @@ uint32_t uni_hal_can_is_available(const uni_hal_can_context_t *ctx) {
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
         result = uxQueueMessagesWaiting(ctx->status.queue_rx);
 #else
+        // the receive interrupt writes to the same buffer
+        uint32_t const primask = uni_hal_core_irq_pause();
         result = uni_common_ringbuffer_length(ctx->config.buffer_rx);
+        uni_hal_core_irq_resume(primask);
 #endif
     }
 
@@ -47,7 +50,10 @@ bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, siz
 #else
         // the receive buffer is polled: without an RTOS there is nothing to wait on
         (void)timeout_ms;
+        // the receive interrupt writes to the same buffer
+        uint32_t const primask = uni_hal_core_irq_pause();
         result = uni_common_ringbuffer_pop(ctx->config.buffer_rx, (uint8_t *)msg, 1U);
+        uni_hal_core_irq_resume(primask);
 #endif
     }
 

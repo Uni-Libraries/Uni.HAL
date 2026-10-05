@@ -413,7 +413,10 @@ static BaseType_t _uni_hal_can_irq_rx(const uni_hal_can_stm32h7_instance_t *inst
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
             bool const queued = xQueueSendFromISR(ctx->status.queue_rx, &msg, &woken) == pdPASS;
 #else
-            bool const queued = uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U) == 1U;
+            // a push into a full ring buffer would overwrite its oldest frame, and move the read
+            // position under the reader: drop the new frame instead
+            bool const queued = !uni_common_ringbuffer_is_full(ctx->config.buffer_rx) &&
+                                uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U) == 1U;
 #endif
 
             if (queued) {
