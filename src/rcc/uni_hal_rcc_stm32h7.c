@@ -1268,6 +1268,10 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
             result = clocks.SYSCLK_Frequency;
             break;
         }
+        case UNI_HAL_CORE_PERIPH_CAN_1:
+        case UNI_HAL_CORE_PERIPH_CAN_2:
+            result = LL_RCC_GetFDCANClockFreq(LL_RCC_FDCAN_CLKSOURCE);
+            break;
         case UNI_HAL_CORE_PERIPH_I2C_1:
         case UNI_HAL_CORE_PERIPH_I2C_2:
         case UNI_HAL_CORE_PERIPH_I2C_3:
@@ -1465,6 +1469,30 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
                 }
                 if (result) {
                     LL_RCC_SetI2CClockSource(src);
+                }
+                break;
+            }
+            case UNI_HAL_CORE_PERIPH_CAN_1:
+            case UNI_HAL_CORE_PERIPH_CAN_2: {
+                // one kernel clock for both FDCAN instances
+                result = true;
+                uint32_t src = 0;
+                switch (source) {
+                    case UNI_HAL_RCC_CLKSRC_HSE:
+                        src = LL_RCC_FDCAN_CLKSOURCE_HSE;
+                        break;
+                    case UNI_HAL_RCC_CLKSRC_PLL1Q:
+                        src = LL_RCC_FDCAN_CLKSOURCE_PLL1Q;
+                        break;
+                    case UNI_HAL_RCC_CLKSRC_PLL2Q:
+                        src = LL_RCC_FDCAN_CLKSOURCE_PLL2Q;
+                        break;
+                    default:
+                        result = false;
+                        break;
+                }
+                if (result) {
+                    LL_RCC_SetFDCANClockSource(src);
                 }
                 break;
             }
