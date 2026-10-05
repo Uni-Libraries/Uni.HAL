@@ -72,6 +72,9 @@ uint32_t uni_hal_core_irq_getnum(uni_hal_core_irq_e irq)
     case UNI_HAL_CORE_IRQ_TIM_1_UP:
         result = TIM1_UP_TIM16_IRQn;
         break;
+    case UNI_HAL_CORE_IRQ_TIM_2:
+        result = TIM2_IRQn;
+        break;
     case UNI_HAL_CORE_IRQ_TIM_15:
         result = TIM1_BRK_TIM15_IRQn;
         break;

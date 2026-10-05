@@ -634,6 +634,9 @@ static bool _uni_hal_tim_enable_update_irq(uni_hal_tim_context_t* ctx, TIM_TypeD
         case UNI_HAL_CORE_PERIPH_TIM_16:
             result = uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_1_UP, 5, 0);
             break;
+        case UNI_HAL_CORE_PERIPH_TIM_2:
+            result = uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_2, 5, 0);
+            break;
         case UNI_HAL_CORE_PERIPH_TIM_15:
             result = uni_hal_core_irq_enable(UNI_HAL_CORE_IRQ_TIM_15, 5, 0);
             break;
@@ -692,7 +695,7 @@ void TIM1_TRG_COM_TIM17_IRQHandler(void) {
 }
 
 void TIM2_IRQHandler(void) {
-
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_tim_irq_update_callback(TIM2, UNI_HAL_CORE_PERIPH_TIM_2));
 }
 
 UNI_COMMON_COMPILER_WEAK void TIM7_IRQHandler(void) {
