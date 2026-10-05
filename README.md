@@ -34,6 +34,7 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 | `UNI_HAL_USE_FREERTOS` | `ON` | build on FreeRTOS; `OFF` for a main loop without an RTOS |
 | `UNI_HAL_CAN_USE_FREERTOS` | `ON` | CAN receive queue is a FreeRTOS queue instead of a ring buffer |
 | `UNI_HAL_I2C_USE_FREERTOS` | `ON` | interrupt-driven I2C transfers wait on a task notification |
+| `UNI_HAL_CAN_USE_FD` | `OFF` | CAN messages hold up to 64 data bytes, for CAN FD on the STM32H7 |
 | `UNI_HAL_RTOS_HEAP_SIZE` | `100*1024` | `configTOTAL_HEAP_SIZE` |
 | `UNI_HAL_RTOS_HEAP_APP` | `OFF` | the application defines `ucHeap` itself |
 | `UNI_HAL_RTOS_MAX_PRIORITIES` | `5` | `configMAX_PRIORITIES` |
@@ -67,6 +68,19 @@ project places the buffers elsewhere.
 **I2C.** Device addresses are 7-bit and not shifted. The bus timing is computed from the kernel
 clock; `config.timing` takes a raw `I2C_TIMINGR` value for a bus that needs something else.
 
+**CAN.** The STM32L4 (bxCAN) and the STM32H7 (FDCAN) have the same interface. Both drivers work
+on the registers; neither uses the ST HAL. Set `bitrate` in the configuration: the timing is
+computed from the CAN clock and the initialisation fails when the clock cannot give the rate
+exactly. Acceptance filters are written in the bxCAN register layout on both families.
+
+CAN FD exists on the STM32H7 only. Build with `-DUNI_HAL_CAN_USE_FD=ON`, set `fd` in the
+configuration and, for frames that switch the bit rate, `bitrate_data`. A message then holds up
+to 64 bytes, and so does every slot of the receive queue: 32 slots take about 2.4 KiB of the
+FreeRTOS heap instead of 0.6 KiB. `dlc` of a message is its number of data bytes; a CAN FD frame
+can carry 0..8, 12, 16, 20, 24, 32, 48 or 64.
+
+`UNI_HAL_CAN_MODE_LOOPBACK_SILENT` runs the transmit and receive paths without a bus.
+
 **Backup domain.** A failure of LSE to start does not reset the backup domain unless the RCC
 configuration sets `lse_backup_reset`, because that erases the RTC and the backup registers.
 
@@ -89,5 +103,5 @@ cmake --build build
 ctest --test-dir build
 ```
 
-The tests cover the logic that does not need hardware: DWT tick arithmetic, the I2C timing and
-the CAN bit timing calculations.
+The tests cover the logic that does not need hardware: DWT tick arithmetic, the I2C timing, the
+CAN bit timings for both phases and the CAN FD data length codes.
