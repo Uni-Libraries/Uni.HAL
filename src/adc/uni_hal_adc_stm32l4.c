@@ -390,7 +390,8 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
 
         // sequence
         LL_ADC_REG_SetTrigSource(instance, LL_ADC_REG_TRIG_SOFTWARE);
-        LL_ADC_REG_SetContinuousMode(instance, LL_ADC_REG_CONV_SINGLE);
+        // the sequence is started once and repeats; DMA in circular mode keeps the data array current
+        LL_ADC_REG_SetContinuousMode(instance, LL_ADC_REG_CONV_CONTINUOUS);
         LL_ADC_REG_SetDMATransfer(instance, ctx->config.dma ? LL_ADC_REG_DMA_TRANSFER_UNLIMITED : LL_ADC_REG_DMA_TRANSFER_NONE);
         LL_ADC_REG_SetOverrun(instance, LL_ADC_REG_OVR_DATA_OVERWRITTEN);
         LL_ADC_REG_SetSequencerLength(instance, _uni_hal_adc_get_scan_length(ctx->config.channels_count));
@@ -403,7 +404,7 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
             LL_ADC_SetChannelSingleDiff(instance, channel, LL_ADC_SINGLE_ENDED);
         }
 
-        LL_ADC_EnableIT_EOS(instance);
+        // no interrupt for the end of the sequence: it would come every few tens of microseconds
         LL_ADC_EnableIT_OVR(instance);
 
         result = true;
@@ -442,7 +443,6 @@ bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
                            (uint32_t) ctx->config.data, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
     LL_DMA_SetDataLength(module, stream, ctx->config.channels_count);
 
-    LL_DMA_EnableIT_TC(module, stream);
     LL_DMA_EnableIT_TE(module, stream);
 
     return true;
