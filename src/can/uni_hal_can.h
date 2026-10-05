@@ -56,6 +56,12 @@ typedef struct {
      * identifier, which is what the driver has always sent.
      */
     bool standard_id;
+
+    /**
+     * Remote frame: a request for the data of this identifier. It carries no data bytes; dlc is
+     * the length that is asked for.
+     */
+    bool remote;
 } uni_hal_can_msg_t;
 
 /**

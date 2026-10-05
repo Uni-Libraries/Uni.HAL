@@ -94,6 +94,7 @@ _Static_assert(UNI_HAL_CAN_RAM_USED <= UNI_HAL_CAN_RAM_BLOCK_WORDS, "the message
  * Fields of the message RAM elements
  */
 #define UNI_HAL_CAN_ELEMENT_XTD      (1UL << 30U) // extended identifier
+#define UNI_HAL_CAN_ELEMENT_RTR      (1UL << 29U) // remote frame
 #define UNI_HAL_CAN_ELEMENT_STD_POS  (18U)        // a standard identifier sits in bits 28:18
 #define UNI_HAL_CAN_ELEMENT_DLC_POS  (16U)
 #define UNI_HAL_CAN_FILTER_CLASSIC   (2UL << 30U) // identifier and mask
@@ -257,8 +258,9 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
     uint32_t const dlc = (msg->dlc <= 8U) ? msg->dlc : 8U;
 
     volatile uint32_t *element = _uni_hal_can_ram(inst, UNI_HAL_CAN_RAM_TX, buffer, UNI_HAL_CAN_ELEMENT_WORDS);
-    element[0] = msg->standard_id ? ((msg->id & 0x7FFU) << UNI_HAL_CAN_ELEMENT_STD_POS)
-                                  : ((msg->id & 0x1FFFFFFFU) | UNI_HAL_CAN_ELEMENT_XTD);
+    element[0] = (msg->standard_id ? ((msg->id & 0x7FFU) << UNI_HAL_CAN_ELEMENT_STD_POS)
+                                   : ((msg->id & 0x1FFFFFFFU) | UNI_HAL_CAN_ELEMENT_XTD)) |
+                 (msg->remote ? UNI_HAL_CAN_ELEMENT_RTR : 0U);
     // classic frame, no bit rate switch, no TX event
     element[1] = dlc << UNI_HAL_CAN_ELEMENT_DLC_POS;
     element[2] = ((uint32_t)msg->data[3] << 24U) | ((uint32_t)msg->data[2] << 16U) |
@@ -335,8 +337,9 @@ static BaseType_t _uni_hal_can_irq_rx(const uni_hal_can_stm32h7_instance_t *inst
         // hand the element back to the FIFO
         *acknowledge = get_index;
 
-        uni_hal_can_msg_t msg;
+        uni_hal_can_msg_t msg = {0};
         msg.standard_id = (r0 & UNI_HAL_CAN_ELEMENT_XTD) == 0U;
+        msg.remote = (r0 & UNI_HAL_CAN_ELEMENT_RTR) != 0U;
         msg.id = msg.standard_id ? ((r0 >> UNI_HAL_CAN_ELEMENT_STD_POS) & 0x7FFU) : (r0 & 0x1FFFFFFFU);
         msg.dlc = (uint8_t)((r1 >> UNI_HAL_CAN_ELEMENT_DLC_POS) & 0xFU);
         if (msg.dlc > 8U) {

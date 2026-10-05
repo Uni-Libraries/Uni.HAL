@@ -224,9 +224,10 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
     // the outcome kept by the transmit interrupt belongs to the frame before this one
     ctx->status.tx_ok[mailbox] = false;
 
-    // identifier, data frame; TXRQ is set last, once the rest of the mailbox is filled
-    box->TIR = msg->standard_id ? ((msg->id & 0x7FFU) << CAN_TI0R_STID_Pos)
-                                : (((msg->id & 0x1FFFFFFFU) << CAN_TI0R_EXID_Pos) | CAN_TI0R_IDE);
+    // identifier and frame type; TXRQ is set last, once the rest of the mailbox is filled
+    box->TIR = (msg->standard_id ? ((msg->id & 0x7FFU) << CAN_TI0R_STID_Pos)
+                                 : (((msg->id & 0x1FFFFFFFU) << CAN_TI0R_EXID_Pos) | CAN_TI0R_IDE)) |
+               (msg->remote ? CAN_TI0R_RTR : 0U);
     box->TDTR = dlc;
     box->TDLR = ((uint32_t)msg->data[3] << 24U) | ((uint32_t)msg->data[2] << 16U) |
                 ((uint32_t)msg->data[1] << 8U) | (uint32_t)msg->data[0];
@@ -290,7 +291,7 @@ static BaseType_t _uni_hal_can_irq_rx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
     }
 
     while ((*rfr & CAN_RF0R_FMP0) != 0U) {
-        uni_hal_can_msg_t msg;
+        uni_hal_can_msg_t msg = {0};
 
         uint32_t const rir = box->RIR;
         uint32_t const rdtr = box->RDTR;
@@ -298,6 +299,7 @@ static BaseType_t _uni_hal_can_irq_rx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
         uint32_t const rdhr = box->RDHR;
 
         msg.standard_id = (rir & CAN_RI0R_IDE) == 0U;
+        msg.remote = (rir & CAN_RI0R_RTR) != 0U;
         msg.id = msg.standard_id ? (rir >> CAN_RI0R_STID_Pos) : (rir >> CAN_RI0R_EXID_Pos);
         msg.dlc = (uint8_t)(rdtr & CAN_RDT0R_DLC);
         if (msg.dlc > 8U) {
