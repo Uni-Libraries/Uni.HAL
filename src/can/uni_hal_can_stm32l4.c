@@ -649,6 +649,76 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
 }
 
 
+/**
+ * Translate the last error code of the peripheral; bxCAN and FDCAN number them alike
+ */
+static uni_hal_can_bus_error_e _uni_hal_can_bus_error(uint32_t lec) {
+    uni_hal_can_bus_error_e result;
+    switch (lec) {
+    case 1U:
+        result = UNI_HAL_CAN_BUS_ERROR_STUFF;
+        break;
+    case 2U:
+        result = UNI_HAL_CAN_BUS_ERROR_FORM;
+        break;
+    case 3U:
+        result = UNI_HAL_CAN_BUS_ERROR_ACK;
+        break;
+    case 4U:
+        result = UNI_HAL_CAN_BUS_ERROR_BIT_RECESSIVE;
+        break;
+    case 5U:
+        result = UNI_HAL_CAN_BUS_ERROR_BIT_DOMINANT;
+        break;
+    case 6U:
+        result = UNI_HAL_CAN_BUS_ERROR_CRC;
+        break;
+    default:
+        // 0: no error; 7: nothing new since the code was last read or reset
+        result = UNI_HAL_CAN_BUS_ERROR_NONE;
+        break;
+    }
+    return result;
+}
+
+
+bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bus_status_t *status) {
+    bool result = false;
+
+    if (uni_hal_can_is_inited(ctx) && status != nullptr) {
+        CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
+        uint32_t const esr = can->ESR;
+
+        if (!_uni_hal_can_is_started(can)) {
+            status->state = UNI_HAL_CAN_BUS_STATE_INACTIVE;
+        }
+        else if ((esr & CAN_ESR_BOFF) != 0U) {
+            status->state = UNI_HAL_CAN_BUS_STATE_BUS_OFF;
+        }
+        else if ((esr & CAN_ESR_EPVF) != 0U) {
+            status->state = UNI_HAL_CAN_BUS_STATE_PASSIVE;
+        }
+        else if ((esr & CAN_ESR_EWGF) != 0U) {
+            status->state = UNI_HAL_CAN_BUS_STATE_WARNING;
+        }
+        else {
+            status->state = UNI_HAL_CAN_BUS_STATE_ACTIVE;
+        }
+
+        status->tx_error_count = (uint8_t)((esr & CAN_ESR_TEC) >> CAN_ESR_TEC_Pos);
+        status->rx_error_count = (uint8_t)((esr & CAN_ESR_REC) >> CAN_ESR_REC_Pos);
+        status->last_error = _uni_hal_can_bus_error((esr & CAN_ESR_LEC) >> CAN_ESR_LEC_Pos);
+
+        // 7 marks the code as read: the next snapshot reports only what happens from now on
+        MODIFY_REG(can->ESR, CAN_ESR_LEC, CAN_ESR_LEC);
+
+        result = true;
+    }
+
+    return result;
+}
+
+
 uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
     uint32_t result = 0U;
     if (uni_hal_can_is_inited(ctx)) {

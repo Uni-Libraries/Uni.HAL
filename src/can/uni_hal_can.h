@@ -246,6 +246,60 @@ typedef struct {
 } uni_hal_can_status_t;
 
 /**
+ * Error state of the node on the bus
+ */
+typedef enum {
+    /** not taking part in bus traffic: not started, or stopped */
+    UNI_HAL_CAN_BUS_STATE_INACTIVE = 0,
+    /** error active, both error counters below 96 */
+    UNI_HAL_CAN_BUS_STATE_ACTIVE,
+    /** error active with an error counter at 96 or above */
+    UNI_HAL_CAN_BUS_STATE_WARNING,
+    /** error passive: an error counter above 127 */
+    UNI_HAL_CAN_BUS_STATE_PASSIVE,
+    /** bus-off: the transmit error counter went past 255 */
+    UNI_HAL_CAN_BUS_STATE_BUS_OFF,
+} uni_hal_can_bus_state_e;
+
+
+/**
+ * Kind of the last error seen on the bus
+ */
+typedef enum {
+    UNI_HAL_CAN_BUS_ERROR_NONE = 0,
+    /** more than five equal bits in a row */
+    UNI_HAL_CAN_BUS_ERROR_STUFF,
+    /** a fixed-format part of a frame had the wrong value */
+    UNI_HAL_CAN_BUS_ERROR_FORM,
+    /** a frame that was sent was acknowledged by nobody */
+    UNI_HAL_CAN_BUS_ERROR_ACK,
+    /** a recessive bit was sent and a dominant one seen */
+    UNI_HAL_CAN_BUS_ERROR_BIT_RECESSIVE,
+    /** a dominant bit was sent and a recessive one seen */
+    UNI_HAL_CAN_BUS_ERROR_BIT_DOMINANT,
+    /** the checksum of a received frame did not match */
+    UNI_HAL_CAN_BUS_ERROR_CRC,
+} uni_hal_can_bus_error_e;
+
+
+/**
+ * Snapshot of the error state of the node
+ */
+typedef struct {
+    uni_hal_can_bus_state_e state;
+
+    /** transmit error counter */
+    uint8_t tx_error_count;
+
+    /** receive error counter */
+    uint8_t rx_error_count;
+
+    /** last error since the previous snapshot, UNI_HAL_CAN_BUS_ERROR_NONE when there was none */
+    uni_hal_can_bus_error_e last_error;
+} uni_hal_can_bus_status_t;
+
+
+/**
  * CAN context
  */
 typedef struct
@@ -356,6 +410,16 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
  * @return true on success
  */
 bool uni_hal_can_set_error_callback(uni_hal_can_context_t *ctx, uni_hal_can_error_callback_t callback, void *cookie);
+
+/**
+ * Read the error state of the node: where it stands between error active and bus-off, the two
+ * error counters and the kind of the last bus error. For telemetry and for deciding when a bus
+ * is not worth sending on.
+ * @param ctx CAN context, initialised
+ * @param status receives the snapshot
+ * @return true on success
+ */
+bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bus_status_t *status);
 
 /**
  * Drop every frame that is still waiting in a TX mailbox, e.g. after the bus went away

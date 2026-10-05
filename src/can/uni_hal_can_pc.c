@@ -94,3 +94,17 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
     }
     return result;
 }
+
+
+bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bus_status_t *status) {
+    bool result = false;
+    if (uni_hal_can_is_inited(ctx) && status != NULL) {
+        // there is no bus on the host: an error-free node
+        status->state = UNI_HAL_CAN_BUS_STATE_ACTIVE;
+        status->tx_error_count = 0U;
+        status->rx_error_count = 0U;
+        status->last_error = UNI_HAL_CAN_BUS_ERROR_NONE;
+        result = true;
+    }
+    return result;
+}

@@ -727,6 +727,77 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
 }
 
 
+/**
+ * Translate the last error code of the peripheral; bxCAN and FDCAN number them alike
+ */
+static uni_hal_can_bus_error_e _uni_hal_can_bus_error(uint32_t lec) {
+    uni_hal_can_bus_error_e result;
+    switch (lec) {
+    case 1U:
+        result = UNI_HAL_CAN_BUS_ERROR_STUFF;
+        break;
+    case 2U:
+        result = UNI_HAL_CAN_BUS_ERROR_FORM;
+        break;
+    case 3U:
+        result = UNI_HAL_CAN_BUS_ERROR_ACK;
+        break;
+    case 4U:
+        result = UNI_HAL_CAN_BUS_ERROR_BIT_RECESSIVE;
+        break;
+    case 5U:
+        result = UNI_HAL_CAN_BUS_ERROR_BIT_DOMINANT;
+        break;
+    case 6U:
+        result = UNI_HAL_CAN_BUS_ERROR_CRC;
+        break;
+    default:
+        // 0: no error; 7: nothing new since the code was last read or reset
+        result = UNI_HAL_CAN_BUS_ERROR_NONE;
+        break;
+    }
+    return result;
+}
+
+
+bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bus_status_t *status) {
+    bool result = false;
+
+    if (uni_hal_can_is_inited(ctx) && status != nullptr) {
+        FDCAN_GlobalTypeDef *can = _uni_hal_can_get_instance(ctx->config.instance)->can;
+
+        // reading the protocol status resets its last error code to 'nothing new'
+        uint32_t const psr = can->PSR;
+        uint32_t const ecr = can->ECR;
+
+        if ((psr & FDCAN_PSR_BO) != 0U) {
+            status->state = UNI_HAL_CAN_BUS_STATE_BUS_OFF;
+        }
+        else if (!_uni_hal_can_is_started(can)) {
+            status->state = UNI_HAL_CAN_BUS_STATE_INACTIVE;
+        }
+        else if ((psr & FDCAN_PSR_EP) != 0U) {
+            status->state = UNI_HAL_CAN_BUS_STATE_PASSIVE;
+        }
+        else if ((psr & FDCAN_PSR_EW) != 0U) {
+            status->state = UNI_HAL_CAN_BUS_STATE_WARNING;
+        }
+        else {
+            status->state = UNI_HAL_CAN_BUS_STATE_ACTIVE;
+        }
+
+        status->tx_error_count = (uint8_t)((ecr & FDCAN_ECR_TEC) >> FDCAN_ECR_TEC_Pos);
+        // the receive error counter has 7 bits and a separate flag for 'error passive level reached'
+        status->rx_error_count = ((ecr & FDCAN_ECR_RP) != 0U) ? 128U : (uint8_t)((ecr & FDCAN_ECR_REC) >> FDCAN_ECR_REC_Pos);
+        status->last_error = _uni_hal_can_bus_error(psr & FDCAN_PSR_LEC);
+
+        result = true;
+    }
+
+    return result;
+}
+
+
 uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
     uint32_t result = 0U;
     if (uni_hal_can_is_inited(ctx)) {
