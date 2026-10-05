@@ -22,6 +22,7 @@
 
 // Uni.HAL
 #include "rtc/uni_hal_rtc.h"
+#include "systick/uni_hal_systick.h"
 
 
 
@@ -40,6 +41,9 @@ enum {
     /** 1 Hz from the 32 kHz internal oscillator: 32000 / (127 + 1) / (249 + 1) */
     UNI_HAL_RTC_LSI_PREDIV_A = 127U,
     UNI_HAL_RTC_LSI_PREDIV_S = 249U,
+
+    /** longest wait for LSE to start again after a reset of the backup domain */
+    UNI_HAL_RTC_LSE_TIMEOUT_MS = 5000U,
 };
 
 
@@ -64,6 +68,49 @@ static bool _uni_hal_rtc_datetime_is_valid(const uni_hal_rtc_datetime_t *datetim
            datetime->day >= 1U && datetime->day <= 31U &&
            datetime->weekday >= 1U && datetime->weekday <= 7U &&
            datetime->hours <= 23U && datetime->minutes <= 59U && datetime->seconds <= 59U;
+}
+
+
+
+/**
+ * Reset the backup domain, which is the only way to make the clock of the RTC selectable again
+ */
+static void _uni_hal_rtc_backup_reset(void) {
+    // The reset clears the whole control register of the backup domain, the LSE settings among
+    // it. They are put back, without the clock selection of the RTC, so that LSE keeps its
+    // bypass and drive settings and starts again when it was on.
+    uint32_t const bdcr = READ_REG(RCC->BDCR) & ~(RCC_BDCR_RTCSEL | RCC_BDCR_RTCEN);
+    LL_RCC_ForceBackupDomainReset();
+    LL_RCC_ReleaseBackupDomainReset();
+    WRITE_REG(RCC->BDCR, bdcr);
+
+    if ((bdcr & RCC_BDCR_LSEON) != 0U) {
+        uint32_t const start_ms = uni_hal_systick_get_ms();
+        while (LL_RCC_LSE_IsReady() == 0U && (uni_hal_systick_get_ms() - start_ms) < UNI_HAL_RTC_LSE_TIMEOUT_MS) {
+        }
+    }
+}
+
+
+/**
+ * Check whether the RTC has to be moved to the clock source of the context
+ */
+static bool _uni_hal_rtc_clock_source_differs(const uni_hal_rtc_context_t *ctx) {
+    uint32_t const current = LL_RCC_GetRTCClockSource();
+    bool result = false;
+    if (current != LL_RCC_RTC_CLKSOURCE_NONE) {
+        // only for a source that can take over
+        if (ctx->clock_source == UNI_HAL_RCC_CLKSRC_LSE) {
+            result = current != LL_RCC_RTC_CLKSOURCE_LSE && LL_RCC_LSE_IsReady() != 0U;
+        }
+        else if (ctx->clock_source == UNI_HAL_RCC_CLKSRC_LSI) {
+            result = current != LL_RCC_RTC_CLKSOURCE_LSI && LL_RCC_LSI_IsReady() != 0U;
+        }
+        else {
+            // not a source this driver selects
+        }
+    }
+    return result;
 }
 
 
@@ -101,7 +148,12 @@ bool uni_hal_rtc_init(uni_hal_rtc_context_t *ctx) {
         LL_PWR_EnableBkUpAccess();
 
         // The clock selection is write-once until the backup domain is reset. Select a source
-        // only when there is none, so that a running calendar is never disturbed.
+        // only when there is none, so that a running calendar is never disturbed, unless the
+        // context asks for the change and accepts the loss.
+        if (ctx->clock_source_change && _uni_hal_rtc_clock_source_differs(ctx)) {
+            _uni_hal_rtc_backup_reset();
+        }
+
         result = true;
         if (LL_RCC_GetRTCClockSource() == LL_RCC_RTC_CLKSOURCE_NONE) {
             switch (ctx->clock_source) {

@@ -72,6 +72,15 @@ typedef struct {
     uni_hal_rcc_clksrc_e clock_source;
 
     /**
+     * Change the clock of an RTC that runs from another source than `clock_source`, e.g. from
+     * LSI because the crystal did not start on an earlier boot. uni_hal_rtc_init() then resets
+     * the backup domain, which erases the calendar and the backup registers that one time; an
+     * LSE that is running is started again. Nothing is changed while the oscillator of
+     * `clock_source` is not running.
+     */
+    bool clock_source_change;
+
+    /**
      * Set by uni_hal_rtc_init()
      */
     bool inited;
