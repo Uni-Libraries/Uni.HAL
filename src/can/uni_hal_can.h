@@ -340,6 +340,16 @@ typedef struct {
 bool uni_hal_can_timing_calc(uint32_t clock_hz, uint32_t bitrate, uni_hal_can_timing_t *timing);
 
 /**
+ * Compute a bit timing for the data phase of CAN FD frames, which is sent at its own, higher
+ * bit rate when the frame asks for a bit rate switch
+ * @param clock_hz frequency of the CAN clock
+ * @param bitrate bit rate of the data phase in bit/s
+ * @param timing receives the timing: prescaler 1..32, bs1 1..32, bs2 1..16, sjw 1..16
+ * @return false when no setting gives exactly this bit rate
+ */
+bool uni_hal_can_timing_calc_data(uint32_t clock_hz, uint32_t bitrate, uni_hal_can_timing_t *timing);
+
+/**
  * Check that CAN RQ queue contains at least one incoming message
  * @param ctx CAN context
  * @return number of incoming messages

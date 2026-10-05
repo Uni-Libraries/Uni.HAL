@@ -64,3 +64,47 @@ TEST_CASE("can_timing_rejects_inexact_bitrate", "[hal_can]") {
     // 7 MHz / 1 Mbit/s = 7 ticks per bit: fewer than the 8 quanta a bit needs here
     REQUIRE_FALSE(uni_hal_can_timing_calc(7'000'000U, 1'000'000U, &timing));
 }
+
+TEST_CASE("can_timing_data_phase", "[hal_can]") {
+    const uint32_t clocks_hz[] = {20'000'000U, 40'000'000U, 80'000'000U};
+    const uint32_t bitrates[] = {1'000'000U, 2'000'000U, 4'000'000U, 5'000'000U, 8'000'000U};
+
+    for (uint32_t clock_hz : clocks_hz) {
+        for (uint32_t bitrate : bitrates) {
+            uni_hal_can_timing_t timing = {};
+            const bool found = uni_hal_can_timing_calc_data(clock_hz, bitrate, &timing);
+
+            INFO("clock " << clock_hz << " Hz, data bit rate " << bitrate);
+            if (clock_hz / bitrate < 5U) {
+                // fewer than five time quanta per bit: not possible
+                REQUIRE_FALSE(found);
+                continue;
+            }
+            REQUIRE(found);
+
+            const uint32_t quanta = 1U + timing.bs1 + timing.bs2;
+            REQUIRE(timing.prescaler >= 1U);
+            REQUIRE(timing.prescaler <= 32U);
+            REQUIRE(timing.bs1 >= 1U);
+            REQUIRE(timing.bs1 <= 32U);
+            REQUIRE(timing.bs2 >= 1U);
+            REQUIRE(timing.bs2 <= 16U);
+            REQUIRE(timing.sjw >= 1U);
+            REQUIRE(timing.sjw <= timing.bs2);
+            REQUIRE(clock_hz == bitrate * timing.prescaler * quanta);
+
+            // sample point between 70 % and 85 %
+            const uint32_t sample_point = ((1U + timing.bs1) * 1000U) / quanta;
+            REQUIRE(sample_point >= 700U);
+            REQUIRE(sample_point <= 850U);
+        }
+    }
+}
+
+TEST_CASE("can_timing_nominal_keeps_narrow_jump_width", "[hal_can]") {
+    // the arbitration phase timing is the one bxCAN users have: unchanged by the data phase work
+    uni_hal_can_timing_t timing = {};
+    REQUIRE(uni_hal_can_timing_calc(32'000'000U, 500'000U, &timing));
+    REQUIRE(timing.sjw == 1U);
+}
+
