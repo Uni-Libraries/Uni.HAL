@@ -3,12 +3,10 @@
 //
 
 // stdlib
-#include <stdio.h>
+#include <stddef.h>
 
 // st
-#include <stm32l496xx.h>
-#include <stm32l4xx_hal.h>
-#include <stm32l4xx_hal_can.h>
+#include <stm32l4xx.h>
 
 // uni_hal
 #include "can/uni_hal_can.h"
@@ -19,18 +17,11 @@
 
 
 //
-// Context Storage
+// The bxCAN peripheral is driven through its registers: ST ships no LL driver for it, and the
+// HAL driver brings its own state machine and tick dependency that this driver does not need.
+// Register and bit names are those of RM0351, chapter "Controller area network (bxCAN)".
 //
 
-static CAN_HandleTypeDef _uni_hal_can_1_handle = {};
-static CAN_HandleTypeDef _uni_hal_can_2_handle = {};
-
-static uni_hal_can_context_t *_uni_hal_can_1_ctx = NULL;
-static uni_hal_can_context_t *_uni_hal_can_2_ctx = NULL;
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-static BaseType_t _uni_hal_can_irq_wake = false;
-#endif
 
 
 //
@@ -42,89 +33,92 @@ static BaseType_t _uni_hal_can_irq_wake = false;
  */
 #define UNI_HAL_CAN_TX_TIMEOUT_MS (100U)
 
+/**
+ * Longest wait for the peripheral to enter or leave initialisation mode.
+ * Leaving it needs 11 consecutive recessive bits on the bus.
+ */
+#define UNI_HAL_CAN_MODE_TIMEOUT_MS (10U)
+
+/**
+ * Priority of the CAN interrupts
+ */
+#define UNI_HAL_CAN_IRQ_PRIORITY (4U)
+
+/**
+ * Filter banks 0..13 belong to CAN1, 14..27 to CAN2
+ */
+#define UNI_HAL_CAN_FILTER_BANKS      (28U)
+#define UNI_HAL_CAN_FILTER_CAN2_START (14U)
+
+/**
+ * Number of TX mailboxes and RX FIFOs of one instance
+ */
+#define UNI_HAL_CAN_TX_MAILBOXES (3U)
+#define UNI_HAL_CAN_RX_FIFOS     (2U)
+
+/**
+ * A FIFO releases its output mailbox within a few clock cycles; do not spin on it for ever
+ */
+#define UNI_HAL_CAN_RELEASE_SPINS (1000U)
+
+
 
 //
-// Interrupts
+// Context Storage
 //
 
-void CAN1_RX0_IRQHandler(void)
-{
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    _uni_hal_can_irq_wake = pdFALSE;
-#endif
+static uni_hal_can_context_t *_uni_hal_can_1_ctx = nullptr;
+static uni_hal_can_context_t *_uni_hal_can_2_ctx = nullptr;
 
-    HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
-#endif
-}
-
-void CAN1_RX1_IRQHandler(void)
-{
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    _uni_hal_can_irq_wake = pdFALSE;
-#endif
-
-    HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
-#endif
-}
-
-void CAN2_RX0_IRQHandler(void)
-{
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    _uni_hal_can_irq_wake = pdFALSE;
-#endif
-
-    HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
-#endif
-}
-
-void CAN2_RX1_IRQHandler(void)
-{
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    _uni_hal_can_irq_wake = pdFALSE;
-#endif
-
-    HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( _uni_hal_can_irq_wake );
-#endif
-}
-
-// status change / error
-void CAN1_SCE_IRQHandler(void)
-{
-    HAL_CAN_IRQHandler(&_uni_hal_can_1_handle);
-}
-
-void CAN2_SCE_IRQHandler(void)
-{
-    HAL_CAN_IRQHandler(&_uni_hal_can_2_handle);
-}
 
 
 //
 // Private functions
 //
 
+static CAN_TypeDef *_uni_hal_can_get_handle(uni_hal_core_periph_e instance) {
+    CAN_TypeDef *result = nullptr;
+    switch (instance) {
+    case UNI_HAL_CORE_PERIPH_CAN_1:
+        result = CAN1;
+        break;
+    case UNI_HAL_CORE_PERIPH_CAN_2:
+        result = CAN2;
+        break;
+    default:
+        break;
+    }
+
+    return result;
+}
+
+
+static bool _uni_hal_can_set_context(uni_hal_can_context_t *ctx)
+{
+    bool result = false;
+    switch (ctx->config.instance) {
+    case UNI_HAL_CORE_PERIPH_CAN_1:
+        _uni_hal_can_1_ctx = ctx;
+        result = true;
+        break;
+    case UNI_HAL_CORE_PERIPH_CAN_2:
+        _uni_hal_can_2_ctx = ctx;
+        result = true;
+        break;
+    default:
+        break;
+    }
+
+    return result;
+}
+
+
 /**
  * Enable CAN interrupts
  * @param instance target CAN instance
  * @param priority interrupt priority
  */
-bool _uni_hal_can_interrupt_enable(uni_hal_core_periph_e instance, uint32_t priority) {
+static bool _uni_hal_can_interrupt_enable(uni_hal_core_periph_e instance, uint32_t priority) {
     bool result = false;
     switch (instance) {
     case UNI_HAL_CORE_PERIPH_CAN_1:
@@ -155,72 +149,223 @@ bool _uni_hal_can_interrupt_enable(uni_hal_core_periph_e instance, uint32_t prio
     return result;
 }
 
-uni_hal_can_context_t *_uni_hal_can_get_context(CAN_HandleTypeDef *hcan) { //-V2009
-    uni_hal_can_context_t *result = NULL;
 
-    if (hcan != NULL) {
-        if (hcan->Instance == CAN1) {
-            result = _uni_hal_can_1_ctx;
-        } else if (hcan->Instance == CAN2) {
-            result = _uni_hal_can_2_ctx;
+/**
+ * Wait for bits of the master status register
+ * @param can CAN instance
+ * @param mask bits of CAN_MSR to look at
+ * @param set true to wait until all of them are set, false until all are clear
+ * @return false when that did not happen within UNI_HAL_CAN_MODE_TIMEOUT_MS
+ */
+static bool _uni_hal_can_wait_msr(const CAN_TypeDef *can, uint32_t mask, bool set) {
+    uint32_t const start_ms = uni_hal_systick_get_ms();
+    for (;;) {
+        uint32_t const bits = can->MSR & mask;
+        if (set ? (bits == mask) : (bits == 0U)) {
+            return true;
+        }
+        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_MODE_TIMEOUT_MS) {
+            return false;
+        }
+    }
+}
+
+
+/**
+ * Put the peripheral into initialisation mode, where it takes no part in bus traffic
+ */
+static bool _uni_hal_can_mode_init(CAN_TypeDef *can) {
+    SET_BIT(can->MCR, CAN_MCR_INRQ);
+    return _uni_hal_can_wait_msr(can, CAN_MSR_INAK, true);
+}
+
+
+/**
+ * Check that the peripheral takes part in bus traffic
+ */
+static bool _uni_hal_can_is_started(const CAN_TypeDef *can) {
+    return (can->MSR & CAN_MSR_INAK) == 0U;
+}
+
+
+/**
+ * Put a frame into a free TX mailbox
+ * @param ctx CAN context, must be initialised
+ * @param msg frame to send
+ * @param tx_mailbox receives the number of the mailbox the frame went into, 0..2
+ * @return false when all mailboxes are taken or the peripheral is not started
+ */
+static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg_t *msg, uint32_t *tx_mailbox) {
+    CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
+    if (can == nullptr || !_uni_hal_can_is_started(can)) {
+        return false;
+    }
+
+    uint32_t const tsr = can->TSR;
+    if ((tsr & (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2)) == 0U) {
+        return false;
+    }
+
+    // CODE holds the number of the next free mailbox while at least one is free
+    uint32_t const mailbox = (tsr & CAN_TSR_CODE) >> CAN_TSR_CODE_Pos;
+    if (mailbox >= UNI_HAL_CAN_TX_MAILBOXES) {
+        return false;
+    }
+
+    CAN_TxMailBox_TypeDef *box = &can->sTxMailBox[mailbox];
+    uint32_t const dlc = (msg->dlc <= 8U) ? msg->dlc : 8U;
+
+    // identifier, data frame; TXRQ is set last, once the rest of the mailbox is filled
+    box->TIR = msg->standard_id ? ((msg->id & 0x7FFU) << CAN_TI0R_STID_Pos)
+                                : (((msg->id & 0x1FFFFFFFU) << CAN_TI0R_EXID_Pos) | CAN_TI0R_IDE);
+    box->TDTR = dlc;
+    box->TDLR = ((uint32_t)msg->data[3] << 24U) | ((uint32_t)msg->data[2] << 16U) |
+                ((uint32_t)msg->data[1] << 8U) | (uint32_t)msg->data[0];
+    box->TDHR = ((uint32_t)msg->data[7] << 24U) | ((uint32_t)msg->data[6] << 16U) |
+                ((uint32_t)msg->data[5] << 8U) | (uint32_t)msg->data[4];
+    SET_BIT(box->TIR, CAN_TI0R_TXRQ);
+
+    *tx_mailbox = mailbox;
+    return true;
+}
+
+
+
+//
+// Interrupts
+//
+
+/**
+ * Receive interrupt of one FIFO: move every pending frame to the receive queue
+ * @return not 0 when a task of higher priority became ready
+ */
+static BaseType_t _uni_hal_can_irq_rx(uni_hal_can_context_t *ctx, CAN_TypeDef *can, uint32_t fifo) {
+    BaseType_t woken = pdFALSE;
+
+    // the status and control bits sit at the same positions in RF0R and RF1R
+    volatile uint32_t *const rfr = (fifo == 0U) ? &can->RF0R : &can->RF1R;
+    const CAN_FIFOMailBox_TypeDef *const box = &can->sFIFOMailBox[fifo];
+
+    // a frame was lost because the FIFO was full
+    if ((*rfr & CAN_RF0R_FOVR0) != 0U) {
+        // the flags are cleared by writing 1; writing only this one leaves the others alone
+        *rfr = CAN_RF0R_FOVR0;
+        if (ctx != nullptr) {
+            ctx->status.count_err++;
+            ctx->status.errors |= UNI_HAL_CAN_ERROR_RX_OVERRUN;
         }
     }
 
-    return result;
+    while ((*rfr & CAN_RF0R_FMP0) != 0U) {
+        uni_hal_can_msg_t msg;
+
+        uint32_t const rir = box->RIR;
+        uint32_t const rdtr = box->RDTR;
+        uint32_t const rdlr = box->RDLR;
+        uint32_t const rdhr = box->RDHR;
+
+        msg.standard_id = (rir & CAN_RI0R_IDE) == 0U;
+        msg.id = msg.standard_id ? (rir >> CAN_RI0R_STID_Pos) : (rir >> CAN_RI0R_EXID_Pos);
+        msg.dlc = (uint8_t)(rdtr & CAN_RDT0R_DLC);
+        if (msg.dlc > 8U) {
+            msg.dlc = 8U;
+        }
+        msg.data[0] = (uint8_t)(rdlr);
+        msg.data[1] = (uint8_t)(rdlr >> 8U);
+        msg.data[2] = (uint8_t)(rdlr >> 16U);
+        msg.data[3] = (uint8_t)(rdlr >> 24U);
+        msg.data[4] = (uint8_t)(rdhr);
+        msg.data[5] = (uint8_t)(rdhr >> 8U);
+        msg.data[6] = (uint8_t)(rdhr >> 16U);
+        msg.data[7] = (uint8_t)(rdhr >> 24U);
+
+        // release the output mailbox and let the FIFO move on to the next frame
+        *rfr = CAN_RF0R_RFOM0;
+        for (uint32_t spin = 0U; spin < UNI_HAL_CAN_RELEASE_SPINS && (*rfr & CAN_RF0R_RFOM0) != 0U; spin++) {
+        }
+
+        if (ctx != nullptr && ctx->status.inited) {
+#if defined(UNI_HAL_CAN_USE_FREERTOS)
+            bool const queued = xQueueSendFromISR(ctx->status.queue_rx, &msg, &woken) == pdPASS;
+#else
+            bool const queued = uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U) == 1U;
+#endif
+
+            if (queued) {
+                ctx->status.count_rx++;
+            }
+            else {
+                ctx->status.count_rx_dropped++;
+            }
+        }
+    }
+
+    return woken;
 }
 
-bool _uni_hal_can_set_context(uni_hal_can_context_t *ctx)
+
+/**
+ * Status change interrupt: the error state of the node changed
+ */
+static void _uni_hal_can_irq_sce(uni_hal_can_context_t *ctx, CAN_TypeDef *can) {
+    if ((can->MSR & CAN_MSR_ERRI) != 0U) {
+        uint32_t const esr = can->ESR;
+
+        // cleared by writing 1; the other write-1-to-clear bits of MSR are written as 0
+        can->MSR = CAN_MSR_ERRI;
+
+        if (ctx != nullptr) {
+            ctx->status.count_err++;
+
+            if ((esr & CAN_ESR_EWGF) != 0U) {
+                ctx->status.errors |= UNI_HAL_CAN_ERROR_WARNING;
+            }
+            if ((esr & CAN_ESR_EPVF) != 0U) {
+                ctx->status.errors |= UNI_HAL_CAN_ERROR_PASSIVE;
+            }
+            if ((esr & CAN_ESR_BOFF) != 0U) {
+                ctx->status.errors |= UNI_HAL_CAN_ERROR_BUS_OFF;
+            }
+        }
+    }
+}
+
+
+void CAN1_RX0_IRQHandler(void)
 {
-    bool result = false;
-    switch (ctx->config.instance) {
-    case UNI_HAL_CORE_PERIPH_CAN_1:
-        _uni_hal_can_1_ctx = ctx;
-        result = true;
-        break;
-    case UNI_HAL_CORE_PERIPH_CAN_2:
-        _uni_hal_can_2_ctx = ctx;
-        result = true;
-        break;
-    default:
-        break;
-    }
-
-    return result;
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_can_irq_rx(_uni_hal_can_1_ctx, CAN1, 0U));
 }
 
-
-CAN_TypeDef *_uni_hal_can_get_handle(uni_hal_core_periph_e instance) {
-    CAN_TypeDef *result = NULL;
-    switch (instance) {
-    case UNI_HAL_CORE_PERIPH_CAN_1:
-        result = CAN1;
-        break;
-    case UNI_HAL_CORE_PERIPH_CAN_2:
-        result = CAN2;
-        break;
-    default:
-        break;
-    }
-
-    return result;
+void CAN1_RX1_IRQHandler(void)
+{
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_can_irq_rx(_uni_hal_can_1_ctx, CAN1, 1U));
 }
 
-
-CAN_HandleTypeDef *_uni_hal_can_get_handle_hal(uni_hal_core_periph_e instance) {
-    CAN_HandleTypeDef *result = NULL;
-    switch (instance) {
-    case UNI_HAL_CORE_PERIPH_CAN_1:
-        result = &_uni_hal_can_1_handle;
-        break;
-    case UNI_HAL_CORE_PERIPH_CAN_2:
-        result = &_uni_hal_can_2_handle;
-        break;
-    default:
-        break;
-    }
-
-    return result;
+void CAN2_RX0_IRQHandler(void)
+{
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_can_irq_rx(_uni_hal_can_2_ctx, CAN2, 0U));
 }
+
+void CAN2_RX1_IRQHandler(void)
+{
+    UNI_HAL_OS_ISR_ENTER();
+    UNI_HAL_OS_ISR_EXIT(_uni_hal_can_irq_rx(_uni_hal_can_2_ctx, CAN2, 1U));
+}
+
+// status change / error
+void CAN1_SCE_IRQHandler(void)
+{
+    _uni_hal_can_irq_sce(_uni_hal_can_1_ctx, CAN1);
+}
+
+void CAN2_SCE_IRQHandler(void)
+{
+    _uni_hal_can_irq_sce(_uni_hal_can_2_ctx, CAN2);
+}
+
 
 
 //
@@ -229,12 +374,12 @@ CAN_HandleTypeDef *_uni_hal_can_get_handle_hal(uni_hal_core_periph_e instance) {
 
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
     bool result = false;
-    if (ctx != NULL) {
+    if (ctx != nullptr) {
         result = _uni_hal_can_set_context(ctx);
 
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
         ctx->status.queue_rx = xQueueCreate(UNI_HAL_CAN_QUEUE_SIZE, sizeof(uni_hal_can_msg_t));
-        result = result && ctx->status.queue_rx != NULL;
+        result = result && ctx->status.queue_rx != nullptr;
 #else
         result =
             result && uni_common_ringbuffer_init(ctx->config.buffer_rx, ctx->config.buffer_rx->data, ctx->config.buffer_rx->size_object, ctx->config.buffer_rx->size_total);
@@ -248,11 +393,9 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         }
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_rx);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_tx);
-        result = result && _uni_hal_can_interrupt_enable(ctx->config.instance, 4U);
 
-        CAN_HandleTypeDef *instance_hal = _uni_hal_can_get_handle_hal(ctx->config.instance);
-        CAN_TypeDef *instance = _uni_hal_can_get_handle(ctx->config.instance);
-        if (result && instance != NULL && instance_hal != NULL) {
+        CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
+        if (result && can != nullptr) {
             // the former fixed timing, used when no bit rate is configured
             uni_hal_can_timing_t timing = {.prescaler = 10U, .bs1 = 8U, .bs2 = 1U, .sjw = 1U};
             if (ctx->config.bitrate != 0U) {
@@ -260,26 +403,43 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
                                                  &timing);
             }
 
-            instance_hal->Instance = instance;
-            instance_hal->Init.Prescaler = timing.prescaler;
-            instance_hal->Init.Mode = CAN_MODE_NORMAL;
-            instance_hal->Init.SyncJumpWidth = (timing.sjw - 1U) << CAN_BTR_SJW_Pos;
-            instance_hal->Init.TimeSeg1 = (timing.bs1 - 1U) << CAN_BTR_TS1_Pos;
-            instance_hal->Init.TimeSeg2 = (timing.bs2 - 1U) << CAN_BTR_TS2_Pos;
-            instance_hal->Init.TimeTriggeredMode = DISABLE;
-            instance_hal->Init.AutoBusOff = ctx->config.auto_bus_off ? ENABLE : DISABLE;
-            instance_hal->Init.AutoWakeUp = ctx->config.auto_wake_up ? ENABLE : DISABLE;
-            instance_hal->Init.AutoRetransmission = ctx->config.auto_retransmission ? ENABLE : DISABLE;
-            instance_hal->Init.ReceiveFifoLocked = DISABLE;
-            instance_hal->Init.TransmitFifoPriority = ctx->config.tx_fifo_priority ? ENABLE : DISABLE;
-            result = result && (HAL_CAN_Init(instance_hal) == HAL_OK);
-            // Report the changes of the error state and lost frames. The per-frame error code
-            // interrupt (LEC) is left off: on a bus without a partner it would fire for every
-            // retransmission.
+            // the configuration below can only be written in initialisation mode; the peripheral
+            // comes out of reset asleep, which has to be left as well
+            result = result && _uni_hal_can_mode_init(can);
             if (result) {
-                result = HAL_CAN_ActivateNotification(instance_hal, CAN_IT_ERROR | CAN_IT_ERROR_WARNING |
-                                                      CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF |
-                                                      CAN_IT_RX_FIFO0_OVERRUN | CAN_IT_RX_FIFO1_OVERRUN) == HAL_OK;
+                CLEAR_BIT(can->MCR, CAN_MCR_SLEEP);
+                result = _uni_hal_can_wait_msr(can, CAN_MSR_SLAK, false);
+            }
+
+            if (result) {
+                // bus management
+                uint32_t mcr = 0U;
+                if (ctx->config.auto_bus_off) {
+                    mcr |= CAN_MCR_ABOM;
+                }
+                if (ctx->config.auto_wake_up) {
+                    mcr |= CAN_MCR_AWUM;
+                }
+                if (!ctx->config.auto_retransmission) {
+                    mcr |= CAN_MCR_NART;
+                }
+                if (ctx->config.tx_fifo_priority) {
+                    mcr |= CAN_MCR_TXFP;
+                }
+                MODIFY_REG(can->MCR,
+                           CAN_MCR_TTCM | CAN_MCR_ABOM | CAN_MCR_AWUM | CAN_MCR_NART | CAN_MCR_RFLM | CAN_MCR_TXFP, mcr);
+
+                // bit timing, normal mode (neither loop back nor silent)
+                can->BTR = ((timing.sjw - 1U) << CAN_BTR_SJW_Pos) | ((timing.bs1 - 1U) << CAN_BTR_TS1_Pos) |
+                           ((timing.bs2 - 1U) << CAN_BTR_TS2_Pos) | (timing.prescaler - 1U);
+
+                // Report the changes of the error state and lost frames. The per-frame error code
+                // interrupt (LEC) is left off: on a bus without a partner it would fire for every
+                // retransmission. The receive interrupts are enabled with the first filter.
+                can->IER = CAN_IER_ERRIE | CAN_IER_EWGIE | CAN_IER_EPVIE | CAN_IER_BOFIE | CAN_IER_FOVIE0 |
+                           CAN_IER_FOVIE1;
+
+                result = _uni_hal_can_interrupt_enable(ctx->config.instance, UNI_HAL_CAN_IRQ_PRIORITY);
             }
 
             ctx->status.count_rx = 0U;
@@ -297,13 +457,15 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
 bool uni_hal_can_start(uni_hal_can_context_t *ctx) { //-V2009
     bool result = false;
     if (uni_hal_can_is_inited(ctx)) {
-        CAN_HandleTypeDef *handle = _uni_hal_can_get_handle_hal(ctx->config.instance);
-        result = HAL_CAN_Start(handle) == HAL_OK;
+        CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
+
+        // leave initialisation mode: the peripheral synchronises to the bus first
+        CLEAR_BIT(can->MCR, CAN_MCR_INRQ);
+        result = _uni_hal_can_wait_msr(can, CAN_MSR_INAK, false);
         if (!result) {
-            // HAL_CAN_Start() times out while the bus is not idle (e.g. stuck dominant) and leaves
-            // the handle in its error state, in which no other call works. Bring it back to
-            // 'ready' so that the start can be tried again later.
-            (void)HAL_CAN_Init(handle);
+            // The bus was not idle in time (e.g. stuck dominant). Withdraw the request, so that
+            // the peripheral is in a defined state and the start can be tried again later.
+            (void)_uni_hal_can_mode_init(can);
         }
     }
 
@@ -313,7 +475,7 @@ bool uni_hal_can_start(uni_hal_can_context_t *ctx) { //-V2009
 bool uni_hal_can_stop(uni_hal_can_context_t *ctx) { //-V2009
     bool result = false;
     if (uni_hal_can_is_inited(ctx)) {
-        result = HAL_CAN_Stop(_uni_hal_can_get_handle_hal(ctx->config.instance)) == HAL_OK;
+        result = _uni_hal_can_mode_init(_uni_hal_can_get_handle(ctx->config.instance));
     }
 
     return result;
@@ -323,55 +485,56 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
                            uint32_t filter_mask) {
     bool result = false;
 
-    if (uni_hal_can_is_inited(ctx) && fifo_num < 2)
+    if (uni_hal_can_is_inited(ctx) && fifo_num < UNI_HAL_CAN_RX_FIFOS && slot_idx < UNI_HAL_CAN_FILTER_BANKS)
     {
-        void* handle = _uni_hal_can_get_handle_hal(ctx->config.instance);
-        HAL_CAN_ActivateNotification(handle, fifo_num == 1 ? CAN_IT_RX_FIFO1_MSG_PENDING : CAN_IT_RX_FIFO0_MSG_PENDING);
+        // a bank only filters for the instance it belongs to
+        bool const is_can2 = ctx->config.instance == UNI_HAL_CORE_PERIPH_CAN_2;
+        if (is_can2 == (slot_idx >= UNI_HAL_CAN_FILTER_CAN2_START)) {
+            CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
+            uint32_t const bank_bit = 1UL << slot_idx;
 
-        CAN_FilterTypeDef rx_can_flt = {
-            .FilterIdHigh = filter_id >> 16,
-            .FilterIdLow = filter_id & UINT16_MAX,
-            .FilterMaskIdHigh = filter_mask >> 16,
-            .FilterMaskIdLow = filter_mask & UINT16_MAX,
-            .FilterFIFOAssignment = fifo_num == 1 ? CAN_FILTER_FIFO1 : CAN_FILTER_FIFO0,
-            .FilterBank = slot_idx, // TODO: clamp
-            .FilterMode = CAN_FILTERMODE_IDMASK,
-            .FilterScale = CAN_FILTERSCALE_32BIT,
-            .FilterActivation = CAN_FILTER_ENABLE,
-            .SlaveStartFilterBank = 14
-        };
+            // the filter registers of both instances are part of CAN1
+            SET_BIT(CAN1->FMR, CAN_FMR_FINIT);
+            MODIFY_REG(CAN1->FMR, CAN_FMR_CAN2SB, UNI_HAL_CAN_FILTER_CAN2_START << CAN_FMR_CAN2SB_Pos);
 
-        result = HAL_CAN_ConfigFilter(handle, &rx_can_flt) == HAL_OK;
+            // a bank is set up while it is inactive
+            CLEAR_BIT(CAN1->FA1R, bank_bit);
+
+            // one 32-bit identifier with its mask, in the layout of the receive identifier
+            // register: identifier shifted left, then IDE and RTR
+            SET_BIT(CAN1->FS1R, bank_bit);
+            CLEAR_BIT(CAN1->FM1R, bank_bit);
+            CAN1->sFilterRegister[slot_idx].FR1 = filter_id;
+            CAN1->sFilterRegister[slot_idx].FR2 = filter_mask;
+
+            if (fifo_num == 1U) {
+                SET_BIT(CAN1->FFA1R, bank_bit);
+            }
+            else {
+                CLEAR_BIT(CAN1->FFA1R, bank_bit);
+            }
+
+            SET_BIT(CAN1->FA1R, bank_bit);
+            CLEAR_BIT(CAN1->FMR, CAN_FMR_FINIT);
+
+            // frames can arrive in this FIFO from now on
+            SET_BIT(can->IER, (fifo_num == 1U) ? CAN_IER_FMPIE1 : CAN_IER_FMPIE0);
+
+            result = true;
+        }
     }
 
     return result;
 }
 
 
-/**
- * Put a frame into a free TX mailbox
- * @param ctx CAN context, must be initialised
- * @param msg frame to send
- * @param tx_mailbox receives the mailbox the frame went into
- * @return false when all mailboxes are taken or the peripheral is not started
- */
-static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg_t *msg, uint32_t *tx_mailbox) {
-    CAN_TxHeaderTypeDef tx_msg_header = {.StdId = msg->standard_id ? msg->id : 0U,
-            .ExtId = msg->standard_id ? 0U : msg->id,
-            .IDE = msg->standard_id ? CAN_ID_STD : CAN_ID_EXT,
-            .RTR = CAN_RTR_DATA,
-            .DLC = msg->dlc,
-            .TransmitGlobalTime = DISABLE};
-
-    CAN_HandleTypeDef* instance = _uni_hal_can_get_handle_hal(ctx->config.instance);
-    return instance != NULL && HAL_CAN_AddTxMessage(instance, &tx_msg_header, msg->data, tx_mailbox) == HAL_OK;
-}
-
-
 uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
     uint32_t result = 0U;
     if (uni_hal_can_is_inited(ctx)) {
-        result = HAL_CAN_GetTxMailboxesFreeLevel(_uni_hal_can_get_handle_hal(ctx->config.instance));
+        uint32_t const tsr = _uni_hal_can_get_handle(ctx->config.instance)->TSR;
+        result += ((tsr & CAN_TSR_TME0) != 0U) ? 1U : 0U;
+        result += ((tsr & CAN_TSR_TME1) != 0U) ? 1U : 0U;
+        result += ((tsr & CAN_TSR_TME2) != 0U) ? 1U : 0U;
     }
     return result;
 }
@@ -380,7 +543,7 @@ uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
 bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_msg_t *msg) {
     bool result = false;
 
-    if (uni_hal_can_is_inited(ctx) && msg != NULL) {
+    if (uni_hal_can_is_inited(ctx) && msg != nullptr) {
         uint32_t tx_mailbox = 0U;
         result = _uni_hal_can_queue(ctx, msg, &tx_mailbox);
         if (result) {
@@ -396,8 +559,10 @@ bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_m
 bool uni_hal_can_transmit_abort(uni_hal_can_context_t *ctx) {
     bool result = false;
     if (uni_hal_can_is_inited(ctx)) {
-        result = HAL_CAN_AbortTxRequest(_uni_hal_can_get_handle_hal(ctx->config.instance),
-                                        CAN_TX_MAILBOX0 | CAN_TX_MAILBOX1 | CAN_TX_MAILBOX2) == HAL_OK;
+        // ABRQ is set by writing 1; the flags in the same register are cleared by writing 1, so
+        // only the request bits are written
+        _uni_hal_can_get_handle(ctx->config.instance)->TSR = CAN_TSR_ABRQ0 | CAN_TSR_ABRQ1 | CAN_TSR_ABRQ2;
+        result = true;
     }
     return result;
 }
@@ -406,38 +571,30 @@ bool uni_hal_can_transmit_abort(uni_hal_can_context_t *ctx) {
 bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
     bool result = false;
 
-    if (uni_hal_can_is_inited(ctx) && msg != NULL) {
-        uint32_t tx_mailbox = 0;
+    if (uni_hal_can_is_inited(ctx) && msg != nullptr) {
+        uint32_t tx_mailbox = 0U;
 
-        CAN_HandleTypeDef* instance = _uni_hal_can_get_handle_hal(ctx->config.instance);
-        if(_uni_hal_can_queue(ctx, msg, &tx_mailbox)) {
+        if (_uni_hal_can_queue(ctx, msg, &tx_mailbox)) {
+            CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
+
+            // the flags of the three mailboxes sit 8 bits apart in the status register
+            uint32_t const tme_mask = CAN_TSR_TME0 << tx_mailbox;
+            uint32_t const txok_mask = CAN_TSR_TXOK0 << (8U * tx_mailbox);
+            uint32_t const abrq_mask = CAN_TSR_ABRQ0 << (8U * tx_mailbox);
+
             // wait until the mailbox is done with the frame; in bus-off it never is
             uint32_t const start_ms = uni_hal_systick_get_ms();
             bool timed_out = false;
-            while (HAL_CAN_IsTxMessagePending(instance, tx_mailbox)) {
+            while ((can->TSR & tme_mask) == 0U) {
                 if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_TX_TIMEOUT_MS) {
-                    (void)HAL_CAN_AbortTxRequest(instance, tx_mailbox);
+                    can->TSR = abrq_mask;
                     timed_out = true;
                     break;
                 }
             }
 
             // the request also completes when the frame was lost (error, arbitration): check TXOK
-            uint32_t txok_mask = 0U;
-            switch (tx_mailbox) {
-            case CAN_TX_MAILBOX0:
-                txok_mask = CAN_TSR_TXOK0;
-                break;
-            case CAN_TX_MAILBOX1:
-                txok_mask = CAN_TSR_TXOK1;
-                break;
-            case CAN_TX_MAILBOX2:
-                txok_mask = CAN_TSR_TXOK2;
-                break;
-            default:
-                break;
-            }
-            result = !timed_out && (instance->Instance->TSR & txok_mask) != 0U;
+            result = !timed_out && (can->TSR & txok_mask) != 0U;
         }
 
         if (result) {
@@ -450,70 +607,3 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
 
     return result;
 }
-
-//
-// HAL Callbacks
-//
-
-static void _uni_hal_can_callback_msgpending(uni_hal_can_context_t *ctx, uint32_t fifo) {
-    (void)fifo; // TODO: support two separate queues for different FIFOs?
-
-    if (uni_hal_can_is_inited(ctx)) {
-        CAN_RxHeaderTypeDef rx_header;
-        uni_hal_can_msg_t msg;
-
-        while (HAL_CAN_GetRxMessage(_uni_hal_can_get_handle_hal(ctx->config.instance), fifo, &rx_header, msg.data) == HAL_OK) {
-            msg.standard_id = rx_header.IDE == CAN_ID_STD;
-            msg.id = msg.standard_id ? rx_header.StdId : rx_header.ExtId;
-            msg.dlc = rx_header.DLC;
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-            bool const queued = xQueueSendFromISR(ctx->status.queue_rx, &msg, &_uni_hal_can_irq_wake) == pdPASS;
-#else
-            bool const queued = uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U) == 1U;
-#endif
-
-            if (queued) {
-                ctx->status.count_rx++;
-            }
-            else {
-                ctx->status.count_rx_dropped++;
-            }
-        }
-    }
-}
-
-static void _uni_hal_can_callback_error(uni_hal_can_context_t *ctx, CAN_HandleTypeDef *hcan) {
-    uint32_t const hal_errors = HAL_CAN_GetError(hcan);
-    (void)HAL_CAN_ResetError(hcan);
-
-    if (ctx != NULL) {
-        ctx->status.count_err++;
-
-        if ((hal_errors & HAL_CAN_ERROR_EWG) != 0U) {
-            ctx->status.errors |= UNI_HAL_CAN_ERROR_WARNING;
-        }
-        if ((hal_errors & HAL_CAN_ERROR_EPV) != 0U) {
-            ctx->status.errors |= UNI_HAL_CAN_ERROR_PASSIVE;
-        }
-        if ((hal_errors & HAL_CAN_ERROR_BOF) != 0U) {
-            ctx->status.errors |= UNI_HAL_CAN_ERROR_BUS_OFF;
-        }
-        if ((hal_errors & (HAL_CAN_ERROR_RX_FOV0 | HAL_CAN_ERROR_RX_FOV1)) != 0U) {
-            ctx->status.errors |= UNI_HAL_CAN_ERROR_RX_OVERRUN;
-        }
-    }
-}
-
-
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
-    _uni_hal_can_callback_msgpending(_uni_hal_can_get_context(hcan), CAN_RX_FIFO0);
-}
-
-
-void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan) {
-    _uni_hal_can_callback_msgpending(_uni_hal_can_get_context(hcan), CAN_RX_FIFO1);
-}
-
-
-void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan) { _uni_hal_can_callback_error(_uni_hal_can_get_context(hcan), hcan); }
