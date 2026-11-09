@@ -62,6 +62,9 @@ endif()
 if(UNI_HAL_I2C_USE_FREERTOS)
     target_compile_definitions(uni.hal PUBLIC UNI_HAL_I2C_USE_FREERTOS)
 endif()
+if(UNI_HAL_IO_PRINTF_LARGE_FORMAT)
+    target_compile_definitions(uni.hal PRIVATE UNI_HAL_IO_PRINTF_LARGE_FORMAT)
+endif()
 
 
 

@@ -35,6 +35,7 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 | `UNI_HAL_CAN_USE_FREERTOS` | `ON` | CAN receive queue is a FreeRTOS queue instead of a ring buffer |
 | `UNI_HAL_I2C_USE_FREERTOS` | `ON` | interrupt-driven I2C transfers wait on a task notification |
 | `UNI_HAL_CAN_USE_FD` | `OFF` | CAN messages hold up to 64 data bytes, for CAN FD on the STM32H7 |
+| `UNI_HAL_IO_PRINTF_LARGE_FORMAT` | `OFF` | `uni_hal_io_stdio_*printf` understand `ll`, `j`, `z`, `t` (`%llu`, `%zu`) |
 | `UNI_HAL_RTOS_HEAP_SIZE` | `100*1024` | `configTOTAL_HEAP_SIZE` |
 | `UNI_HAL_RTOS_HEAP_APP` | `OFF` | the application defines `ucHeap` itself |
 | `UNI_HAL_RTOS_MAX_PRIORITIES` | `5` | `configMAX_PRIORITIES` |

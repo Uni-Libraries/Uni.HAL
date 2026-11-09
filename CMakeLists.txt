@@ -17,6 +17,7 @@ option(UNI_HAL_USE_FREERTOS     "build the drivers on top of FreeRTOS; OFF for a
 option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
 option(UNI_HAL_CAN_USE_FD       "CAN messages carry up to 64 data bytes (CAN FD); OFF keeps them at 8" OFF)
 option(UNI_HAL_I2C_USE_FREERTOS "use FreeRTOS for I2C driver" ON)
+option(UNI_HAL_IO_PRINTF_LARGE_FORMAT "uni_hal_io_stdio_*printf: support ll/j/z/t (%llu, %zu) at the cost of code size" OFF)
 if(NOT UNI_HAL_USE_FREERTOS)
     # nothing to build the per-driver RTOS support on
     set(UNI_HAL_CAN_USE_FREERTOS OFF)
