@@ -18,6 +18,9 @@ extern "C" {
     #include "core/uni_hal_core_cm7.h"
     #include "core/uni_hal_core_stm32h7.h"
 #endif
+#if defined(UNI_HAL_TARGET_MCU_ZYNQ7000)
+    #include "core/uni_hal_core_zynq7000.h"
+#endif
 
 
 

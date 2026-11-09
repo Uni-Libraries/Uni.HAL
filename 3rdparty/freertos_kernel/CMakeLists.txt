@@ -76,6 +76,11 @@ if(UNI_HAL_TARGET_MCU STREQUAL "PC")
         target_sources(freertos_kernel PRIVATE "src_port/pc_posix/port.c")
         target_sources(freertos_kernel PRIVATE "src_port/pc_posix/utils/wait_for_event.c")
     endif()
+elseif(UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
+    # GCC/ARM_CA9: compiled into the executable, like the Cortex-M port - the port calls the
+    # tick and interrupt hooks implemented in uni.hal (core/uni_hal_core_zynq7000.c)
+    target_sources(freertos_kernel INTERFACE "src_port/arm_ca9/port.c" "src_port/arm_ca9/portASM.S")
+    target_include_directories(freertos_kernel PUBLIC "src_port/arm_ca9")
 else()
     target_sources(freertos_kernel INTERFACE "src_port/arm_cm4f/port.c")
     target_include_directories(freertos_kernel PUBLIC "src_port/arm_cm4f")
@@ -135,9 +140,6 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "#define configTICK_RATE_HZ                      (1000)                         \n"
         "#define configTICK_TYPE_WIDTH_IN_BITS           (TICK_TYPE_WIDTH_32_BITS)      \n"
         "                                                                               \n"
-        "#define configPRIO_BITS                         (4U)                           \n"
-        "#define configMAX_SYSCALL_INTERRUPT_PRIORITY    (4U << (8U - configPRIO_BITS)) \n"
-        "                                                                               \n"
         "#define configNUM_THREAD_LOCAL_STORAGE_POINTERS (4)                            \n"
         "                                                                               \n"
         "#define configMAX_PRIORITIES                    (${UNI_HAL_RTOS_MAX_PRIORITIES}) \n"
@@ -161,18 +163,48 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "                                                                               \n"
         "#define configPRINTF( X )                       vLoggingPrintf X               \n"
         "                                                                               \n"
-        "#define xPortPendSVHandler                      PendSV_Handler                 \n"
-        "#define vPortSVCHandler                         SVC_Handler                    \n"
-        "                                                                               \n"
         "#define configASSERT(x)  do { if((x) == 0){vAssertCalled(__LINE__, __FILE__);} } while(0) \n"
         "                                                                               \n"
 )
+
+if(NOT UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
+    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
+        "// port specific: ARM Cortex-M NVIC (also kept for the PC ports)               \n"
+        "#define configPRIO_BITS                         (4U)                           \n"
+        "#define configMAX_SYSCALL_INTERRUPT_PRIORITY    (4U << (8U - configPRIO_BITS)) \n"
+        "#define xPortPendSVHandler                      PendSV_Handler                 \n"
+        "#define vPortSVCHandler                         SVC_Handler                    \n"
+        "                                                                               \n"
+    )
+endif()
 
 if(UNI_HAL_TARGET_MCU STREQUAL "PC")
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "// port specific: PC                                                           \n"
         "#define configMINIMAL_STACK_SIZE                (16384U)                       \n"
         "#define configUSE_PORT_OPTIMISED_TASK_SELECTION (0)                            \n"
+        "                                                                               \n"
+    )
+elseif(UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
+    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
+        "// port specific: ARM Cortex-A9 (Zynq-7000), GCC/ARM_CA9                       \n"
+        "#define configMINIMAL_STACK_SIZE                (${UNI_HAL_RTOS_MINIMAL_STACK_SIZE}U) \n"
+        "#define configUSE_PORT_OPTIMISED_TASK_SELECTION (1)                            \n"
+        "// every task has an FPU context: the BSP and newlib are hard-float           \n"
+        "#define configUSE_TASK_FPU_SUPPORT              (2)                            \n"
+        "// GIC PL390: distributor 0xF8F01000, CPU interface 0xF8F00100                 \n"
+        "#define configINTERRUPT_CONTROLLER_BASE_ADDRESS         (0xF8F01000UL)         \n"
+        "#define configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET (-0xF00)               \n"
+        "#define configUNIQUE_INTERRUPT_PRIORITIES       (32)                           \n"
+        "// interrupts with GIC priority (0..31) numerically >= this may call ...FromISR \n"
+        "#define configMAX_API_CALL_INTERRUPT_PRIORITY   (18)                           \n"
+        "// tick: SCU private timer, see core/uni_hal_core_zynq7000.c                   \n"
+        "void vConfigureTickInterrupt(void);                                            \n"
+        "void vClearTickInterrupt(void);                                                \n"
+        "#define configSETUP_TICK_INTERRUPT()            vConfigureTickInterrupt()      \n"
+        "#define configCLEAR_TICK_INTERRUPT()            vClearTickInterrupt()          \n"
+        "// Cortex-M port API used by Uni.HAL (BaseType_t is long on this port)         \n"
+        "long xPortIsInsideInterrupt(void);                                             \n"
         "                                                                               \n"
     )
 else()

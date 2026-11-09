@@ -11,8 +11,8 @@ project(uni.hal LANGUAGES C CXX ASM)
 # Options
 #
 
-set(UNI_HAL_TARGET_MCU "" CACHE STRING "Target MCU: STM32H743, STM32L496 or PC")
-set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 PC)
+set(UNI_HAL_TARGET_MCU "" CACHE STRING "Target MCU: STM32H743, STM32L496, ZYNQ7000 or PC")
+set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 ZYNQ7000 PC)
 option(UNI_HAL_USE_FREERTOS     "build the drivers on top of FreeRTOS; OFF for a main loop without an RTOS" ON)
 option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
 option(UNI_HAL_CAN_USE_FD       "CAN messages carry up to 64 data bytes (CAN FD); OFF keeps them at 8" OFF)
@@ -35,7 +35,9 @@ endif()
 
 # The clock drivers derive the PLL dividers and every peripheral clock from HSE_VALUE,
 # so there is no usable default: a wrong value gives wrong baud rates without any error.
-if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC" AND NOT UNI_HAL_HSE_VALUE MATCHES "^[1-9][0-9]*$")
+# ZYNQ7000: the clocks are set up by the PS7 configuration (ps7_init/FSBL), not by Uni.HAL.
+if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC" AND NOT UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000"
+   AND NOT UNI_HAL_HSE_VALUE MATCHES "^[1-9][0-9]*$")
     message(FATAL_ERROR "UNI_HAL_HSE_VALUE is not set. Please set it to the HSE frequency of the board in Hz, e.g. -DUNI_HAL_HSE_VALUE=8000000")
 endif()
 
@@ -106,6 +108,10 @@ elseif(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
     add_subdirectory(3rdparty/st_stm32l4)
     set(UNI_HAL_DFP_LIBRARY st_stm32l4)
     set(UNI_HAL_DFP_SUFFIX  "*_cm.c" "*_cm4.c" "*_stm32.c" "*_stm32l4.c")
+elseif(UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
+    add_subdirectory(3rdparty/xilinx_zynq7000)
+    set(UNI_HAL_DFP_LIBRARY xilinx_zynq7000)
+    set(UNI_HAL_DFP_SUFFIX  "*_ca9.c" "*_ca9.S" "*_zynq7000.c")
 elseif(UNI_HAL_TARGET_MCU STREQUAL "PC")
     set(UNI_HAL_DFP_SUFFIX  "*_pc.c")
 else()

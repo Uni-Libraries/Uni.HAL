@@ -2,13 +2,13 @@
 # Checks
 #
 
-if((TOOLCHAIN_CPU MATCHES "cortex-m") AND (NOT DEFINED CMAKE_C_COMPILER))
-    message(STATUS "Cortex-M target detected and C compiler is not set. Setting compiler to arm-none-eabi-gcc.")
+if((TOOLCHAIN_CPU MATCHES "cortex-[ma]") AND (NOT DEFINED CMAKE_C_COMPILER))
+    message(STATUS "Cortex-M/A target detected and C compiler is not set. Setting compiler to arm-none-eabi-gcc.")
     set(CMAKE_C_COMPILER "arm-none-eabi-gcc" CACHE STRING "C compiler" FORCE)
 endif()
 
-if((TOOLCHAIN_CPU MATCHES "cortex-m") AND (NOT DEFINED CMAKE_CXX_COMPILER))
-    message(STATUS "Cortex-M target detected and CXX compiler is not set. Setting compiler to arm-none-eabi-g++.")
+if((TOOLCHAIN_CPU MATCHES "cortex-[ma]") AND (NOT DEFINED CMAKE_CXX_COMPILER))
+    message(STATUS "Cortex-M/A target detected and CXX compiler is not set. Setting compiler to arm-none-eabi-g++.")
     set(CMAKE_CXX_COMPILER "arm-none-eabi-g++" CACHE STRING "C++ compiler" FORCE)
 endif()
 
@@ -74,7 +74,8 @@ set(CMAKE_EXE_LINKER_FLAGS_INIT "${TOOLCHAIN_ARCH}")                            
 set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -Wl,-gc-sections")          #perform garbage collection
 set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -Wl,-print-memory-usage")   #print memory usage
 
-if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC")
+# ZYNQ7000: the C library glue comes from the Xilinx BSP (Xilinx.spec, libxil), see 3rdparty/xilinx_zynq7000
+if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC" AND NOT UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
     if(CMAKE_C_COMPILER MATCHES "gcc")
         set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -specs=nano.specs")         #use newlib-nano
         set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -specs=nosys.specs")        #use nosys

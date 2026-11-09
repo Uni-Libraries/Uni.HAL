@@ -6,6 +6,7 @@ A hardware abstraction layer in C23 for STM32 microcontrollers, with a PC target
 |---|---|---|
 | STM32H743 | `STM32H743` | Cortex-M7 |
 | STM32L496 | `STM32L496` | Cortex-M4F |
+| Zynq-7000 | `ZYNQ7000` | Cortex-A9 #0 of the PS, on the Vitis standalone BSP of the board (`UNI_HAL_ZYNQ7000_BSP_DIR`) |
 | Host | `PC` | stand-ins for the drivers, used by the unit tests |
 
 Not every module exists for every target; the header of a module says what it covers. The
@@ -30,6 +31,7 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 | Option | Default | Meaning |
 |---|---|---|
 | `UNI_HAL_TARGET_MCU` | none | target, required |
+| `UNI_HAL_ZYNQ7000_BSP_DIR` | none | ZYNQ7000: `<platform>/export/<platform>/sw/<domain>` of a Vitis platform (`include/`, `lib/`, `Xilinx.spec`); build with the Xilinx `arm-none-eabi-gcc` |
 | `UNI_HAL_HSE_VALUE` | none | HSE frequency in Hz, required for the MCU targets |
 | `UNI_HAL_USE_FREERTOS` | `ON` | build on FreeRTOS; `OFF` for a main loop without an RTOS |
 | `UNI_HAL_CAN_USE_FREERTOS` | `ON` | CAN receive queue is a FreeRTOS queue instead of a ring buffer |

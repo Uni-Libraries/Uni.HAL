@@ -24,8 +24,8 @@ extern "C" {
     #include "rcc/uni_hal_rcc_stm32l4.h"
 #elif defined(UNI_HAL_TARGET_MCU_STM32H743)
     #include "rcc/uni_hal_rcc_stm32h7.h"
-#elif defined(UNI_HAL_TARGET_MCU_PC)
-    //
+#elif defined(UNI_HAL_TARGET_MCU_PC) || defined(UNI_HAL_TARGET_MCU_ZYNQ7000)
+    // ZYNQ7000: clocks are configured by the PS7 initialization (ps7_init/FSBL)
 #else
     #error "unknown target"
 #endif
