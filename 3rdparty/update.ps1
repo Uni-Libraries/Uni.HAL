@@ -1,5 +1,10 @@
 #!/usr/bin/env pwsh
 
+# Usage: ./update.ps1                      update every component
+#        ./update.ps1 FreeRTOS-Kernel ...  update only the listed components
+#        (CMSIS-Core, DFP-STM32L4, DFP-STM32H7, USB-STM-Device, FreeRTOS-Kernel, FreeRTOS-FAT)
+param([string[]]$Components)
+
 #
 # Functions
 #
@@ -108,6 +113,11 @@ function Get-FreeRTOS-Kernel(){
     Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CM4F/*.c" -Destination "./freertos_kernel/src_port/arm_cm4f/" -Recurse
     Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CM4F/*.h" -Destination "./freertos_kernel/src_port/arm_cm4f/" -Recurse
 
+    New-Item    -Path "./freertos_kernel/src_port/arm_ca9/" -ItemType Directory
+    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CA9/*.c" -Destination "./freertos_kernel/src_port/arm_ca9/" -Recurse
+    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CA9/*.h" -Destination "./freertos_kernel/src_port/arm_ca9/" -Recurse
+    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CA9/*.S" -Destination "./freertos_kernel/src_port/arm_ca9/" -Recurse
+
     New-Item    -Path "./freertos_kernel/src_port/pc_posix/" -ItemType Directory
     Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/*.c" -Destination "./freertos_kernel/src_port/pc_posix/" -Recurse
     Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/*.h" -Destination "./freertos_kernel/src_port/pc_posix/" -Recurse
@@ -144,11 +154,11 @@ Push-Location $PSScriptRoot
 Remove-Item -Path "./~temp/" -Force -Recurse -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path "./~temp/" -ErrorAction SilentlyContinue
 
-Get-CMSIS-Core
-Get-DFP-STM32L4
-Get-DFP-STM32H7
-Get-USB-STM-Device
-Get-FreeRTOS-Kernel
-Get-FreeRTOS-FAT
+$all = @("CMSIS-Core", "DFP-STM32L4", "DFP-STM32H7", "USB-STM-Device", "FreeRTOS-Kernel", "FreeRTOS-FAT")
+if (-not $Components) { $Components = $all }
+foreach ($c in $Components) {
+    if ($all -notcontains $c) { throw "Unknown component '$c', expected one of: $($all -join ', ')" }
+    & "Get-$c"
+}
 
 Pop-Location
