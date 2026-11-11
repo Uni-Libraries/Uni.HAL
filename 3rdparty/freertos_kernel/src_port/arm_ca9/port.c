@@ -115,15 +115,13 @@
 /* The critical section macros only mask interrupts up to an application
  * determined priority level.  Sometimes it is necessary to turn interrupt off in
  * the CPU itself before modifying certain hardware registers. */
+/* Uni.HAL: no DSB / ISB after CPS: the mask takes effect at once (as in Linux local_irq_disable /
+ * enable), and a DSB waits for every buffered write to DDR. */
 #define portCPU_IRQ_DISABLE()                  \
-    __asm volatile ( "CPSID i" ::: "memory" ); \
-    __asm volatile ( "DSB" );                  \
-    __asm volatile ( "ISB" );
+    __asm volatile ( "CPSID i" ::: "memory" );
 
 #define portCPU_IRQ_ENABLE()                   \
-    __asm volatile ( "CPSIE i" ::: "memory" ); \
-    __asm volatile ( "DSB" );                  \
-    __asm volatile ( "ISB" );
+    __asm volatile ( "CPSIE i" ::: "memory" );
 
 
 /* Macro to unmask all interrupt priorities. */
@@ -416,8 +414,11 @@ void vPortEndScheduler( void )
 
 void vPortEnterCritical( void )
 {
-    /* Mask interrupts up to the max syscall interrupt priority. */
-    ulPortSetInterruptMask();
+    /* Uni.HAL: mask IRQs in the CPU, not with the GIC priority mask: an ICCPMR access and its barriers
+     * cost hundreds of cycles, and a network packet takes dozens of critical sections (half of the CPU
+     * at 600 Mbit/s). Interrupts above configMAX_API_CALL_INTERRUPT_PRIORITY are masked as well. The
+     * I bit is part of the task context, so a yield inside a critical section keeps it. */
+    portCPU_IRQ_DISABLE();
 
     /* Now that interrupts are disabled, ulCriticalNesting can be accessed
      * directly.  Increment ulCriticalNesting to keep a count of how many times
@@ -448,9 +449,7 @@ void vPortExitCritical( void )
          * priorities must be re-enabled. */
         if( ulCriticalNesting == portNO_CRITICAL_NESTING )
         {
-            /* Critical nesting has reached zero so all interrupt priorities
-             * should be unmasked. */
-            portCLEAR_INTERRUPT_MASK();
+            portCPU_IRQ_ENABLE();
         }
     }
 }

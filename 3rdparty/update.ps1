@@ -145,6 +145,19 @@ function Get-FreeRTOS-FAT(){
   Copy-Item   -Path "./~temp/Lab-Project-FreeRTOS-FAT-main/include/*.h" -Destination "./freertos_fat/include/" -Recurse
 }
 
+# Local changes on top of upstream, per component (patches/<component>/*.patch): an update overwrites
+# the files, the patches put the changes back
+function Add-Local-Patches([string]$Component){
+    foreach ($patch in Get-ChildItem -Path "./patches/$Component/*.patch" -ErrorAction SilentlyContinue) {
+        git -C .. apply "3rdparty/patches/$Component/$($patch.Name)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "patch $Component/$($patch.Name) does not apply, update it"
+        }
+    }
+}
+
+
+
 #
 # Pipeline
 #
@@ -159,6 +172,7 @@ if (-not $Components) { $Components = $all }
 foreach ($c in $Components) {
     if ($all -notcontains $c) { throw "Unknown component '$c', expected one of: $($all -join ', ')" }
     & "Get-$c"
+    Add-Local-Patches $c
 }
 
 Pop-Location

@@ -116,13 +116,11 @@
     POP     {R1}
     STR     R1, [R0]
 
-    /* Ensure the priority mask is correct for the critical nesting depth. */
+    /* Uni.HAL: critical sections mask IRQs in the CPU (CPSR, restored below with the task), the
+    priority mask is open for every task. */
     LDR     R2, ulICCPMRConst
     LDR     R2, [R2]
-    CMP     R1, #0
-    MOVEQ   R4, #255
-    LDRNE   R4, ulMaxAPIPriorityMaskConst
-    LDRNE   R4, [R4]
+    MOV     R4, #255
     STR     R4, [R2]
 
     /* Restore all system mode registers other than the SP (which is already
