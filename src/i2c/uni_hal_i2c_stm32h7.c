@@ -62,46 +62,29 @@ static uint16_t _uni_hal_i2c_shiftaddr(uint16_t addr) {
     return result;
 }
 
-static I2C_TypeDef *_uni_hal_i2c_get_handle(uni_hal_core_periph_e instance) {
-    I2C_TypeDef *result = NULL;
-    switch (instance) {
-    case UNI_HAL_CORE_PERIPH_I2C_1:
-        result = I2C1;
-        break;
-    case UNI_HAL_CORE_PERIPH_I2C_2:
-        result = I2C2;
-        break;
-    case UNI_HAL_CORE_PERIPH_I2C_3:
-        result = I2C3;
-        break;
-    case UNI_HAL_CORE_PERIPH_I2C_4:
-        result = I2C4;
-        break;
-    default:
-        break;
+typedef struct {
+    I2C_TypeDef *instance;
+    I2C_HandleTypeDef *hal;
+    uni_hal_i2c_context_t *owner;
+} i2c_bus_t;
+
+static i2c_bus_t buses[] = {
+    {I2C1, &hi2c1, nullptr},
+    {I2C2, &hi2c2, nullptr},
+    {I2C3, &hi2c3, nullptr},
+    {I2C4, &hi2c4, nullptr},
+};
+
+static i2c_bus_t *get_bus(uni_hal_core_periph_e instance) {
+    if (instance < UNI_HAL_CORE_PERIPH_I2C_1 || instance > UNI_HAL_CORE_PERIPH_I2C_4) {
+        return nullptr;
     }
-    return result;
+    return &buses[instance - UNI_HAL_CORE_PERIPH_I2C_1];
 }
 
 static I2C_HandleTypeDef *_uni_hal_i2c_get_handle_hal(uni_hal_core_periph_e instance) {
-    I2C_HandleTypeDef *result = NULL;
-    switch (instance) {
-    case UNI_HAL_CORE_PERIPH_I2C_1:
-        result = &hi2c1;
-        break;
-    case UNI_HAL_CORE_PERIPH_I2C_2:
-        result = &hi2c2;
-        break;
-    case UNI_HAL_CORE_PERIPH_I2C_3:
-        result = &hi2c3;
-        break;
-    case UNI_HAL_CORE_PERIPH_I2C_4:
-        result = &hi2c4;
-        break;
-    default:
-        break;
-    }
-    return result;
+    i2c_bus_t *bus = get_bus(instance);
+    return bus ? bus->hal : nullptr;
 }
 
 
@@ -111,72 +94,68 @@ static I2C_HandleTypeDef *_uni_hal_i2c_get_handle_hal(uni_hal_core_periph_e inst
 //
 
 bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
-    bool result = false;
-
-    if (ctx != NULL && !uni_hal_i2c_is_inited(ctx)) {
-        I2C_TypeDef *handle = _uni_hal_i2c_get_handle(ctx->config.instance);
-        I2C_HandleTypeDef *handle_hal = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-        if (handle != NULL && handle_hal != NULL) {
-            result = true;
-            if (!ctx->state.initialized) {
-                uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source);
-                result = uni_hal_rcc_clk_set(ctx->config.instance, true);
-
-                if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sck)) {
-                    result = uni_hal_gpio_pin_init(ctx->config.pin_sck) && result;
-                }
-                if(!uni_hal_gpio_pin_is_inited(ctx->config.pin_sda)) {
-                    result = uni_hal_gpio_pin_init(ctx->config.pin_sda) && result;
-                }
-
-                if(result) {
-                    handle_hal->Instance = handle;
-
-                    // the timing depends on the clock that feeds the peripheral, so it is computed from it
-                    handle_hal->Init.Timing = ctx->config.timing != 0U
-                            ? ctx->config.timing
-                            : uni_hal_i2c_timing_calc(uni_hal_rcc_clk_get_freq(ctx->config.instance), ctx->config.speed);
-                    result = handle_hal->Init.Timing != 0U;
-
-                    handle_hal->Init.OwnAddress1 = 0;
-                    handle_hal->Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-                    handle_hal->Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-                    handle_hal->Init.OwnAddress2 = 0;
-                    handle_hal->Init.OwnAddress2Masks = I2C_OA2_NOMASK;
-                    handle_hal->Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-                    handle_hal->Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-                    result = result && (HAL_I2C_Init(handle_hal) == HAL_OK);
-
-                    if(result) {
-                        result = HAL_I2CEx_ConfigAnalogFilter(handle_hal, I2C_ANALOGFILTER_ENABLE) == HAL_OK;
-                    }
-
-                    if(result){
-                        result = HAL_I2CEx_ConfigDigitalFilter(handle_hal, 0) == HAL_OK;
-                    }
-                }
-            }
-        }
-        ctx->state.initialized = result;
+    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : nullptr;
+    if (!bus || bus->owner || ctx->state.initialized) {
+        return false;
     }
 
-    return result;
+    uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source);
+    if (!uni_hal_rcc_clk_set(ctx->config.instance, true)) {
+        return false;
+    }
+    if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sck) && !uni_hal_gpio_pin_init(ctx->config.pin_sck)) {
+        return false;
+    }
+    if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sda) && !uni_hal_gpio_pin_init(ctx->config.pin_sda)) {
+        return false;
+    }
+
+    I2C_HandleTypeDef *hal = bus->hal;
+    hal->Init.Timing = ctx->config.timing != 0U ? ctx->config.timing
+            : uni_hal_i2c_timing_calc(uni_hal_rcc_clk_get_freq(ctx->config.instance), ctx->config.speed);
+    if (hal->Init.Timing == 0U) {
+        return false;
+    }
+    hal->Init.OwnAddress1 = 0;
+    hal->Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+    hal->Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+    hal->Init.OwnAddress2 = 0;
+    hal->Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+    hal->Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+    hal->Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+
+    bus->owner = ctx;
+    hal->Instance = bus->instance;
+    if (HAL_I2C_Init(hal) != HAL_OK ||
+        HAL_I2CEx_ConfigAnalogFilter(hal, I2C_ANALOGFILTER_ENABLE) != HAL_OK ||
+        HAL_I2CEx_ConfigDigitalFilter(hal, 0) != HAL_OK) {
+        (void)uni_hal_i2c_deinit(ctx);
+        return false;
+    }
+
+    ctx->state.initialized = true;
+    return true;
 }
 
 
 bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
-    bool result = false;
-    if (ctx != NULL) {
-        I2C_HandleTypeDef *handle_hal = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-        if (handle_hal != NULL) {
-            HAL_I2C_DeInit(handle_hal);
-            LL_I2C_Disable(handle_hal->Instance);
-            LL_I2C_DeInit(handle_hal->Instance);
-        }
-        ctx->state.initialized = false;
-        result = true;
+    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : nullptr;
+    if (!bus || (bus->owner && bus->owner != ctx)) {
+        return false;
     }
-    return result;
+    ctx->state.initialized = false;
+    if (bus->hal->Instance) {
+        if (bus->hal->Instance != bus->instance || HAL_I2C_DeInit(bus->hal) != HAL_OK) {
+            return false;
+        }
+        bus->hal->Instance = nullptr;
+    }
+    // A bootloader can leave the peripheral enabled even when our HAL handle is still empty.
+    if (LL_I2C_DeInit(bus->instance) != SUCCESS) {
+        return false;
+    }
+    bus->owner = nullptr;
+    return true;
 }
 
 

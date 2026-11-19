@@ -128,7 +128,9 @@ typedef struct {
 
 
 /**
- * Initializes I2C interface
+ * Initializes I2C interface.
+ * Serialize init, deinit, reset and recovery for the same physical bus, and stop transfers
+ * before reconfiguring it. Recovery temporarily takes both pins away from the peripheral.
  * @param ctx pointer to interface context
  * @return true on success
  */
@@ -152,6 +154,7 @@ bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *ctx);
 
 /**
  * Deinitialize I2C interface from task or startup context.
+ * On STM32H743 this also resets a valid peripheral before its first initialization.
  * @param ctx pointer to the interface context
  * @return true on success
  */

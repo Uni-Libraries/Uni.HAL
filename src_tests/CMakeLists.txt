@@ -50,6 +50,7 @@ uni_hal_add_test(dwt)
 uni_hal_add_test(i2c)
 uni_hal_add_test(can)
 add_subdirectory(i2c_transfer)
+add_subdirectory(i2c_h7)
 
 uni_hal_add_test(rcc PROPERTIES TIMEOUT 10)
 target_include_directories(uni_hal_test_rcc SYSTEM PRIVATE

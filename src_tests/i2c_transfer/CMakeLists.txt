@@ -2,7 +2,7 @@
 foreach(mode IN ITEMS freertos freertos_dynamic)
     set(target uni_hal_test_i2c_transfer_${mode})
     add_executable(${target} model.c ../../src/i2c/uni_hal_i2c_stm32l4.c)
-    target_include_directories(${target} PRIVATE fakes ../../src)
+    target_include_directories(${target} PRIVATE fakes ../i2c ../../src)
     target_compile_definitions(${target} PRIVATE UNI_HAL_TARGET_MCU_PC)
     target_link_libraries(${target} PRIVATE uni.common)
     if(mode STREQUAL "freertos_dynamic")

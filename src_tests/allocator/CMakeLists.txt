@@ -38,3 +38,8 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         -kernel $<TARGET_FILE:allocator_qemu>)
     set_tests_properties(allocator_cortex_m4 PROPERTIES TIMEOUT 15)
 endif()
+
+if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
+    uni_hal_add_executable(i2c_h7_recovery_link)
+    target_sources(i2c_h7_recovery_link PRIVATE ../i2c_h7/link_recover.c)
+endif()
