@@ -6,17 +6,14 @@
 #include <stddef.h>
 
 // STM
-#include <stm32l496xx.h>
 #include <stm32l4xx_hal.h>
-#include <stm32l4xx_hal_i2c.h>
-#include <stm32l4xx_ll_bus.h>
 #include <stm32l4xx_ll_i2c.h>
-#include <stm32l4xx_ll_rcc.h>
 
 // FreeRTOS
 #if defined(UNI_HAL_I2C_USE_FREERTOS)
     #include <FreeRTOS.h>
     #include <task.h>
+    #include <semphr.h>
 #endif
 
 // Uni.Common
@@ -41,129 +38,60 @@ UNI_COMMON_COMPILER_WEAK I2C_HandleTypeDef hi2c2 = {0};
 UNI_COMMON_COMPILER_WEAK I2C_HandleTypeDef hi2c3 = {0};
 UNI_COMMON_COMPILER_WEAK I2C_HandleTypeDef hi2c4 = {0};
 
-static uni_hal_i2c_context_t *g_uni_hal_i2c_ctx[UNI_HAL_I2C_MAXINSTANCES] = {NULL};
+typedef enum {
+    IRQ_IDLE,
+    IRQ_PENDING,
+    IRQ_SUCCEEDED,
+    IRQ_FAILED,
+} i2c_irq_state_t;
 
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    static BaseType_t g_uni_hal_i2c_highprio_woken = pdFALSE;
+typedef struct {
+    uni_hal_i2c_context_t *owner;
+    bool busy;
+    volatile i2c_irq_state_t irq_state;
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
+    bool wait_with_event;
+    BaseType_t higher_priority_woken;
+    StaticSemaphore_t event_storage;
+    SemaphoreHandle_t event;
 #endif
+} i2c_bus_t;
 
+static i2c_bus_t g_buses[UNI_HAL_I2C_MAXINSTANCES];
 
 
 //
 // IRQ
 //
 
-void I2C1_EV_IRQHandler(void)
+static void handle_irq(I2C_HandleTypeDef *handle, unsigned index, bool error)
 {
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
+    // Event and error IRQs for this bus have the same priority. Other buses may preempt them.
+    g_buses[index].higher_priority_woken = pdFALSE;
     UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
+#else
+    (void)index;
 #endif
-
-    HAL_I2C_EV_IRQHandler(&hi2c1);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
+    if (error) {
+        HAL_I2C_ER_IRQHandler(handle);
+    } else {
+        HAL_I2C_EV_IRQHandler(handle);
+    }
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
+    UNI_HAL_OS_ISR_EXIT(g_buses[index].higher_priority_woken);
 #endif
 }
 
-void I2C2_EV_IRQHandler(void)
-{
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
-#endif
+void I2C1_EV_IRQHandler(void) { handle_irq(&hi2c1, 0, false); }
+void I2C2_EV_IRQHandler(void) { handle_irq(&hi2c2, 1, false); }
+void I2C3_EV_IRQHandler(void) { handle_irq(&hi2c3, 2, false); }
+void I2C4_EV_IRQHandler(void) { handle_irq(&hi2c4, 3, false); }
 
-    HAL_I2C_EV_IRQHandler(&hi2c2);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
-#endif
-}
-
-void I2C3_EV_IRQHandler(void)
-{
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
-#endif
-
-    HAL_I2C_EV_IRQHandler(&hi2c3);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
-#endif
-}
-
-void I2C4_EV_IRQHandler(void)
-{
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
-#endif
-
-    HAL_I2C_EV_IRQHandler(&hi2c4);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
-#endif
-}
-
-void I2C1_ER_IRQHandler(void)
-{
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
-#endif
-
-    HAL_I2C_ER_IRQHandler(&hi2c1);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
-#endif
-}
-
-void I2C2_ER_IRQHandler(void)
-{
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
-#endif
-
-    HAL_I2C_ER_IRQHandler(&hi2c2);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
-#endif
-}
-
-void I2C3_ER_IRQHandler(void)
-{
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
-#endif
-
-    HAL_I2C_ER_IRQHandler(&hi2c3);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
-#endif
-}
-
-void I2C4_ER_IRQHandler(void)
-{
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_ENTER();
-    g_uni_hal_i2c_highprio_woken = pdFALSE;
-#endif
-
-    HAL_I2C_ER_IRQHandler(&hi2c4);
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    UNI_HAL_OS_ISR_EXIT( g_uni_hal_i2c_highprio_woken );
-#endif
-}
+void I2C1_ER_IRQHandler(void) { handle_irq(&hi2c1, 0, true); }
+void I2C2_ER_IRQHandler(void) { handle_irq(&hi2c2, 1, true); }
+void I2C3_ER_IRQHandler(void) { handle_irq(&hi2c3, 2, true); }
+void I2C4_ER_IRQHandler(void) { handle_irq(&hi2c4, 3, true); }
 
 
 
@@ -338,15 +266,74 @@ static bool _uni_hal_i2c_init_irq(uni_hal_i2c_context_t *ctx)
 }
 
 
-static void _uni_hal_i2c_callback(I2C_HandleTypeDef* hal_handle, bool success)
+static i2c_bus_t *get_bus(uni_hal_core_periph_e instance)
 {
-    uni_hal_i2c_context_t* ctx = g_uni_hal_i2c_ctx[_uni_hal_i2c_get_number(_uni_hal_i2c_get_periph(hal_handle->Instance))-1];
-    if (ctx)
-    {
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-        xTaskNotifyIndexedFromISR(ctx->state.irq_task, 0, success ? 1U : 0U, eSetBits, &g_uni_hal_i2c_highprio_woken);
-#else
-        (void)success;
+    uint32_t number = _uni_hal_i2c_get_number(instance);
+    return number <= UNI_HAL_I2C_MAXINSTANCES ? &g_buses[number - 1U] : nullptr;
+}
+
+static bool try_claim(i2c_bus_t *bus)
+{
+    uint32_t mask = uni_hal_core_irq_pause();
+    bool claimed = !bus->busy;
+    if (claimed) {
+        bus->busy = true;
+    }
+    uni_hal_core_irq_resume(mask);
+    return claimed;
+}
+
+static void release_bus(i2c_bus_t *bus)
+{
+    uint32_t mask = uni_hal_core_irq_pause();
+    bus->busy = false;
+    uni_hal_core_irq_resume(mask);
+}
+
+static uint32_t remaining_ms(uint32_t start, uint32_t timeout)
+{
+    uint32_t elapsed = uni_hal_systick_get_ms() - start;
+    return elapsed < timeout ? timeout - elapsed : 0U;
+}
+
+static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uint32_t timeout)
+{
+    if (!uni_hal_i2c_is_inited(ctx)) {
+        return nullptr;
+    }
+    i2c_bus_t *bus = get_bus(ctx->config.instance);
+    if (!bus) {
+        return nullptr;
+    }
+    do {
+        if (try_claim(bus)) {
+            if (bus->owner == ctx && ctx->state.initialized) {
+                return bus;
+            }
+            release_bus(bus);
+            return nullptr;
+        }
+        if (!timeout || __get_IPSR() || __get_PRIMASK() || __get_BASEPRI()) {
+            return nullptr;
+        }
+#if defined(UNI_HAL_USE_FREERTOS)
+        if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+            vTaskDelay(1U);
+        }
+#endif
+    } while (remaining_ms(start, timeout));
+    return nullptr;
+}
+
+static void _uni_hal_i2c_callback(I2C_HandleTypeDef *handle, bool success)
+{
+    i2c_bus_t *bus = get_bus(_uni_hal_i2c_get_periph(handle->Instance));
+    if (bus && bus->irq_state == IRQ_PENDING) {
+        bus->irq_state = success ? IRQ_SUCCEEDED : IRQ_FAILED;
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
+        if (bus->wait_with_event) {
+            xSemaphoreGiveFromISR(bus->event, &bus->higher_priority_woken);
+        }
 #endif
     }
 }
@@ -356,16 +343,6 @@ static void _uni_hal_i2c_callback(I2C_HandleTypeDef* hal_handle, bool success)
 //
 // Callbacks
 //
-
-void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
-{
-    _uni_hal_i2c_callback(hi2c, true);
-}
-
-void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
-{
-    _uni_hal_i2c_callback(hi2c, true);
-}
 
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
@@ -400,7 +377,12 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
     {
         I2C_TypeDef *handle = _uni_hal_i2c_get_handle(ctx->config.instance);
         I2C_HandleTypeDef *handle_hal = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-        if (handle != NULL && handle_hal != NULL &&  !ctx->state.initialized) {
+        i2c_bus_t *bus = get_bus(ctx->config.instance);
+        if (handle && handle_hal && try_claim(bus)) {
+            if (bus->owner && bus->owner != ctx) {
+                release_bus(bus);
+                return false;
+            }
             result = uni_hal_rcc_clk_set(ctx->config.instance, true);
 
             if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sck)) {
@@ -446,10 +428,11 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
 
             if (result)
             {
-                g_uni_hal_i2c_ctx[_uni_hal_i2c_get_number(ctx->config.instance)-1] = ctx;
+                bus->owner = ctx;
             }
 
             ctx->state.initialized = result;
+            release_bus(bus);
         }
     }
 
@@ -458,32 +441,40 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
 
 
 bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
-    bool result = false;
-    if (ctx != NULL) {
-        I2C_HandleTypeDef *handle_hal = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-        if (handle_hal != NULL) {
-            HAL_I2C_DeInit(handle_hal);
-            LL_I2C_Disable(handle_hal->Instance);
-            LL_I2C_DeInit(handle_hal->Instance);
-        }
-        ctx->state.initialized = false;
-        result = true;
+    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : nullptr;
+    if (!bus || !try_claim(bus)) {
+        return false;
     }
-    return result;
+    if (bus->owner && bus->owner != ctx) {
+        release_bus(bus);
+        return false;
+    }
+    I2C_HandleTypeDef *handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
+    if (handle->Instance) {
+        HAL_I2C_DeInit(handle);
+        LL_I2C_DeInit(handle->Instance);
+    }
+    bus->owner = nullptr;
+    ctx->state.initialized = false;
+    release_bus(bus);
+    return true;
 }
 
 
 bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t trials, uint32_t timeout) {
     bool result = false;
 
-    if (uni_hal_i2c_is_inited(ctx)) {
+    uint32_t const start_ms = uni_hal_systick_get_ms();
+    i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
+    if (bus) {
         HAL_StatusTypeDef status = HAL_BUSY;
-        uint32_t const start_ms = uni_hal_systick_get_ms();
-        while (status == HAL_BUSY && (uni_hal_systick_get_ms() - start_ms) <= timeout) {
-            status = HAL_I2C_IsDeviceReady(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr), trials, timeout);
-        }
+        do {
+            status = HAL_I2C_IsDeviceReady(_uni_hal_i2c_get_handle_hal(ctx->config.instance),
+                _uni_hal_i2c_shiftaddr(dev_addr), trials, remaining_ms(start_ms, timeout));
+        } while (status == HAL_BUSY && remaining_ms(start_ms, timeout));
 
         result = status == HAL_OK;
+        release_bus(bus);
     }
 
     return result;
@@ -493,15 +484,17 @@ bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t
 bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint8_t *buf, uint16_t buf_len, uint32_t timeout) {
     bool result = false;
 
-    if (uni_hal_i2c_is_inited(ctx)) {
+    uint32_t const start_ms = uni_hal_systick_get_ms();
+    i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
+    if (bus) {
         HAL_StatusTypeDef status = HAL_BUSY;
-        uint32_t const start_ms = uni_hal_systick_get_ms();
-        while (status == HAL_BUSY && (uni_hal_systick_get_ms() - start_ms) <= timeout) {
-            status =
-                HAL_I2C_Master_Receive(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, timeout);
-        }
+        do {
+            status = HAL_I2C_Master_Receive(_uni_hal_i2c_get_handle_hal(ctx->config.instance),
+                _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, remaining_ms(start_ms, timeout));
+        } while (status == HAL_BUSY && remaining_ms(start_ms, timeout));
 
         result = status == HAL_OK;
+        release_bus(bus);
     }
 
     return result;
@@ -511,130 +504,124 @@ bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, u
 bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint8_t *buf, uint16_t buf_len, uint32_t timeout) {
     bool result = false;
 
-    if (uni_hal_i2c_is_inited(ctx)) {
+    uint32_t const start_ms = uni_hal_systick_get_ms();
+    i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
+    if (bus) {
         HAL_StatusTypeDef status = HAL_BUSY;
-        uint32_t const start_ms = uni_hal_systick_get_ms();
-        while (status == HAL_BUSY && (uni_hal_systick_get_ms() - start_ms) <= timeout) {
-            status =
-                HAL_I2C_Master_Transmit(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, timeout);
-        }
+        do {
+            status = HAL_I2C_Master_Transmit(_uni_hal_i2c_get_handle_hal(ctx->config.instance),
+                _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, remaining_ms(start_ms, timeout));
+        } while (status == HAL_BUSY && remaining_ms(start_ms, timeout));
 
         result = status == HAL_OK;
+        release_bus(bus);
     }
 
     return result;
 }
 
 
-bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr, uni_hal_i2c_memadd_size_e mem_addr_size,
-                         uint8_t *buf, uint16_t buf_len, uint32_t timeout) {
+// The owner holds the bus throughout setup, the IRQ wait and synchronous cancellation.
+static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr,
+                         uni_hal_i2c_memadd_size_e mem_addr_size, uint8_t *buf, uint16_t len, uint32_t timeout)
+{
+    if (!timeout || __get_IPSR() || __get_PRIMASK() || __get_BASEPRI()) {
+        return false;
+    }
+    uint32_t const start = uni_hal_systick_get_ms();
+    i2c_bus_t *bus = claim_transfer(ctx, start, timeout);
+    if (!bus) {
+        return false;
+    }
+    I2C_HandleTypeDef *handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
+    uint16_t addr = _uni_hal_i2c_shiftaddr(dev_addr);
+    uint16_t size = _uni_hal_i2c_memadd_size(mem_addr_size);
     bool result = false;
-
-    if (uni_hal_i2c_is_inited(ctx)) {
-        I2C_HandleTypeDef* handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-        if (handle)
-        {
-            uint32_t const start_ms = uni_hal_systick_get_ms();
-            while (HAL_I2C_GetState(handle) != HAL_I2C_STATE_READY)
-            {
-                if ((uni_hal_systick_get_ms() - start_ms) > timeout)
-                {
-                    return false;
-                }
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-                taskYIELD();
-#endif
-            }
-
-            if (ctx->config.irq_enable)
-            {
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-                ctx->state.irq_task = xTaskGetCurrentTaskHandle();
-
-                // forget the outcome of an earlier transfer that finished after its timeout
-                (void)xTaskNotifyStateClearIndexed(NULL, 0U);
-                (void)ulTaskNotifyValueClearIndexed(NULL, 0U, UINT32_MAX);
-#endif
-
-                result = HAL_I2C_Mem_Read_IT(handle, _uni_hal_i2c_shiftaddr(dev_addr), mem_addr,
-                    _uni_hal_i2c_memadd_size((mem_addr_size)), buf,buf_len) == HAL_OK;
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-                if (result && timeout)
-                {
-                    uint32_t notified_val = 0U;
-                    result = xTaskNotifyWaitIndexed(0U, 0U, UINT32_MAX, &notified_val, pdMS_TO_TICKS(timeout)) == pdTRUE;
-                    if (result)
-                    {
-                        result = notified_val == 1U;
-                    }
-                }
-#endif
-            }
-            else
-            {
-                result = HAL_I2C_Mem_Read(handle, _uni_hal_i2c_shiftaddr(dev_addr),mem_addr,
-                    _uni_hal_i2c_memadd_size((mem_addr_size)), buf, buf_len, timeout) == HAL_OK;
-            }
-        }
+    uint32_t remaining = remaining_ms(start, timeout);
+    if (!remaining || HAL_I2C_GetState(handle) != HAL_I2C_STATE_READY || !buf || !len || !size) {
+        release_bus(bus);
+        return false;
+    }
+    if (!ctx->config.irq_enable) {
+        HAL_StatusTypeDef status = read ? HAL_I2C_Mem_Read(handle, addr, mem_addr, size, buf, len, remaining)
+                                        : HAL_I2C_Mem_Write(handle, addr, mem_addr, size, buf, len, remaining);
+        release_bus(bus);
+        return status == HAL_OK;
     }
 
+#if defined(UNI_HAL_I2C_USE_FREERTOS)
+    bool scheduler_running = xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
+#if configSUPPORT_STATIC_ALLOCATION
+    if (scheduler_running) {
+        if (!bus->event) {
+            bus->event = xSemaphoreCreateBinaryStatic(&bus->event_storage);
+        }
+        // Completion can race the timeout or arrive before the first wait.
+        (void)xSemaphoreTake(bus->event, 0U);
+        bus->wait_with_event = true;
+    }
+#endif
+#endif
+    uint32_t mask = uni_hal_core_irq_pause();
+    bus->irq_state = IRQ_PENDING;
+    HAL_StatusTypeDef status = read ? HAL_I2C_Mem_Read_IT(handle, addr, mem_addr, size, buf, len)
+                                    : HAL_I2C_Mem_Write_IT(handle, addr, mem_addr, size, buf, len);
+    if (status != HAL_OK) {
+        bus->irq_state = IRQ_IDLE;
+    }
+    uni_hal_core_irq_resume(mask);
+
+    while (bus->irq_state == IRQ_PENDING && (remaining = remaining_ms(start, timeout)) != 0U) {
+#if defined(UNI_HAL_I2C_USE_FREERTOS)
+#if configSUPPORT_STATIC_ALLOCATION
+        if (bus->wait_with_event) {
+            // portMAX_DELAY can mean forever. Recheck the same deadline after each wait.
+            TickType_t ticks = pdMS_TO_TICKS(remaining);
+            if (ticks == portMAX_DELAY) {
+                --ticks;
+            }
+            (void)xSemaphoreTake(bus->event, ticks ? ticks : 1U);
+        }
+#else
+        if (scheduler_running) {
+            vTaskDelay(1U);
+        }
+#endif
+#endif
+    }
+
+    mask = uni_hal_core_irq_pause();
+    if (bus->irq_state == IRQ_PENDING) {
+        // No STOP/abort interrupt is guaranteed on a stalled bus. Reset the peripheral
+        // synchronously, including its interrupt sources, before releasing caller storage.
+        handle->XferISR = nullptr;
+        handle->pBuffPtr = nullptr;
+        handle->XferCount = 0U;
+        handle->XferSize = 0U;
+        bool reset = LL_I2C_DeInit(handle->Instance) == SUCCESS;
+        // HAL init reapplies TIMINGR and the driver's analog-on/digital-off filter defaults.
+        ctx->state.initialized = reset && HAL_I2C_Init(handle) == HAL_OK;
+    } else if (status == HAL_OK) {
+        result = bus->irq_state == IRQ_SUCCEEDED;
+        handle->pBuffPtr = nullptr;
+    }
+    bus->irq_state = IRQ_IDLE;
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
+    bus->wait_with_event = false;
+#endif
+    uni_hal_core_irq_resume(mask);
+    release_bus(bus);
     return result;
 }
 
+bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr,
+                          uni_hal_i2c_memadd_size_e mem_addr_size, uint8_t *buf, uint16_t buf_len, uint32_t timeout)
+{
+    return mem_transfer(true, ctx, dev_addr, mem_addr, mem_addr_size, buf, buf_len, timeout);
+}
 
-bool uni_hal_i2c_mem_write(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr, uni_hal_i2c_memadd_size_e mem_addr_size,
-                          uint8_t *buf, uint16_t buf_len, uint32_t timeout) {
-    bool result = false;
-
-    if (uni_hal_i2c_is_inited(ctx)) {
-        I2C_HandleTypeDef* handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-        if (handle)
-        {
-            uint32_t const start_ms = uni_hal_systick_get_ms();
-            while (HAL_I2C_GetState(handle) != HAL_I2C_STATE_READY)
-            {
-                if ((uni_hal_systick_get_ms() - start_ms) > timeout)
-                {
-                    return false;
-                }
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-                taskYIELD();
-#endif
-            }
-
-            if (ctx->config.irq_enable)
-            {
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-                ctx->state.irq_task = xTaskGetCurrentTaskHandle();
-
-                // forget the outcome of an earlier transfer that finished after its timeout
-                (void)xTaskNotifyStateClearIndexed(NULL, 0U);
-                (void)ulTaskNotifyValueClearIndexed(NULL, 0U, UINT32_MAX);
-#endif
-
-                result = HAL_I2C_Mem_Write_IT(handle, _uni_hal_i2c_shiftaddr(dev_addr), mem_addr,
-                    _uni_hal_i2c_memadd_size((mem_addr_size)), buf,buf_len) == HAL_OK;
-
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-                if (result && timeout)
-                {
-                    uint32_t notified_val = 0U;
-                    result = xTaskNotifyWaitIndexed(0U, 0U, UINT32_MAX, &notified_val, pdMS_TO_TICKS(timeout)) == pdTRUE;
-                    if (result)
-                    {
-                        result = notified_val == 1U;
-                    }
-                }
-#endif
-            }
-            else
-            {
-                result = HAL_I2C_Mem_Write(handle, _uni_hal_i2c_shiftaddr(dev_addr),mem_addr,
-                    _uni_hal_i2c_memadd_size((mem_addr_size)), buf, buf_len, timeout) == HAL_OK;
-            }
-        }
-    }
-
-    return result;
+bool uni_hal_i2c_mem_write(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr,
+                           uni_hal_i2c_memadd_size_e mem_addr_size, uint8_t *buf, uint16_t buf_len, uint32_t timeout)
+{
+    return mem_transfer(false, ctx, dev_addr, mem_addr, mem_addr_size, buf, buf_len, timeout);
 }

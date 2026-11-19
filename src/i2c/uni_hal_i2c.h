@@ -95,7 +95,7 @@ typedef struct {
     bool initialized;
 
     /**
-     * Task to notify
+     * Reserved for compatibility
      */
     void* irq_task;
 } uni_hal_i2c_state_t;
@@ -215,7 +215,8 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
 
 
 /**
- * Reads data from specific memory address in blocking mode
+ * Reads data from specific memory address in blocking mode. On STM32L496 the buffer
+ * is released before return on success or failure. A zero timeout starts no transfer.
  * @param ctx pointer to interface context
  * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param mem_addr target device memory address
@@ -230,7 +231,8 @@ bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_
 
 
 /**
- * Writes data to specific memory address in blocking mode
+ * Writes data to specific memory address in blocking mode. On STM32L496 the buffer
+ * is released before return on success or failure. A zero timeout starts no transfer.
  * @param ctx pointer to interface context
  * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param mem_addr target device memory address

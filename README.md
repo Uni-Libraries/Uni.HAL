@@ -35,7 +35,7 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 | `UNI_HAL_HSE_VALUE` | none | HSE frequency in Hz, required for the MCU targets |
 | `UNI_HAL_USE_FREERTOS` | `ON` | build on FreeRTOS; `OFF` for a main loop without an RTOS |
 | `UNI_HAL_CAN_USE_FREERTOS` | `ON` | CAN receive queue is a FreeRTOS queue instead of a ring buffer |
-| `UNI_HAL_I2C_USE_FREERTOS` | `ON` | interrupt-driven I2C transfers wait on a task notification |
+| `UNI_HAL_I2C_USE_FREERTOS` | `ON` | suspend the calling task while an interrupt-driven STM32L4 I2C memory transfer is in progress |
 | `UNI_HAL_CAN_USE_FD` | `OFF` | CAN messages hold up to 64 data bytes, for CAN FD on the STM32H7 |
 | `UNI_HAL_IO_PRINTF_LARGE_FORMAT` | `OFF` | `uni_hal_io_stdio_*printf` understand `ll`, `j`, `z`, `t` (`%llu`, `%zu`) |
 | `UNI_HAL_RTOS_HEAP_SIZE` | `100*1024` | `configTOTAL_HEAP_SIZE` |
@@ -86,6 +86,9 @@ configured by the application as well and need a faster setting.
 
 **I2C.** Device addresses are 7-bit and not shifted. The bus timing is computed from the kernel
 clock; `config.timing` takes a raw `I2C_TIMINGR` value for a bus that needs something else.
+On STM32L4, `uni_hal_i2c_mem_read()` and `uni_hal_i2c_mem_write()` finish using the caller's
+buffer before they return, including on timeout. A zero timeout returns
+`false` without starting a transfer. A timed-out write may already have sent bytes to the device.
 
 **CAN.** The STM32L4 (bxCAN) and the STM32H7 (FDCAN) have the same interface. Both drivers work
 on the registers; neither uses the ST HAL. Set `bitrate` in the configuration: the timing is
@@ -122,13 +125,12 @@ For the same reason the RTC keeps the clock it was given on an earlier boot;
 ## Without an RTOS
 
 With `-DUNI_HAL_USE_FREERTOS=OFF` the kernel is not built. The IO buffers become ring buffers
-that are accessed with the interrupts masked, and every wait is a polling loop bounded by its
-timeout. Two things behave differently:
+that are accessed with the interrupts masked. The following calls occupy the CPU while waiting:
 
 - `uni_hal_io_receive_data()` and `uni_hal_io_receive_sync()` occupy the CPU until their
   timeout; call them with a timeout of 0 from a main loop.
-- interrupt-driven I2C transfers (`irq_enable`) return before the transfer has finished; use
-  the blocking mode.
+- STM32L4 I2C memory transfers with `irq_enable` wait for completion with interrupts enabled.
+  Call them from the main loop so that the I2C and SysTick handlers can run.
 
 ## Tests
 
@@ -138,8 +140,8 @@ cmake --build build
 ctest --test-dir build
 ```
 
-The tests cover the logic that does not need hardware: DWT tick arithmetic, the I2C timing, the
-CAN bit timings for both phases and the CAN FD data length codes.
+The host suite covers DWT tick arithmetic, I2C timing and CAN timings and data lengths. It
+also runs the STM32L496 I2C driver with controlled interrupts and deadlines.
 
 The allocator regression links a firmware executable and checks the providers of the libc
 and FreeRTOS symbols in its linker map. With Arm GCC and `qemu-system-arm` on the path, run

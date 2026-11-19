@@ -28,8 +28,7 @@ bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *ctx) {
 bool uni_hal_i2c_reset(uni_hal_i2c_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
-        uni_hal_i2c_deinit(ctx);
-        result = uni_hal_i2c_init(ctx);
+        result = uni_hal_i2c_deinit(ctx) && uni_hal_i2c_init(ctx);
     }
 
     return result;
@@ -61,7 +60,9 @@ bool uni_hal_i2c_recover(uni_hal_i2c_context_t *ctx) {
     }
 
     // take the peripheral off the bus and drive the lines as plain open-drain outputs
-    (void)uni_hal_i2c_deinit(ctx);
+    if (!uni_hal_i2c_deinit(ctx)) {
+        return false;
+    }
 
     uni_hal_gpio_type_e const scl_type = scl->gpio_type;
     uni_hal_gpio_type_e const sda_type = sda->gpio_type;
