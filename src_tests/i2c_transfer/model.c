@@ -47,7 +47,8 @@ static void advance(void)
     }
     if (compete) {
         compete = false;
-        assert(!uni_hal_i2c_mem_write(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, competitor_buffer, 1, 2));
+        // The fake clock advances on each read. Leave enough time for a tick of sleep and a retry.
+        assert(!uni_hal_i2c_mem_write(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, competitor_buffer, 1, 4));
         assert(!uni_hal_i2c_deinit(&ctx));
     }
     if (deliver && now == scheduled_at) {
@@ -69,6 +70,7 @@ uint32_t uni_hal_core_irq_pause(void) {
 void uni_hal_core_irq_resume(uint32_t mask) { irq_mask = mask; }
 uint32_t __get_PRIMASK(void) { return irq_mask; }
 uint32_t __get_BASEPRI(void) { return 0; }
+uint32_t NVIC_GetPriority(int irq) { assert(irq == SysTick_IRQn); return 15U; }
 uint32_t __get_IPSR(void) { return in_irq; }
 
 bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *c) { return c && c->state.initialized; }

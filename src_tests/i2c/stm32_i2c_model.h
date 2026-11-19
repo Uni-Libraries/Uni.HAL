@@ -30,6 +30,9 @@ typedef struct I2C_HandleTypeDef {
 uint32_t __get_IPSR(void);
 uint32_t __get_PRIMASK(void);
 uint32_t __get_BASEPRI(void);
+#define __NVIC_PRIO_BITS 4U
+enum { SysTick_IRQn = -1 };
+uint32_t NVIC_GetPriority(int irq);
 HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *);
 HAL_StatusTypeDef HAL_I2C_DeInit(I2C_HandleTypeDef *);
 HAL_StatusTypeDef HAL_I2CEx_ConfigAnalogFilter(I2C_HandleTypeDef *, uint32_t);

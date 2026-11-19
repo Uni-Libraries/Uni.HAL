@@ -23,7 +23,7 @@
 #include "core/uni_hal_core.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
-#include "systick/uni_hal_systick.h"
+#include "uni_hal_i2c_stm32_poll.h"
 
 
 
@@ -282,15 +282,9 @@ static void release_bus(i2c_bus_t *bus)
     uni_hal_core_irq_resume(mask);
 }
 
-static uint32_t remaining_ms(uint32_t start, uint32_t timeout)
-{
-    uint32_t elapsed = uni_hal_systick_get_ms() - start;
-    return elapsed < timeout ? timeout - elapsed : 0U;
-}
-
 static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uint32_t timeout)
 {
-    if (!uni_hal_i2c_is_inited(ctx)) {
+    if (!timeout || !polling_allowed() || !uni_hal_i2c_is_inited(ctx)) {
         return nullptr;
     }
     i2c_bus_t *bus = get_bus(ctx->config.instance);
@@ -305,13 +299,7 @@ static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uin
             release_bus(bus);
             return nullptr;
         }
-        if (!timeout || __get_IPSR() || __get_PRIMASK() || __get_BASEPRI()) {
-            return nullptr;
-        }
-        if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
-            vTaskDelay(1U);
-        }
-    } while (remaining_ms(start, timeout));
+    } while (retry_budget(start, timeout));
     return nullptr;
 }
 
@@ -459,13 +447,8 @@ bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t
     uint32_t const start_ms = uni_hal_systick_get_ms();
     i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
     if (bus) {
-        HAL_StatusTypeDef status = HAL_BUSY;
-        do {
-            status = HAL_I2C_IsDeviceReady(_uni_hal_i2c_get_handle_hal(ctx->config.instance),
-                _uni_hal_i2c_shiftaddr(dev_addr), trials, remaining_ms(start_ms, timeout));
-        } while (status == HAL_BUSY && remaining_ms(start_ms, timeout));
-
-        result = status == HAL_OK;
+        result = poll_ready(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr),
+                            trials, start_ms, timeout);
         release_bus(bus);
     }
 
@@ -479,13 +462,8 @@ bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, u
     uint32_t const start_ms = uni_hal_systick_get_ms();
     i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
     if (bus) {
-        HAL_StatusTypeDef status = HAL_BUSY;
-        do {
-            status = HAL_I2C_Master_Receive(_uni_hal_i2c_get_handle_hal(ctx->config.instance),
-                _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, remaining_ms(start_ms, timeout));
-        } while (status == HAL_BUSY && remaining_ms(start_ms, timeout));
-
-        result = status == HAL_OK;
+        result = poll_master(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr),
+                             buf, buf_len, true, start_ms, timeout);
         release_bus(bus);
     }
 
@@ -499,13 +477,8 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
     uint32_t const start_ms = uni_hal_systick_get_ms();
     i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
     if (bus) {
-        HAL_StatusTypeDef status = HAL_BUSY;
-        do {
-            status = HAL_I2C_Master_Transmit(_uni_hal_i2c_get_handle_hal(ctx->config.instance),
-                _uni_hal_i2c_shiftaddr(dev_addr), buf, buf_len, remaining_ms(start_ms, timeout));
-        } while (status == HAL_BUSY && remaining_ms(start_ms, timeout));
-
-        result = status == HAL_OK;
+        result = poll_master(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr),
+                             buf, buf_len, false, start_ms, timeout);
         release_bus(bus);
     }
 
@@ -517,9 +490,6 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
 static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr,
                          uni_hal_i2c_memadd_size_e mem_addr_size, uint8_t *buf, uint16_t len, uint32_t timeout)
 {
-    if (!timeout || __get_IPSR() || __get_PRIMASK() || __get_BASEPRI()) {
-        return false;
-    }
     uint32_t const start = uni_hal_systick_get_ms();
     i2c_bus_t *bus = claim_transfer(ctx, start, timeout);
     if (!bus) {
@@ -535,10 +505,10 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
         return false;
     }
     if (!ctx->config.irq_enable) {
-        HAL_StatusTypeDef status = read ? HAL_I2C_Mem_Read(handle, addr, mem_addr, size, buf, len, remaining)
-                                        : HAL_I2C_Mem_Write(handle, addr, mem_addr, size, buf, len, remaining);
+        HAL_StatusTypeDef status = read ? HAL_I2C_Mem_Read(handle, addr, mem_addr, size, buf, len, hal_timeout(remaining))
+                                        : HAL_I2C_Mem_Write(handle, addr, mem_addr, size, buf, len, hal_timeout(remaining));
         release_bus(bus);
-        return status == HAL_OK;
+        return finished_in_time(status, start, timeout);
     }
 
     bool scheduler_running = xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;

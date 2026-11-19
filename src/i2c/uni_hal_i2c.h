@@ -182,7 +182,7 @@ bool uni_hal_i2c_recover(uni_hal_i2c_context_t *ctx);
  * @param ctx pointer to interface context
  * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param trials number of trials before error
- * @param timeout operation timeout in msecs
+ * @param timeout total operation timeout in milliseconds; on STM32 zero starts no transfer
  * @return true if device is ready
  */
 bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t trials, uint32_t timeout);
@@ -194,7 +194,7 @@ bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t
  * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param buf pointer to receive buffer
  * @param buf_len receive buffer length
- * @param timeout operation timeout in msecs
+ * @param timeout total operation timeout in milliseconds; on STM32 zero starts no transfer
  * @return true on success
  */
 bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint8_t *buf, uint16_t buf_len, uint32_t timeout);
@@ -206,7 +206,7 @@ bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, u
  * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param buf pointer to transmit buffer
  * @param buf_len transmit buffer length
- * @param timeout operation timeout in msecs
+ * @param timeout total operation timeout in milliseconds; on STM32 zero starts no transfer
  * @return true on success
  */
 bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint8_t *buf, uint16_t buf_len, uint32_t timeout);
@@ -221,7 +221,7 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
  * @param mem_addr_size target device memory address size in bytes (1 or 2)
  * @param buf pointer to receive buffer
  * @param buf_len receive buffer length
- * @param timeout operation timeout in msecs
+ * @param timeout total operation timeout in milliseconds; on STM32 zero starts no transfer
  * @return true on success
  */
 bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr, uni_hal_i2c_memadd_size_e mem_addr_size,
@@ -237,7 +237,7 @@ bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_
  * @param mem_addr_size target device memory address size in bytes (1 or 2)
  * @param buf pointer to transmit buffer
  * @param buf_len transmit buffer length
- * @param timeout operation timeout in msecs
+ * @param timeout total operation timeout in milliseconds; on STM32 zero starts no transfer
  * @return true on success
  */
 bool uni_hal_i2c_mem_write(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr, uni_hal_i2c_memadd_size_e mem_addr_size,

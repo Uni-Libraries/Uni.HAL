@@ -1,0 +1,5 @@
+add_executable(uni_hal_test_i2c_timeout model.c ../../src/i2c/uni_hal_i2c_stm32h7.c)
+target_include_directories(uni_hal_test_i2c_timeout PRIVATE ../i2c_h7/fakes ../i2c)
+target_link_libraries(uni_hal_test_i2c_timeout PRIVATE uni.hal)
+add_test(NAME i2c_h743_timeout COMMAND uni_hal_test_i2c_timeout)
+set_tests_properties(i2c_h743_timeout PROPERTIES TIMEOUT 10)

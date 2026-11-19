@@ -1,0 +1,138 @@
+diff --git a/3rdparty/st_stm32h7/src_hal/stm32h7xx_hal_i2c.c b/3rdparty/st_stm32h7/src_hal/stm32h7xx_hal_i2c.c
+index ca52bf9..6a151bb 100644
+--- a/3rdparty/st_stm32h7/src_hal/stm32h7xx_hal_i2c.c
++++ b/3rdparty/st_stm32h7/src_hal/stm32h7xx_hal_i2c.c
+@@ -459,2 +459,4 @@ static HAL_StatusTypeDef I2C_Slave_ISR_DMA(struct __I2C_HandleTypeDef *hi2c, uin
+ /* Private functions to handle flags during polling transfer */
++static uint32_t I2C_PollTimeoutExpired(const I2C_HandleTypeDef *hi2c, uint32_t Timeout, uint32_t Tickstart);
++static HAL_StatusTypeDef I2C_WaitForFreeBus(I2C_HandleTypeDef *hi2c, uint32_t Timeout, uint32_t Tickstart);
+ static HAL_StatusTypeDef I2C_WaitOnFlagUntilTimeout(I2C_HandleTypeDef *hi2c, uint32_t Flag, FlagStatus Status,
+@@ -1132,3 +1134,3 @@ HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *hi2c, uint16_t DevA
+
+-    if (I2C_WaitOnFlagUntilTimeout(hi2c, I2C_FLAG_BUSY, SET, I2C_TIMEOUT_BUSY, tickstart) != HAL_OK)
++    if (I2C_WaitForFreeBus(hi2c, Timeout, tickstart) != HAL_OK)
+     {
+@@ -1272,3 +1274,3 @@ HAL_StatusTypeDef HAL_I2C_Master_Receive(I2C_HandleTypeDef *hi2c, uint16_t DevAd
+
+-    if (I2C_WaitOnFlagUntilTimeout(hi2c, I2C_FLAG_BUSY, SET, I2C_TIMEOUT_BUSY, tickstart) != HAL_OK)
++    if (I2C_WaitForFreeBus(hi2c, Timeout, tickstart) != HAL_OK)
+     {
+@@ -2544,3 +2546,3 @@ HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *hi2c, uint16_t DevAddress
+
+-    if (I2C_WaitOnFlagUntilTimeout(hi2c, I2C_FLAG_BUSY, SET, I2C_TIMEOUT_BUSY, tickstart) != HAL_OK)
++    if (I2C_WaitForFreeBus(hi2c, Timeout, tickstart) != HAL_OK)
+     {
+@@ -2681,3 +2683,3 @@ HAL_StatusTypeDef HAL_I2C_Mem_Read(I2C_HandleTypeDef *hi2c, uint16_t DevAddress,
+
+-    if (I2C_WaitOnFlagUntilTimeout(hi2c, I2C_FLAG_BUSY, SET, I2C_TIMEOUT_BUSY, tickstart) != HAL_OK)
++    if (I2C_WaitForFreeBus(hi2c, Timeout, tickstart) != HAL_OK)
+     {
+@@ -3285,2 +3287,6 @@ HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *hi2c, uint16_t DevAdd
+
++    /* The bus is idle: discard a late response from a timed-out transfer. */
++    __HAL_I2C_CLEAR_FLAG(hi2c, I2C_FLAG_STOPF | I2C_FLAG_AF);
++    /* Every address trial uses the same deadline. */
++    tickstart = HAL_GetTick();
+     do
+@@ -3292,4 +3298,2 @@ HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *hi2c, uint16_t DevAdd
+       /* Wait until STOPF flag is set or a NACK flag is set*/
+-      tickstart = HAL_GetTick();
+-
+       tmp1 = __HAL_I2C_GET_FLAG(hi2c, I2C_FLAG_STOPF);
+@@ -3301,3 +3305,3 @@ HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *hi2c, uint16_t DevAdd
+         {
+-          if (((HAL_GetTick() - tickstart) > Timeout) || (Timeout == 0U))
++          if ((HAL_GetTick() - tickstart) >= Timeout)
+           {
+@@ -3361,7 +3365,9 @@ HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *hi2c, uint16_t DevAdd
+         /* Wait until STOPF flag is reset */
+-        if (I2C_WaitOnFlagUntilTimeout(hi2c, I2C_FLAG_STOPF, RESET, Timeout, tickstart) == HAL_OK)
++        if (I2C_WaitOnFlagUntilTimeout(hi2c, I2C_FLAG_STOPF, RESET, Timeout, tickstart) != HAL_OK)
+         {
+-          /* Clear STOP Flag, auto generated with autoend*/
+-          __HAL_I2C_CLEAR_FLAG(hi2c, I2C_FLAG_STOPF);
++          /* The wait already restored READY and released the lock. */
++          return HAL_ERROR;
+         }
++        /* Clear STOP Flag, auto generated with autoend*/
++        __HAL_I2C_CLEAR_FLAG(hi2c, I2C_FLAG_STOPF);
+       }
+@@ -3370,3 +3376,3 @@ HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *hi2c, uint16_t DevAdd
+       I2C_Trials++;
+-    } while (I2C_Trials < Trials);
++    } while ((I2C_Trials < Trials) && ((Timeout == HAL_MAX_DELAY) || ((HAL_GetTick() - tickstart) < Timeout)));
+
+@@ -6956,2 +6962,34 @@ static void I2C_DMAAbort(DMA_HandleTypeDef *hdma)
+
++/* Master polling uses one finite deadline, including the millisecond on its boundary.
++   Retain the ST slave polling convention and its error recovery. */
++static uint32_t I2C_PollTimeoutExpired(const I2C_HandleTypeDef *hi2c, uint32_t Timeout, uint32_t Tickstart)
++{
++  uint32_t elapsed = HAL_GetTick() - Tickstart;
++  if (Timeout == HAL_MAX_DELAY)
++  {
++    return 0U;
++  }
++  return (hi2c->Mode == HAL_I2C_MODE_SLAVE) ? ((elapsed > Timeout) || (Timeout == 0U)) : (elapsed >= Timeout);
++}
++
++static HAL_StatusTypeDef I2C_WaitForFreeBus(I2C_HandleTypeDef *hi2c, uint32_t Timeout, uint32_t Tickstart)
++{
++  uint32_t wait = (Timeout < I2C_TIMEOUT_BUSY) ? Timeout : I2C_TIMEOUT_BUSY;
++  /* No START of ours is pending yet. An old NACK must not cause a STOP on a busy bus. */
++  while (__HAL_I2C_GET_FLAG(hi2c, I2C_FLAG_BUSY) == SET)
++  {
++    if (I2C_PollTimeoutExpired(hi2c, wait, Tickstart))
++    {
++      hi2c->ErrorCode |= HAL_I2C_ERROR_TIMEOUT;
++      hi2c->State = HAL_I2C_STATE_READY;
++      hi2c->Mode = HAL_I2C_MODE_NONE;
++      __HAL_UNLOCK(hi2c);
++      return HAL_ERROR;
++    }
++  }
++  /* A NACK and STOP from a previous transfer may both have arrived after its deadline. */
++  __HAL_I2C_CLEAR_FLAG(hi2c, I2C_FLAG_STOPF | I2C_FLAG_AF);
++  return HAL_OK;
++}
++
+ /**
+@@ -6981,3 +7019,3 @@ static HAL_StatusTypeDef I2C_WaitOnFlagUntilTimeout(I2C_HandleTypeDef *hi2c, uin
+     {
+-      if (((HAL_GetTick() - Tickstart) > Timeout) || (Timeout == 0U))
++      if (I2C_PollTimeoutExpired(hi2c, Timeout, Tickstart))
+       {
+@@ -7021,3 +7059,3 @@ static HAL_StatusTypeDef I2C_WaitOnTXISFlagUntilTimeout(I2C_HandleTypeDef *hi2c,
+     {
+-      if (((HAL_GetTick() - Tickstart) > Timeout) || (Timeout == 0U))
++      if (I2C_PollTimeoutExpired(hi2c, Timeout, Tickstart))
+       {
+@@ -7060,3 +7098,3 @@ static HAL_StatusTypeDef I2C_WaitOnSTOPFlagUntilTimeout(I2C_HandleTypeDef *hi2c,
+     /* Check for the Timeout */
+-    if (((HAL_GetTick() - Tickstart) > Timeout) || (Timeout == 0U))
++    if (I2C_PollTimeoutExpired(hi2c, Timeout, Tickstart))
+     {
+@@ -7138,3 +7176,3 @@ static HAL_StatusTypeDef I2C_WaitOnRXNEFlagUntilTimeout(I2C_HandleTypeDef *hi2c,
+     /* Check for the Timeout */
+-    if ((((HAL_GetTick() - Tickstart) > Timeout) || (Timeout == 0U)) && (status == HAL_OK))
++    if (I2C_PollTimeoutExpired(hi2c, Timeout, Tickstart) && (status == HAL_OK))
+     {
+@@ -7184,3 +7222,3 @@ static HAL_StatusTypeDef I2C_IsErrorOccurred(I2C_HandleTypeDef *hi2c, uint32_t T
+       {
+-        if (((HAL_GetTick() - tickstart) > Timeout) || (Timeout == 0U))
++        if (I2C_PollTimeoutExpired(hi2c, Timeout, tickstart))
+         {
+@@ -7196,5 +7234,11 @@ static HAL_StatusTypeDef I2C_IsErrorOccurred(I2C_HandleTypeDef *hi2c, uint32_t T
+             hi2c->Instance->CR2 |= I2C_CR2_STOP;
++          }
+
+-            /* Update Tick with new reference */
+-            tickstart = HAL_GetTick();
++          if (tmp2 != HAL_I2C_MODE_SLAVE)
++          {
++            /* STOP is requested. Leave the error path unlocked, without starting a second
++               timeout. The next master operation waits for an idle bus and clears its STOPF. */
++            error_code |= HAL_I2C_ERROR_TIMEOUT;
++            status = HAL_ERROR;
++            break;
+           }

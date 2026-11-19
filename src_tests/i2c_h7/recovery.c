@@ -7,6 +7,11 @@
 #include "stm32h7xx_ll_i2c.h"
 
 I2C_TypeDef model_instances[4];
+uint32_t __get_IPSR(void) { return 0U; }
+uint32_t __get_PRIMASK(void) { return 0U; }
+uint32_t __get_BASEPRI(void) { return 0U; }
+uint32_t NVIC_GetPriority(int irq) { (void)irq; return 0U; }
+
 static unsigned hal_inits, hal_deinits, peripheral_resets;
 static bool fail_deinit, fail_reset, fail_filter;
 
