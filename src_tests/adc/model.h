@@ -4,6 +4,7 @@
 void reset_adc_model(void);
 bool adc_model_untouched(void);
 extern unsigned adc_peripheral_calls;
+const ADC_TypeDef *adc_model_registers(void);
 bool adc_model_capturing(const volatile uint16_t *data, uint32_t count);
 extern bool adc_dma_init_succeeds;
 extern unsigned dma_init_calls;

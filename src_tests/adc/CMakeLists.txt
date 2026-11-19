@@ -4,10 +4,17 @@ else()
     set(adc_machine mps2-an386)
 endif()
 
-add_executable(adc_qemu model.c bounds.c)
-target_link_libraries(adc_qemu PRIVATE uni.hal)
-uni_hal_set_linker_file(adc_qemu "${CMAKE_CURRENT_SOURCE_DIR}/mps2.ld")
-add_test(NAME adc_configuration COMMAND "${QEMU_SYSTEM_ARM}" -M ${adc_machine}
-    -nographic -monitor none -serial none -semihosting-config enable=on,target=native
-    -kernel $<TARGET_FILE:adc_qemu>)
-set_tests_properties(adc_configuration PROPERTIES TIMEOUT 10)
+function(add_adc_model_test name source)
+    add_executable(${name}_qemu model.c ${source})
+    target_link_libraries(${name}_qemu PRIVATE uni.hal)
+    uni_hal_set_linker_file(${name}_qemu "${CMAKE_CURRENT_SOURCE_DIR}/mps2.ld")
+    add_test(NAME ${name} COMMAND "${QEMU_SYSTEM_ARM}" -M ${adc_machine}
+        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+        -kernel $<TARGET_FILE:${name}_qemu>)
+    set_tests_properties(${name} PROPERTIES TIMEOUT 10)
+endfunction()
+
+add_adc_model_test(adc_configuration bounds.c)
+if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
+    add_adc_model_test(adc_channel_preselection preselection.c)
+endif()

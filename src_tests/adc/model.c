@@ -96,6 +96,10 @@ bool adc_model_untouched(void) {
            memcmp(dma_banks, reset_dma, sizeof dma_banks) == 0;
 }
 
+const ADC_TypeDef *adc_model_registers(void) {
+    return ADC1;
+}
+
 bool adc_model_capturing(const volatile uint16_t *data, uint32_t count) {
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
     const uint32_t index = LL_DMA_STREAM_1;

@@ -647,15 +647,12 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
         LL_ADC_REG_Init(instance, &reg);
 
 
-        if(ctx->config.channels_count>0U) {
-            LL_ADC_SetChannelPreSelection(instance, _uni_hal_adc_get_channel(ctx->config.channels[0]));
-            // ranks
-            for (uint32_t idx_channel = 0; idx_channel < ctx->config.channels_count; idx_channel++) {
-                uint32_t channel = _uni_hal_adc_get_channel(ctx->config.channels[idx_channel]);
-                LL_ADC_REG_SetSequencerRanks(instance, _uni_hal_adc_get_rank(idx_channel + 1), channel);
-                LL_ADC_SetChannelSamplingTime(instance, channel, sampling);
-                LL_ADC_SetChannelSingleDiff(instance, channel, LL_ADC_SINGLE_ENDED);
-            }
+        for (uint32_t rank = 0; rank < ctx->config.channels_count; ++rank) {
+            const uint32_t channel = _uni_hal_adc_get_channel(ctx->config.channels[rank]);
+            LL_ADC_SetChannelPreselection(instance, channel);
+            LL_ADC_REG_SetSequencerRanks(instance, _uni_hal_adc_get_rank(rank + 1U), channel);
+            LL_ADC_SetChannelSamplingTime(instance, channel, sampling);
+            LL_ADC_SetChannelSingleDiff(instance, channel, LL_ADC_SINGLE_ENDED);
         }
 
         //LL_ADC_EnableIT_EOS(instance);
