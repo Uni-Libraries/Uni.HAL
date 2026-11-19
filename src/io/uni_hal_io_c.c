@@ -111,7 +111,7 @@ void uni_hal_io_deinit(uni_hal_io_context_t *ctx) {
 #endif
     ctx->buf_rx.handle = nullptr;
     ctx->buf_tx.handle = nullptr;
-    ctx->buf_rx.sync_idx = 0U;
+    uni_hal_io_receive_sync_reset(ctx);
     ctx->buf_tx.sync_idx = 0U;
     ctx->handlers = (uni_hal_io_handlers_t){0};
     ctx->stats = (uni_hal_io_stats_t){0};
@@ -135,6 +135,9 @@ size_t uni_hal_io_buffer_pop_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t
     size_t result = 0U;
     if (buf != nullptr && buf->handle != nullptr && data != nullptr) {
         result = xStreamBufferReceiveFromISR(buf->handle, data, data_len, woken);
+        if (result != 0U) {
+            buf->sync_idx = 0U;
+        }
     }
     return result;
 }
@@ -161,9 +164,10 @@ size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
 bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
     bool result = false;
     if (ctx != nullptr && ctx->buf_rx.handle != nullptr) {
-        // reset sync progress and buffer
-        ctx->buf_rx.sync_idx = 0U;
         result = xStreamBufferReset(ctx->buf_rx.handle) == pdPASS;
+        if (result) {
+            uni_hal_io_receive_sync_reset(ctx);
+        }
     }
     return result;
 }
@@ -187,7 +191,19 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
         }
     }
 
+    if (received != 0U) {
+        uni_hal_io_receive_sync_reset(ctx);
+    }
     return received;
+}
+
+
+void uni_hal_io_receive_sync_reset(uni_hal_io_context_t *ctx) {
+    if (ctx != nullptr) {
+        ctx->buf_rx.sync_idx = 0U;
+        ctx->sync_pattern_addr = 0U;
+        ctx->sync_pattern_len = 0U;
+    }
 }
 
 
@@ -197,8 +213,12 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
         return false;
     }
 
-    const size_t pat_len = data_len;
-    size_t match_idx = ctx->buf_rx.sync_idx; // resume progress across calls
+    size_t match_idx = 0U;
+    if (ctx->sync_pattern_addr == (uintptr_t)data && ctx->sync_pattern_len == data_len &&
+        ctx->buf_rx.sync_idx < data_len) {
+        match_idx = ctx->buf_rx.sync_idx;
+    }
+
     uint32_t const t_start = uni_hal_systick_get_ms();
 
     for (;;) {
@@ -212,16 +232,15 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
             // No new data. Give up once the timeout is over; until then keep looking, which is
             // only reached where the read above cannot sleep.
             if ((uni_hal_systick_get_ms() - t_start) >= timeout) {
-                ctx->buf_rx.sync_idx = match_idx;
-                return false;
+                break;
             }
             continue;
         }
 
         if (ch == data[match_idx]) {
             match_idx++;
-            if (match_idx == pat_len) {
-                ctx->buf_rx.sync_idx = 0U;
+            if (match_idx == data_len) {
+                uni_hal_io_receive_sync_reset(ctx);
                 return true;
             }
         } else {
@@ -237,6 +256,11 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
             match_idx = next_idx;
         }
     }
+
+    ctx->buf_rx.sync_idx = match_idx;
+    ctx->sync_pattern_addr = (uintptr_t)data;
+    ctx->sync_pattern_len = data_len;
+    return false;
 }
 
 

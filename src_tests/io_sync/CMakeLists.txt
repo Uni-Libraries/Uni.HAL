@@ -1,0 +1,4 @@
+add_executable(uni_hal_test_io_sync receive_sync.c)
+target_link_libraries(uni_hal_test_io_sync PRIVATE uni.hal)
+add_test(NAME io_receive_sync COMMAND uni_hal_test_io_sync)
+set_tests_properties(io_receive_sync PROPERTIES TIMEOUT 10)

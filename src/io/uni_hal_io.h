@@ -152,6 +152,11 @@ typedef struct {
      * IO stats
      */
     uni_hal_io_stats_t stats;
+
+    // Identity of the marker associated with buf_rx.sync_idx. The driver only
+    // reads the marker supplied to the current receive_sync call.
+    uintptr_t sync_pattern_addr;
+    size_t sync_pattern_len;
 } uni_hal_io_context_t;
 
 
@@ -267,16 +272,20 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 
 
 /**
- * Skip input data until specified data will be found
- * @param ctx pointer to the interface context
- * @param data pointer to the data array
- * @param data_len length of the data array in bytes
- * @param timeout receive timoeut in msecs
- * @note The implementation consumes bytes while searching.
- *       Match progress is preserved across calls in ctx->buf_rx.sync_idx.
- * @return true in case of successful sync
+ * Consume RX bytes through the first complete marker, leaving later bytes queued.
+ * @param timeout receive timeout in milliseconds.
+ * @return true when the marker was found
+ * @note A partial match resumes on the next call with the same marker address and
+ *       length. Keep its bytes unchanged between retries. Call uni_hal_io_receive_sync_reset
+ *       before reusing that address for another marker of the same length.
+ *       Serialize RX readers. Consuming bytes with uni_hal_io_receive_data or
+ *       uni_hal_io_buffer_pop_isr discards saved progress. Reset it explicitly
+ *       after direct reads through the FreeRTOS stream handle.
  */
-bool uni_hal_io_receive_sync(uni_hal_io_context_t* ctx, const uint8_t* data, size_t data_len, uint32_t timeout);
+bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, size_t data_len, uint32_t timeout);
+
+/** Discard saved marker progress and preserve the queued RX data. */
+void uni_hal_io_receive_sync_reset(uni_hal_io_context_t *ctx);
 
 
 
