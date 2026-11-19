@@ -9,9 +9,7 @@
 #include "stm32l4xx_hal.h"
 #include "stm32l4xx_ll_i2c.h"
 #include "task.h"
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
 #include "semphr.h"
-#endif
 
 extern I2C_HandleTypeDef hi2c1;
 void I2C1_EV_IRQHandler(void);
@@ -27,6 +25,19 @@ static uint32_t now, irq_mask, irq_starts, resets, accesses, polls, scheduled_at
 static bool deliver, fail, compete, read_direction, fail_init, fail_start;
 static bool complete_at_deadline;
 static bool scheduler_running;
+static bool in_irq;
+static SemaphoreHandle_t active_event;
+static uint32_t event_creation_ms;
+#if !configSUPPORT_STATIC_ALLOCATION
+static bool fail_event_allocation;
+#endif
+
+static void run_irq(void)
+{
+    in_irq = true;
+    I2C1_EV_IRQHandler();
+    in_irq = false;
+}
 
 static void advance(void)
 {
@@ -40,7 +51,7 @@ static void advance(void)
         assert(!uni_hal_i2c_deinit(&ctx));
     }
     if (deliver && now == scheduled_at) {
-        I2C1_EV_IRQHandler();
+        run_irq();
     }
 }
 
@@ -50,7 +61,7 @@ uint32_t uni_hal_core_irq_pause(void) {
     if (!prior && complete_at_deadline && hi2c1.XferISR) {
         // STOPF arrives after the wait expires but just before cancellation masks IRQs.
         complete_at_deadline = false;
-        I2C1_EV_IRQHandler();
+        run_irq();
     }
     irq_mask = 1;
     return prior;
@@ -58,7 +69,7 @@ uint32_t uni_hal_core_irq_pause(void) {
 void uni_hal_core_irq_resume(uint32_t mask) { irq_mask = mask; }
 uint32_t __get_PRIMASK(void) { return irq_mask; }
 uint32_t __get_BASEPRI(void) { return 0; }
-uint32_t __get_IPSR(void) { return 0; }
+uint32_t __get_IPSR(void) { return in_irq; }
 
 bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *c) { return c && c->state.initialized; }
 bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *pin) { (void)pin; return true; }
@@ -76,23 +87,41 @@ void vTaskDelay(TickType_t ticks) {
     ++delays;
     while (ticks--) { advance(); }
 }
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
-SemaphoreHandle_t xSemaphoreCreateBinaryStatic(StaticSemaphore_t *storage) { storage->count = 0; return storage; }
+static SemaphoreHandle_t create_event(SemaphoreHandle_t storage) {
+    assert(!active_event && scheduler_running && !in_irq && !irq_mask);
+    now += event_creation_ms;
+    active_event = storage;
+    storage->count = 0;
+    return storage;
+}
+#if configSUPPORT_STATIC_ALLOCATION
+SemaphoreHandle_t xSemaphoreCreateBinaryStatic(StaticSemaphore_t *storage) {
+    return create_event(storage);
+}
+#else
+SemaphoreHandle_t xSemaphoreCreateBinary(void) {
+    static ModelSemaphore allocated;
+    return fail_event_allocation ? nullptr : create_event(&allocated);
+}
+#endif
+void vSemaphoreDelete(SemaphoreHandle_t event) {
+    assert(event && event == active_event && !in_irq);
+    active_event = nullptr;
+}
 BaseType_t xSemaphoreGiveFromISR(SemaphoreHandle_t event, BaseType_t *woken) {
-    assert(!event->count);
+    assert(event == active_event && in_irq && !event->count);
     event->count = 1;
     *woken = pdTRUE;
     return pdTRUE;
 }
 BaseType_t xSemaphoreTake(SemaphoreHandle_t event, TickType_t ticks) {
-    assert(!irq_mask && scheduler_running);
+    assert(event == active_event && !irq_mask && !in_irq && scheduler_running);
     if (ticks) { ++waits; }
     while (!event->count && ticks--) { advance(); }
     if (!event->count) { return pdFALSE; }
     event->count = 0;
     return pdTRUE;
 }
-#endif
 
 HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *h) {
     assert(h->Init.Timing == 42);
@@ -183,7 +212,7 @@ static void exercise(operation_t op)
     assert(!op(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 10));
     assert(resets == initial_resets + 1 && now < 10 && ctx.state.initialized);
     assert(!hi2c1.pBuffPtr && !hi2c1.XferISR);
-    I2C1_EV_IRQHandler(); // An already pending vector after return.
+    run_irq(); // An already pending vector after return.
     assert(accesses == initial_accesses);
 
     deliver = true;
@@ -215,20 +244,38 @@ int main(void)
     assert(uni_hal_i2c_init(&ctx));
     exercise(uni_hal_i2c_mem_read);
     exercise(uni_hal_i2c_mem_write);
-    assert(waits == 0 && delays == 0);
+    assert(waits == 0 && delays == 0 && !active_event);
     scheduler_running = true;
+    uint32_t starts_before_event = irq_starts;
+#if !configSUPPORT_STATIC_ALLOCATION
+    fail_event_allocation = true;
+    assert(!uni_hal_i2c_mem_read(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 20));
+    assert(!active_event && irq_starts == starts_before_event);
+    fail_event_allocation = false;
+#endif
+    // Semaphore creation can use the entire transfer deadline.
+    event_creation_ms = 20;
+    assert(!uni_hal_i2c_mem_read(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 20));
+    assert(active_event && irq_starts == starts_before_event);
+    event_creation_ms = 0;
+    in_irq = true;
+    assert(!uni_hal_i2c_mem_read(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 20));
+    assert(!uni_hal_i2c_deinit(&ctx));
+    in_irq = false;
     exercise(uni_hal_i2c_mem_read);
     exercise(uni_hal_i2c_mem_write);
     assert(delays > 0); // A competing task yields while another transfer owns the bus.
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
     assert(waits > 0);
-#else
-    assert(waits == 0);
-#endif
     deliver = false;
     fail_init = true;
     assert(!uni_hal_i2c_mem_read(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 10));
     assert(!ctx.state.initialized && !hi2c1.XferISR && !hi2c1.pBuffPtr);
     assert(uni_hal_i2c_deinit(&ctx));
+    assert(!active_event);
+    fail_init = false;
+    deliver = true;
+    assert(uni_hal_i2c_init(&ctx));
+    assert(uni_hal_i2c_mem_read(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 20));
+    assert(active_event && uni_hal_i2c_deinit(&ctx) && !active_event);
     return 0;
 }

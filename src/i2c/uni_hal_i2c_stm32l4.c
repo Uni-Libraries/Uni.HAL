@@ -12,9 +12,7 @@
 // FreeRTOS
 #include <FreeRTOS.h>
 #include <task.h>
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
-    #include <semphr.h>
-#endif
+#include <semphr.h>
 
 // Uni.Common
 #include <uni_common.h>
@@ -49,11 +47,11 @@ typedef struct {
     uni_hal_i2c_context_t *owner;
     bool busy;
     volatile i2c_irq_state_t irq_state;
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
     bool wait_with_event;
     BaseType_t higher_priority_woken;
-    StaticSemaphore_t event_storage;
     SemaphoreHandle_t event;
+#if configSUPPORT_STATIC_ALLOCATION
+    StaticSemaphore_t event_storage;
 #endif
 } i2c_bus_t;
 
@@ -66,21 +64,15 @@ static i2c_bus_t g_buses[UNI_HAL_I2C_MAXINSTANCES];
 
 static void handle_irq(I2C_HandleTypeDef *handle, unsigned index, bool error)
 {
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
     // Event and error IRQs for this bus have the same priority. Other buses may preempt them.
     g_buses[index].higher_priority_woken = pdFALSE;
     UNI_HAL_OS_ISR_ENTER();
-#else
-    (void)index;
-#endif
     if (error) {
         HAL_I2C_ER_IRQHandler(handle);
     } else {
         HAL_I2C_EV_IRQHandler(handle);
     }
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
     UNI_HAL_OS_ISR_EXIT(g_buses[index].higher_priority_woken);
-#endif
 }
 
 void I2C1_EV_IRQHandler(void) { handle_irq(&hi2c1, 0, false); }
@@ -328,11 +320,9 @@ static void _uni_hal_i2c_callback(I2C_HandleTypeDef *handle, bool success)
     i2c_bus_t *bus = get_bus(_uni_hal_i2c_get_periph(handle->Instance));
     if (bus && bus->irq_state == IRQ_PENDING) {
         bus->irq_state = success ? IRQ_SUCCEEDED : IRQ_FAILED;
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
         if (bus->wait_with_event) {
             xSemaphoreGiveFromISR(bus->event, &bus->higher_priority_woken);
         }
-#endif
     }
 }
 
@@ -440,7 +430,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
 
 bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
     i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : nullptr;
-    if (!bus || !try_claim(bus)) {
+    if (__get_IPSR() || !bus || !try_claim(bus)) {
         return false;
     }
     if (bus->owner && bus->owner != ctx) {
@@ -451,6 +441,10 @@ bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
     if (handle->Instance) {
         HAL_I2C_DeInit(handle);
         LL_I2C_DeInit(handle->Instance);
+    }
+    if (bus->event) {
+        vSemaphoreDelete(bus->event);
+        bus->event = nullptr;
     }
     bus->owner = nullptr;
     ctx->state.initialized = false;
@@ -547,20 +541,29 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
         return status == HAL_OK;
     }
 
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
     bool scheduler_running = xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
-#if configSUPPORT_STATIC_ALLOCATION
     if (scheduler_running) {
         if (!bus->event) {
+#if configSUPPORT_STATIC_ALLOCATION
             bus->event = xSemaphoreCreateBinaryStatic(&bus->event_storage);
+#else
+            bus->event = xSemaphoreCreateBinary();
+#endif
+            if (!bus->event) {
+                release_bus(bus);
+                return false;
+            }
         }
         // Completion can race the timeout or arrive before the first wait.
         (void)xSemaphoreTake(bus->event, 0U);
-        bus->wait_with_event = true;
     }
-#endif
-#endif
     uint32_t mask = uni_hal_core_irq_pause();
+    if (!remaining_ms(start, timeout)) {
+        uni_hal_core_irq_resume(mask);
+        release_bus(bus);
+        return false;
+    }
+    bus->wait_with_event = scheduler_running;
     bus->irq_state = IRQ_PENDING;
     HAL_StatusTypeDef status = read ? HAL_I2C_Mem_Read_IT(handle, addr, mem_addr, size, buf, len)
                                     : HAL_I2C_Mem_Write_IT(handle, addr, mem_addr, size, buf, len);
@@ -570,9 +573,7 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
     uni_hal_core_irq_resume(mask);
 
     while (bus->irq_state == IRQ_PENDING && (remaining = remaining_ms(start, timeout)) != 0U) {
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-#if configSUPPORT_STATIC_ALLOCATION
-        if (bus->wait_with_event) {
+        if (scheduler_running) {
             // portMAX_DELAY can mean forever. Recheck the same deadline after each wait.
             TickType_t ticks = pdMS_TO_TICKS(remaining);
             if (ticks == portMAX_DELAY) {
@@ -580,12 +581,6 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
             }
             (void)xSemaphoreTake(bus->event, ticks ? ticks : 1U);
         }
-#else
-        if (scheduler_running) {
-            vTaskDelay(1U);
-        }
-#endif
-#endif
     }
 
     mask = uni_hal_core_irq_pause();
@@ -604,9 +599,7 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
         handle->pBuffPtr = nullptr;
     }
     bus->irq_state = IRQ_IDLE;
-#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
     bus->wait_with_event = false;
-#endif
     uni_hal_core_irq_resume(mask);
     release_bus(bus);
     return result;

@@ -3,13 +3,6 @@
 #
 
 cmake_minimum_required(VERSION 3.29)
-
-if(DEFINED UNI_HAL_USE_FREERTOS AND NOT UNI_HAL_USE_FREERTOS)
-    message(FATAL_ERROR "Uni.HAL requires FreeRTOS. Remove UNI_HAL_USE_FREERTOS=OFF from the configuration or clear the cached setting with -UUNI_HAL_USE_FREERTOS.")
-endif()
-# Keep the feature available to existing parent projects without exposing a build option.
-set(UNI_HAL_USE_FREERTOS ON CACHE INTERNAL "Uni.HAL includes the FreeRTOS kernel")
-
 project(uni.hal LANGUAGES C CXX ASM)
 
 
@@ -20,9 +13,7 @@ project(uni.hal LANGUAGES C CXX ASM)
 
 set(UNI_HAL_TARGET_MCU "" CACHE STRING "Target MCU: STM32H743, STM32L496, ZYNQ7000 or PC")
 set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 ZYNQ7000 PC)
-option(UNI_HAL_CAN_USE_FREERTOS "use FreeRTOS for CAN driver" ON)
-option(UNI_HAL_CAN_USE_FD       "CAN messages carry up to 64 data bytes (CAN FD); OFF keeps them at 8" OFF)
-option(UNI_HAL_I2C_USE_FREERTOS "use FreeRTOS for I2C driver" ON)
+option(UNI_HAL_CAN_USE_FD "CAN messages carry up to 64 data bytes (CAN FD); OFF keeps them at 8" OFF)
 option(UNI_HAL_IO_PRINTF_LARGE_FORMAT "uni_hal_io_stdio_*printf: support ll/j/z/t (%llu, %zu) at the cost of code size" OFF)
 if(NOT DEFINED UNI_HAL_HSE_VALUE)
     set(UNI_HAL_HSE_VALUE "" CACHE STRING "HSE clock value in Hz")

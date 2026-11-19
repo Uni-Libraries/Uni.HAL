@@ -45,6 +45,36 @@ TEST_CASE("can_timing_gives_exact_bitrate", "[hal_can]") {
     }
 }
 
+TEST_CASE("can_receive_from_freertos_queue", "[hal_can]") {
+    uni_hal_can_context_t ctx{};
+    REQUIRE(uni_hal_can_is_available(&ctx) == 0U);
+    REQUIRE(uni_hal_can_init(&ctx));
+
+    uni_hal_can_msg_t frame{};
+    frame.id = 0x123U;
+    frame.dlc = 1U;
+    frame.data[0] = 0xA5U;
+    REQUIRE(xQueueSend(ctx.status.queue_rx, &frame, 0U) == pdPASS);
+    frame.data[0] = 0x5AU;
+    REQUIRE(xQueueSend(ctx.status.queue_rx, &frame, 0U) == pdPASS);
+    REQUIRE(uni_hal_can_is_available(&ctx) == 2U);
+
+    uni_hal_can_msg_t received{};
+    REQUIRE(uni_hal_can_receive(&ctx, &received, 0U));
+    REQUIRE(received.id == frame.id);
+    REQUIRE(received.data[0] == 0xA5U);
+    REQUIRE(uni_hal_can_receive(&ctx, &received, 0U));
+    REQUIRE(received.data[0] == 0x5AU);
+    REQUIRE(uni_hal_can_is_available(&ctx) == 0U);
+    REQUIRE_FALSE(uni_hal_can_receive(&ctx, &received, 0U));
+    auto const queue = ctx.status.queue_rx;
+    REQUIRE(xQueueSend(queue, &frame, 0U) == pdPASS);
+    REQUIRE(uni_hal_can_init(&ctx));
+    REQUIRE(ctx.status.queue_rx == queue);
+    REQUIRE(uni_hal_can_is_available(&ctx) == 0U);
+    vQueueDelete(ctx.status.queue_rx);
+}
+
 TEST_CASE("can_timing_fw_ktb_bus", "[hal_can]") {
     // 32 MHz APB1, 500 kbit/s: 16 quanta with the sample point at exactly 87.5 %
     uni_hal_can_timing_t timing = {};

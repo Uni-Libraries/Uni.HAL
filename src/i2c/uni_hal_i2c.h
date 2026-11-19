@@ -93,11 +93,6 @@ typedef struct {
      * Initialization state
      */
     bool initialized;
-
-    /**
-     * Reserved for compatibility
-     */
-    void* irq_task;
 } uni_hal_i2c_state_t;
 
 
@@ -156,7 +151,7 @@ uint32_t uni_hal_i2c_timing_calc(uint32_t clock_hz, uni_hal_i2c_speed_e speed);
 bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *ctx);
 
 /**
- * Deinitialize I2C interface
+ * Deinitialize I2C interface from task or startup context.
  * @param ctx pointer to the interface context
  * @return true on success
  */

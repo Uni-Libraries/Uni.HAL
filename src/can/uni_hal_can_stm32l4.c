@@ -9,7 +9,7 @@
 #include <stm32l4xx.h>
 
 // uni_hal
-#include "can/uni_hal_can.h"
+#include "can/uni_hal_can_internal.h"
 #include "os/uni_hal_os.h"
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
@@ -69,6 +69,7 @@
 
 static uni_hal_can_context_t *_uni_hal_can_1_ctx = nullptr;
 static uni_hal_can_context_t *_uni_hal_can_2_ctx = nullptr;
+static QueueHandle_t g_uni_hal_can_rx_queues[2];
 
 
 
@@ -325,14 +326,7 @@ static BaseType_t _uni_hal_can_irq_rx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
         }
 
         if (ctx != nullptr && ctx->status.inited) {
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
             bool const queued = xQueueSendFromISR(ctx->status.queue_rx, &msg, &woken) == pdPASS;
-#else
-            // a push into a full ring buffer would overwrite its oldest frame, and move the read
-            // position under the reader: drop the new frame instead
-            bool const queued = !uni_common_ringbuffer_is_full(ctx->config.buffer_rx) &&
-                                uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U) == 1U;
-#endif
 
             if (queued) {
                 ctx->status.count_rx++;
@@ -480,15 +474,8 @@ void CAN2_SCE_IRQHandler(void)
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
     bool result = false;
     if (ctx != nullptr) {
+        ctx->status = (uni_hal_can_status_t){0};
         result = _uni_hal_can_set_context(ctx);
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-        ctx->status.queue_rx = xQueueCreate(UNI_HAL_CAN_QUEUE_SIZE, sizeof(uni_hal_can_msg_t));
-        result = result && ctx->status.queue_rx != nullptr;
-#else
-        result =
-            result && uni_common_ringbuffer_init(ctx->config.buffer_rx, ctx->config.buffer_rx->data, ctx->config.buffer_rx->size_object, ctx->config.buffer_rx->size_total);
-#endif
 
         result = result && uni_hal_rcc_clk_set(ctx->config.instance, true);
 
@@ -517,6 +504,10 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             if (result) {
                 CLEAR_BIT(can->MCR, CAN_MCR_SLEEP);
                 result = _uni_hal_can_wait_msr(can, CAN_MSR_SLAK, false);
+            }
+            if (result) {
+                ctx->status.queue_rx = uni_hal_can_init_rx_queue(&g_uni_hal_can_rx_queues[can == CAN1 ? 0U : 1U]);
+                result = ctx->status.queue_rx != nullptr;
             }
 
             if (result) {
@@ -567,18 +558,6 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
                 result = _uni_hal_can_interrupt_enable(ctx->config.instance, UNI_HAL_CAN_IRQ_PRIORITY);
             }
 
-            ctx->status.count_rx = 0U;
-            ctx->status.count_tx = 0U;
-            ctx->status.count_err = 0U;
-            ctx->status.count_rx_dropped = 0U;
-            ctx->status.errors = UNI_HAL_CAN_ERROR_NONE;
-            ctx->status.tx_callback = nullptr;
-            ctx->status.tx_callback_cookie = nullptr;
-            ctx->status.error_callback = nullptr;
-            ctx->status.error_callback_cookie = nullptr;
-            for (uint32_t mailbox = 0U; mailbox < UNI_HAL_CAN_TX_MAILBOXES; mailbox++) {
-                ctx->status.tx_ok[mailbox] = false;
-            }
             ctx->status.inited = result;
         }
     }

@@ -2,9 +2,6 @@
 // Includes
 //
 
-// uni_common
-#include <uni_common.h>
-
 // uni_hal
 #include "can/uni_hal_can.h"
 #include "core/uni_hal_core.h"
@@ -17,15 +14,8 @@
 
 uint32_t uni_hal_can_is_available(const uni_hal_can_context_t *ctx) {
     uint32_t result = 0;
-    if (ctx != NULL) {
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
+    if (uni_hal_can_is_inited(ctx)) {
         result = uxQueueMessagesWaiting(ctx->status.queue_rx);
-#else
-        // the receive interrupt writes to the same buffer
-        uint32_t const primask = uni_hal_core_irq_pause();
-        result = uni_common_ringbuffer_length(ctx->config.buffer_rx);
-        uni_hal_core_irq_resume(primask);
-#endif
     }
 
     return result;
@@ -45,16 +35,7 @@ bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, siz
     bool result = false;
 
     if (uni_hal_can_is_inited(ctx) && msg != NULL) {
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
         result = xQueueReceive(ctx->status.queue_rx, msg, timeout_ms == portMAX_DELAY ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms)) == pdPASS;
-#else
-        // The ring-buffer backend returns immediately when the queue is empty.
-        (void)timeout_ms;
-        // the receive interrupt writes to the same buffer
-        uint32_t const primask = uni_hal_core_irq_pause();
-        result = uni_common_ringbuffer_pop(ctx->config.buffer_rx, (uint8_t *)msg, 1U);
-        uni_hal_core_irq_resume(primask);
-#endif
     }
 
     return result;

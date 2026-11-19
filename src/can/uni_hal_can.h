@@ -14,13 +14,8 @@ extern "C" {
 #include <stdint.h>
 
 // FreeRTOS
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
 #include <FreeRTOS.h>
 #include <queue.h>
-#endif
-
-// Uni.Common
-#include "uni_common.h"
 
 // Uni.HAL
 #include "core/uni_hal_core.h"
@@ -188,10 +183,6 @@ typedef struct
      */
     bool tx_fifo_priority;
 
-#if !defined(UNI_HAL_CAN_USE_FREERTOS)
-    uni_common_ringbuffer_context_t *buffer_rx;
-#endif
-
 } uni_hal_can_config_t;
 
 
@@ -292,9 +283,7 @@ typedef struct {
      */
     void *error_callback_cookie;
 
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
     QueueHandle_t queue_rx;
-#endif
 
 } uni_hal_can_status_t;
 
@@ -419,12 +408,18 @@ uint8_t uni_hal_can_dlc_to_length(uint32_t dlc, bool fd);
 bool uni_hal_can_timing_calc_data(uint32_t clock_hz, uint32_t bitrate, uni_hal_can_timing_t *timing);
 
 /**
- * Check that CAN RQ queue contains at least one incoming message
+ * Count the frames waiting in the FreeRTOS receive queue
  * @param ctx CAN context
  * @return number of incoming messages
  */
 uint32_t uni_hal_can_is_available(const uni_hal_can_context_t *ctx);
 
+/**
+ * Initialise the controller from ctx->config. On STM32 the receive queue belongs
+ * to the peripheral. Each PC context owns a queue and must start zero-initialised.
+ * Stop the controller and its users before reinitialisation, which empties the queue.
+ * Use one active context per STM32 peripheral.
+ */
 bool uni_hal_can_init(uni_hal_can_context_t *ctx);
 
 /**
@@ -441,6 +436,11 @@ bool uni_hal_can_stop(uni_hal_can_context_t *ctx);
 bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint32_t slot_idx, uint32_t filter_id,
                            uint32_t filter_mask);
 
+/**
+ * Read the oldest queued frame from task context.
+ * @param timeout_ms maximum wait in milliseconds, 0 to poll or portMAX_DELAY to wait indefinitely
+ * @return true if a frame was received
+ */
 bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, size_t timeout_ms);
 
 /**

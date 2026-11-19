@@ -2,7 +2,7 @@
 // Includes
 //
 
-#include "can/uni_hal_can.h"
+#include "can/uni_hal_can_internal.h"
 
 
 
@@ -12,18 +12,11 @@
 
 
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
-    bool result = false;
-    if (ctx != NULL) {
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-        ctx->status.queue_rx = xQueueCreate(UNI_HAL_CAN_QUEUE_SIZE, sizeof(uni_hal_can_msg_t));
-        result = result && ctx->status.queue_rx != NULL;
-#else
-        result =
-            result && uni_common_ringbuffer_init(ctx->config.buffer_rx, ctx->config.buffer_rx->data, ctx->config.buffer_rx->size_object, ctx->config.buffer_rx->size_total);
-#endif
+    if (ctx == nullptr) {
+        return false;
     }
-
-    return result;
+    ctx->status.inited = uni_hal_can_init_rx_queue(&ctx->status.queue_rx) != nullptr;
+    return ctx->status.inited;
 }
 
 

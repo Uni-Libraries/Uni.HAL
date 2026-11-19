@@ -10,7 +10,7 @@
 #include <stm32h7xx.h>
 
 // uni_hal
-#include "can/uni_hal_can.h"
+#include "can/uni_hal_can_internal.h"
 #include "core/uni_hal_core.h"
 #include "os/uni_hal_os.h"
 #include "rcc/uni_hal_rcc.h"
@@ -155,6 +155,7 @@ typedef struct {
     IRQn_Type irq;
 
     uni_hal_can_context_t *ctx;
+    QueueHandle_t queue_rx;
 
     /** TX buffers that hold a frame whose completion has not been reported yet */
     volatile uint32_t tx_inflight;
@@ -410,14 +411,7 @@ static BaseType_t _uni_hal_can_irq_rx(const uni_hal_can_stm32h7_instance_t *inst
         *acknowledge = get_index;
 
         if (ctx != nullptr && ctx->status.inited) {
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
             bool const queued = xQueueSendFromISR(ctx->status.queue_rx, &msg, &woken) == pdPASS;
-#else
-            // a push into a full ring buffer would overwrite its oldest frame, and move the read
-            // position under the reader: drop the new frame instead
-            bool const queued = !uni_common_ringbuffer_is_full(ctx->config.buffer_rx) &&
-                                uni_common_ringbuffer_push(ctx->config.buffer_rx, (uint8_t *)&msg, 1U) == 1U;
-#endif
 
             if (queued) {
                 ctx->status.count_rx++;
@@ -566,21 +560,18 @@ void FDCAN2_IT0_IRQHandler(void)
 //
 
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
+    if (ctx == nullptr) {
+        return false;
+    }
+    ctx->status = (uni_hal_can_status_t){0};
     bool result = false;
-    uni_hal_can_stm32h7_instance_t *inst = (ctx != nullptr) ? _uni_hal_can_get_instance(ctx->config.instance) : nullptr;
+    uni_hal_can_stm32h7_instance_t *inst = _uni_hal_can_get_instance(ctx->config.instance);
 
     if (inst != nullptr) {
         FDCAN_GlobalTypeDef *can = inst->can;
         inst->ctx = ctx;
         inst->tx_inflight = 0U;
         result = true;
-
-#if defined(UNI_HAL_CAN_USE_FREERTOS)
-        ctx->status.queue_rx = xQueueCreate(UNI_HAL_CAN_QUEUE_SIZE, sizeof(uni_hal_can_msg_t));
-        result = ctx->status.queue_rx != nullptr;
-#else
-        result = uni_common_ringbuffer_init(ctx->config.buffer_rx, ctx->config.buffer_rx->data, ctx->config.buffer_rx->size_object, ctx->config.buffer_rx->size_total);
-#endif
 
         // both instances share one kernel clock; UNKNOWN keeps the source that is selected
         if (ctx->config.clock_source != UNI_HAL_RCC_CLKSRC_UNKNOWN) {
@@ -612,6 +603,10 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             // wake the peripheral up, then open the configuration
             CLEAR_BIT(can->CCCR, FDCAN_CCCR_CSR);
             result = _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_CSA, false) && _uni_hal_can_mode_init(can);
+        }
+        if (result) {
+            ctx->status.queue_rx = uni_hal_can_init_rx_queue(&inst->queue_rx);
+            result = ctx->status.queue_rx != nullptr;
         }
 
         if (result) {
@@ -723,18 +718,6 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             NVIC_EnableIRQ(inst->irq);
         }
 
-        ctx->status.count_rx = 0U;
-        ctx->status.count_tx = 0U;
-        ctx->status.count_err = 0U;
-        ctx->status.count_rx_dropped = 0U;
-        ctx->status.errors = UNI_HAL_CAN_ERROR_NONE;
-        ctx->status.tx_callback = nullptr;
-        ctx->status.tx_callback_cookie = nullptr;
-        ctx->status.error_callback = nullptr;
-        ctx->status.error_callback_cookie = nullptr;
-        for (uint32_t buffer = 0U; buffer < UNI_HAL_CAN_TX_BUFFERS; buffer++) {
-            ctx->status.tx_ok[buffer] = false;
-        }
         ctx->status.inited = result;
     }
 

@@ -27,16 +27,13 @@ target_sources(firmware PRIVATE main.c)
 
 Configure with `-DCMAKE_TOOLCHAIN_FILE=Uni.HAL/cmake/toolchain.cmake`. The dependencies
 Uni.Common and nanoprintf are downloaded by CPM during the configuration.
-All MCU targets and the PC target use the bundled FreeRTOS kernel. If an existing build
-directory cached `UNI_HAL_USE_FREERTOS=OFF`, pass `-UUNI_HAL_USE_FREERTOS` when reconfiguring it.
+All MCU targets and the PC target use the bundled FreeRTOS kernel.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `UNI_HAL_TARGET_MCU` | none | target, required |
 | `UNI_HAL_ZYNQ7000_BSP_DIR` | none | ZYNQ7000: `<platform>/export/<platform>/sw/<domain>` of a Vitis platform (`include/`, `lib/`, `Xilinx.spec`); build with the Xilinx `arm-none-eabi-gcc` |
 | `UNI_HAL_HSE_VALUE` | none | HSE frequency in Hz, required for the MCU targets |
-| `UNI_HAL_CAN_USE_FREERTOS` | `ON` | CAN receive queue is a FreeRTOS queue instead of a ring buffer |
-| `UNI_HAL_I2C_USE_FREERTOS` | `ON` | suspend the calling task while an interrupt-driven STM32L4 I2C memory transfer is in progress |
 | `UNI_HAL_CAN_USE_FD` | `OFF` | CAN messages hold up to 64 data bytes, for CAN FD on the STM32H7 |
 | `UNI_HAL_IO_PRINTF_LARGE_FORMAT` | `OFF` | `uni_hal_io_stdio_*printf` understand `ll`, `j`, `z`, `t` (`%llu`, `%zu`) |
 | `UNI_HAL_RTOS_HEAP_SIZE` | `100*1024` | `configTOTAL_HEAP_SIZE` |
@@ -95,7 +92,10 @@ configured by the application as well and need a faster setting.
 
 **I2C.** Device addresses are 7-bit and not shifted. The bus timing is computed from the kernel
 clock; `config.timing` takes a raw `I2C_TIMINGR` value for a bus that needs something else.
-On STM32L4, `uni_hal_i2c_mem_read()` and `uni_hal_i2c_mem_write()` finish using the caller's
+On STM32L4, an interrupt-driven memory transfer blocks the calling task on a FreeRTOS
+semaphore until the interrupt signals completion or the timeout expires. Before the
+scheduler starts, the driver polls for completion with interrupts enabled.
+`uni_hal_i2c_mem_read()` and `uni_hal_i2c_mem_write()` finish using the caller's
 buffer before they return, including on timeout. A zero timeout returns
 `false` without starting a transfer. A timed-out write may already have sent bytes to the device.
 
@@ -103,6 +103,7 @@ buffer before they return, including on timeout. A zero timeout returns
 on the registers; neither uses the ST HAL. Set `bitrate` in the configuration: the timing is
 computed from the CAN clock and the initialisation fails when the clock cannot give the rate
 exactly. Acceptance filters are written in the bxCAN register layout on both families.
+The receive interrupt delivers accepted frames to a FreeRTOS queue.
 
 CAN FD exists on the STM32H7 only. Build with `-DUNI_HAL_CAN_USE_FD=ON`, set `fd` in the
 configuration and, for frames that switch the bit rate, `bitrate_data`. A message then holds up

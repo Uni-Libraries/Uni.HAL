@@ -49,15 +49,9 @@ target_include_directories(uni.hal PUBLIC ".")
 # Definitions
 #
 
-target_compile_definitions(uni.hal PUBLIC UNI_HAL_TARGET_MCU_${UNI_HAL_TARGET_MCU} UNI_HAL_USE_FREERTOS)
-if(UNI_HAL_CAN_USE_FREERTOS)
-    target_compile_definitions(uni.hal PUBLIC UNI_HAL_CAN_USE_FREERTOS)
-endif()
+target_compile_definitions(uni.hal PUBLIC UNI_HAL_TARGET_MCU_${UNI_HAL_TARGET_MCU})
 if(UNI_HAL_CAN_USE_FD)
     target_compile_definitions(uni.hal PUBLIC UNI_HAL_CAN_USE_FD)
-endif()
-if(UNI_HAL_I2C_USE_FREERTOS)
-    target_compile_definitions(uni.hal PUBLIC UNI_HAL_I2C_USE_FREERTOS)
 endif()
 if(UNI_HAL_IO_PRINTF_LARGE_FORMAT)
     target_compile_definitions(uni.hal PRIVATE UNI_HAL_IO_PRINTF_LARGE_FORMAT)
