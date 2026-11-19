@@ -63,6 +63,10 @@ endif()
 # Libraries
 #
 
+if(UNI_HAL_TARGET_MCU MATCHES "^STM32")
+    # Hand the boot SysTick to the Cortex-M port and account for suppressed tick periods.
+    target_link_options(uni.hal INTERFACE "LINKER:--wrap=xPortStartScheduler" "LINKER:--wrap=vTaskStepTick")
+endif()
 target_link_libraries(uni.hal PUBLIC freertos_kernel)
 target_link_libraries(uni.hal PUBLIC uni.common)
 target_link_libraries(uni.hal PUBLIC nanoprintf)

@@ -64,6 +64,7 @@ static void write_flash_latency(uint32_t latency) {
 #define LL_FLASH_SetLatency write_flash_latency
 // This vendor helper uses a literal 32-bit MMIO address. I2C mux selection is outside this fixture.
 #define LL_RCC_SetI2CClockSource(source) ((void)(source))
+#include "systick/uni_hal_systick_stm32l4.c"
 #include "rcc/uni_hal_rcc_stm32l4.c"
 
 bool uni_hal_systick_init(void) {

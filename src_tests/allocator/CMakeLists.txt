@@ -30,6 +30,7 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
     enable_testing()
     uni_hal_add_executable(allocator_qemu)
     target_sources(allocator_qemu PRIVATE main.c qemu_main.c ../io/freertos_buffers.c)
+    target_compile_definitions(allocator_qemu PRIVATE UNI_HAL_TEST_SYSTICK_SLEEP)
     target_compile_options(allocator_qemu PRIVATE -fno-builtin)
     target_link_options(allocator_qemu PRIVATE
         "LINKER:--defsym,_estack=0x20020000" "LINKER:--wrap=main")

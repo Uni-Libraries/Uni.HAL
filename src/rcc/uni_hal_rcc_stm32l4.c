@@ -21,6 +21,7 @@
 #include "rcc/uni_hal_rcc.h"
 #include "rcc/uni_hal_rcc_stm32l4.h"
 #include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32.h"
 
 
 //
@@ -357,22 +358,9 @@ static bool _uni_hal_stm_rcc_pll(bool recovery) {
 // Rescale the existing time base after a clock change, including the automatic CSS switch.
 // Leave NVIC priority, interrupt enable and clock selection under their current owner's control.
 static void _uni_hal_rcc_update_timebase(void) {
-    uint32_t old_hclk = SystemCoreClock;
-    uint32_t old_reload = SysTick->LOAD;
+    uint32_t const old_hclk = SystemCoreClock;
     SystemCoreClockUpdate();
-    if (old_hclk == SystemCoreClock || old_hclk == 0 || old_reload == 0) {
-        return;
-    }
-
-    // Both possible SysTick sources scale with HCLK. Preserve the active tick period,
-    // including an RTOS-configured rate, even if CSS temporarily selected MSI.
-    uint64_t scaled = (uint64_t)(old_reload + 1U) * SystemCoreClock;
-    uint64_t period = (scaled + old_hclk / 2U) / old_hclk;
-    if (period > SysTick_LOAD_RELOAD_Msk + 1U) {
-        period = SysTick_LOAD_RELOAD_Msk + 1U;
-    }
-    SysTick->LOAD = period > 1U ? (uint32_t)period - 1U : 1U;
-    SysTick->VAL = 0;
+    uni_hal_systick_l4_reclock(old_hclk, SystemCoreClock);
 }
 
 static bool _uni_hal_stm_rcc_sysclk(bool recovery) {

@@ -26,7 +26,7 @@ extern volatile uint32_t g_uni_hal_systick_counter;
 //
 
 uint32_t uni_hal_systick_get_ms(void){
-    return g_uni_hal_systick_counter / (uni_hal_systick_get_freq() / 1000);
+    return g_uni_hal_systick_counter;
 }
 
 

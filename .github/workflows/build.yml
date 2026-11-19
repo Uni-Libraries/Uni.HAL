@@ -72,7 +72,7 @@ jobs:
       run: ctest --build-config Release --output-on-failure --no-tests=error
 
   build-arm-gcc:
-    name: arm/gcc (${{ matrix.mcu }}, CAN FD ${{ matrix.can_fd }}${{ matrix.static_allocation == 'OFF' && ', dynamic allocation only' || '' }}) on ubuntu-latest
+    name: arm/gcc (${{ matrix.mcu }}, CAN FD ${{ matrix.can_fd }}${{ matrix.static_allocation == 'OFF' && ', dynamic allocation only' || '' }}${{ matrix.tick_hz == 128 && ', tickless 128 Hz' || '' }}) on ubuntu-latest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -80,6 +80,7 @@ jobs:
         mcu: [STM32H743, STM32L496]
         can_fd: ["OFF"]
         static_allocation: ["ON"]
+        tick_hz: [1000]
         build_type: [Release]
         include:
           - mcu: STM32H743
@@ -89,6 +90,11 @@ jobs:
           - mcu: STM32L496
             can_fd: "OFF"
             static_allocation: "OFF"
+            build_type: Release
+          - mcu: STM32L496
+            can_fd: "OFF"
+            static_allocation: "ON"
+            tick_hz: 128
             build_type: Release
 
     steps:
@@ -115,7 +121,7 @@ jobs:
       id: strings
       shell: bash
       run: |
-        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.can_fd }}-${{ matrix.static_allocation }}" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.can_fd }}-${{ matrix.static_allocation }}-${{ matrix.tick_hz || 1000 }}" >> "$GITHUB_OUTPUT"
 
     - name: Configure CMake
       run: >
@@ -126,13 +132,14 @@ jobs:
         -DUNI_HAL_HSE_VALUE=8000000
         -DUNI_HAL_CAN_USE_FD=${{ matrix.can_fd }}
         ${{ matrix.static_allocation == 'OFF' && format('-DUNI_HAL_RTOS_CONFIG_EXTRA={0}/src_tests/config/freertos_dynamic_only.h', github.workspace) || '' }}
+        ${{ matrix.tick_hz == 128 && format('-DUNI_HAL_RTOS_CONFIG_EXTRA={0}/src_tests/config/freertos_tick_128hz.h', github.workspace) || '' }}
         ${{ matrix.mcu == 'STM32L496' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
         -S ${{ github.workspace }}/src_tests/allocator
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Test the allocator and FreeRTOS IO buffers
+    - name: Test the allocator, SysTick, I2C deadlines and FreeRTOS IO buffers
       if: matrix.mcu == 'STM32L496'
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
@@ -186,6 +193,6 @@ jobs:
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Test the allocator, picolibc TLS and FreeRTOS IO buffers
+    - name: Test the allocator, picolibc TLS, SysTick, I2C deadlines and FreeRTOS IO buffers
       if: matrix.mcu == 'STM32L496'
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error

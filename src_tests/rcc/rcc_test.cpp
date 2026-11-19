@@ -41,6 +41,7 @@ TEST_CASE("L496 CSS preserves 80 MHz with 12 MHz HSE and 16 MHz HSI") {
     // Model an RTOS-owned SysTick on HCLK/8. Recovery must retain its settings.
     SysTick->CTRL = 3U;
     SysTick->LOAD = 9'999;
+    SysTick->VAL = 123;
     auto tick_reads = rcc_test_tick_reads;
     rcc_test_fail_hse();
     auto status = uni_hal_rcc_stm32l4_status_get();
@@ -55,6 +56,7 @@ TEST_CASE("L496 CSS preserves 80 MHz with 12 MHz HSE and 16 MHz HSI") {
     REQUIRE(SystemCoreClock == 80'000'000);
     REQUIRE(SysTick->CTRL == 3U);
     REQUIRE(SysTick->LOAD == 9'999);
+    REQUIRE(SysTick->VAL == 123);
     REQUIRE(rcc_test_tick_inits == 1);
     REQUIRE(rcc_test_tick_reads == tick_reads);
 }
@@ -130,6 +132,14 @@ TEST_CASE("L496 CSS preserves the running scheduler tick across an HCLK change")
         REQUIRE(SysTick->LOAD == 7'999);
         REQUIRE(SysTick->CTRL == 3U);
         REQUIRE(rcc_test_tick_inits == 1);
+    }
+    SECTION("a stopped SysTick stays stopped after recovery") {
+        SysTick->CTRL = 0U;
+        SysTick->LOAD = 0U;
+        rcc_test_fail_hse();
+        REQUIRE(SystemCoreClock == 16'000'000);
+        REQUIRE(SysTick->CTRL == 0U);
+        REQUIRE(SysTick->LOAD == 0U);
     }
     SECTION("an unrepresentably short period keeps the minimum running reload") {
         SysTick->LOAD = 1;
