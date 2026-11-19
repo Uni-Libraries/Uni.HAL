@@ -107,7 +107,7 @@ typedef struct {
 
     /**
      * Ongoing receive_sync match progress (bytes of the pattern already matched)
-     * This allows continuing sync across calls when the RX stream ends mid-pattern.
+     * A full match is pending if its final read returned after the deadline.
      */
     size_t sync_idx;
 } uni_hal_io_buffer_t;
@@ -273,7 +273,8 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 
 /**
  * Consume RX bytes through the first complete marker, leaving later bytes queued.
- * @param timeout receive timeout in milliseconds.
+ * @param timeout overall search budget in milliseconds. Zero polls only the bytes
+ *        already queued on entry.
  * @return true when the marker was found
  * @note A partial match resumes on the next call with the same marker address and
  *       length. Keep its bytes unchanged between retries. Call uni_hal_io_receive_sync_reset
@@ -281,6 +282,9 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
  *       Serialize RX readers. Consuming bytes with uni_hal_io_receive_data or
  *       uni_hal_io_buffer_pop_isr discards saved progress. Reset it explicitly
  *       after direct reads through the FreeRTOS stream handle.
+ * @note A final byte read exactly at the deadline completes the search. If the
+ *       blocking read returns later, this call returns false and the next search
+ *       for the same marker reports the match once.
  */
 bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, size_t data_len, uint32_t timeout);
 

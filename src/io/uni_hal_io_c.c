@@ -215,23 +215,34 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
 
     size_t match_idx = 0U;
     if (ctx->sync_pattern_addr == (uintptr_t)data && ctx->sync_pattern_len == data_len &&
-        ctx->buf_rx.sync_idx < data_len) {
+        ctx->buf_rx.sync_idx <= data_len) {
         match_idx = ctx->buf_rx.sync_idx;
     }
+    if (match_idx == data_len) {
+        uni_hal_io_receive_sync_reset(ctx);
+        return true;
+    }
 
-    uint32_t const t_start = uni_hal_systick_get_ms();
-
+    uint32_t const start = timeout != 0U ? uni_hal_systick_get_ms() : 0U;
+    size_t available = timeout == 0U ? xStreamBufferBytesAvailable(ctx->buf_rx.handle) : 0U;
     for (;;) {
-        uint32_t const elapsed = uni_hal_systick_get_ms() - t_start;
-        uint32_t const wait_ms = (elapsed < timeout) ? (timeout - elapsed) : 0U;
+        uint32_t wait_ms = 0U;
+        if (timeout != 0U) {
+            uint32_t const elapsed = uni_hal_systick_get_ms() - start;
+            if (elapsed >= timeout) {
+                break;
+            }
+            wait_ms = timeout - elapsed;
+        } else {
+            if (available == 0U) {
+                break;
+            }
+            --available;
+        }
 
-        uint8_t ch = 0U;
-        size_t const got = _uni_hal_io_buf_read(&ctx->buf_rx, &ch, 1U, wait_ms);
-
-        if (got == 0U) {
-            // No new data. Give up once the timeout is over; until then keep looking, which is
-            // only reached where the read above cannot sleep.
-            if ((uni_hal_systick_get_ms() - t_start) >= timeout) {
+        uint8_t ch;
+        if (_uni_hal_io_buf_read(&ctx->buf_rx, &ch, 1U, wait_ms) == 0U) {
+            if (timeout == 0U) {
                 break;
             }
             continue;
@@ -240,6 +251,10 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
         if (ch == data[match_idx]) {
             match_idx++;
             if (match_idx == data_len) {
+                if (timeout != 0U && (uni_hal_systick_get_ms() - start) > timeout) {
+                    // The read consumed the marker. Deliver it on the next matching call.
+                    break;
+                }
                 uni_hal_io_receive_sync_reset(ctx);
                 return true;
             }
