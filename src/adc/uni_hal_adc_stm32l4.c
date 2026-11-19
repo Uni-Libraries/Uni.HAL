@@ -17,6 +17,7 @@
 
 // Uni.HAL
 #include "adc/uni_hal_adc.h"
+#include "adc/uni_hal_adc_stm32_config.h"
 #include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
@@ -685,58 +686,56 @@ static bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
 //
 
 bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
-    bool result = false;
+    if (ctx == nullptr) {
+        return false;
+    }
+    const uni_hal_adc_config_t *config = &ctx->config;
+    if (!uni_hal_adc_stm32_config_valid(config, UNI_HAL_ADC_STM32L4_CHANNEL_VBAT, UNI_HAL_DMA_CHANNEL_1) ||
+        _uni_hal_adc_get_clock(config) == UINT32_MAX ||
+        _uni_hal_adc_get_resolution(config->resolution_bits) == UINT32_MAX ||
+        _uni_hal_adc_get_sampling(config->sampling_cycles) == UINT32_MAX) {
+        return false;
+    }
+    uni_hal_rcc_clksrc_e clock_source = config->clock_source;
+    if (clock_source == UNI_HAL_RCC_CLKSRC_UNKNOWN) {
+        clock_source = UNI_HAL_RCC_CLKSRC_SYSCLK;
+    }
+    if (clock_source != UNI_HAL_RCC_CLKSRC_SYSCLK && clock_source != UNI_HAL_RCC_CLKSRC_NONE) {
+        return false;
+    }
+    if (ctx->state.initialized) {
+        return uni_hal_adc_is_inited(ctx);
+    }
+    if (config->dma != nullptr && !uni_hal_dma_init(config->dma)) {
+        return false;
+    }
 
-    if (ctx != NULL && ctx->config.channels_count > 0U) {
-        ADC_TypeDef *adc_instance = _uni_hal_adc_get_instance(ctx->config.instance);
-        uint32_t adc_interrupt = _uni_hal_adc_get_interrupt(ctx->config.instance);
-
-        result = adc_instance != NULL;
-
-        // configure pins
-        for (size_t idx = 0; idx < ctx->config.channels_count; idx++) {
-            if (ctx->config.pins[idx] != NULL && !uni_hal_gpio_pin_is_inited(ctx->config.pins[idx])) {
-                result = uni_hal_gpio_pin_init(ctx->config.pins[idx]) && result;
+    for (uint32_t rank = 0; rank < config->channels_count; ++rank) {
+        uni_hal_gpio_pin_context_t *pin = config->pins[rank];
+        if (pin != nullptr && !uni_hal_gpio_pin_is_inited(pin)) {
+            if (!uni_hal_gpio_pin_init(pin)) {
+                return false;
             }
-        }
-
-        // clk: SYSCLK unless the configuration names a source
-        uni_hal_rcc_clksrc_e clock_source = ctx->config.clock_source;
-        if (clock_source == UNI_HAL_RCC_CLKSRC_UNKNOWN) {
-            clock_source = UNI_HAL_RCC_CLKSRC_SYSCLK;
-        }
-        result = uni_hal_rcc_clksrc_set(ctx->config.instance, clock_source) && result;
-        result = uni_hal_rcc_clk_set(ctx->config.instance, true) && result;
-
-        // irq
-        NVIC_SetPriority(adc_interrupt, UNI_HAL_ADC_INT_PRIO); /* ADC IRQ greater priority than DMA IRQ */
-        NVIC_EnableIRQ(adc_interrupt);
-
-        // dma
-        if (ctx->config.dma) {
-            result = result && uni_hal_dma_init(ctx->config.dma);
-            result = result && _uni_hal_adc_configure_dma(ctx);
-            result = result && uni_hal_dma_enable(ctx->config.dma, true);
-        }
-
-        // common
-        result = _uni_hal_adc_configure_common(ctx) && result;
-
-        // module
-        result = _uni_hal_adc_configure(ctx) && result;
-
-        // powerup
-        result = _uni_hal_adc_powerup(ctx) && result;
-
-        // enable
-        result = result && _uni_hal_adc_enable(ctx);
-        ctx->state.initialized = result;
-        if (result) {
-            _uni_hal_adc_trigger(ctx);
         }
     }
 
-    return result;
+    if (!uni_hal_rcc_clksrc_set(config->instance, clock_source) || !uni_hal_rcc_clk_set(config->instance, true)) {
+        return false;
+    }
+    const uint32_t interrupt = _uni_hal_adc_get_interrupt(config->instance);
+    NVIC_SetPriority(interrupt, UNI_HAL_ADC_INT_PRIO);
+    NVIC_EnableIRQ(interrupt);
+
+    if (!_uni_hal_adc_configure_common(ctx) || !_uni_hal_adc_configure(ctx) ||
+        !_uni_hal_adc_powerup(ctx) || !_uni_hal_adc_enable(ctx)) {
+        return false;
+    }
+    if (config->dma != nullptr && (!_uni_hal_adc_configure_dma(ctx) || !uni_hal_dma_enable(config->dma, true))) {
+        return false;
+    }
+    ctx->state.initialized = true;
+    _uni_hal_adc_trigger(ctx);
+    return true;
 }
 
 

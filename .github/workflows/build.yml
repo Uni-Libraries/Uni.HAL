@@ -114,7 +114,6 @@ jobs:
         echo "${TOOLCHAIN_DIR}/bin" >> "$GITHUB_PATH"
 
     - name: Install Cortex-M emulator
-      if: matrix.mcu == 'STM32L496'
       run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
 
     - name: Set reusable strings
@@ -133,14 +132,14 @@ jobs:
         -DUNI_HAL_CAN_USE_FD=${{ matrix.can_fd }}
         ${{ matrix.static_allocation == 'OFF' && format('-DUNI_HAL_RTOS_CONFIG_EXTRA={0}/src_tests/config/freertos_dynamic_only.h', github.workspace) || '' }}
         ${{ matrix.tick_hz == 128 && format('-DUNI_HAL_RTOS_CONFIG_EXTRA={0}/src_tests/config/freertos_tick_128hz.h', github.workspace) || '' }}
+        -DUNI_HAL_TEST_ADC_QEMU=ON
         ${{ matrix.mcu == 'STM32L496' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
         -S ${{ github.workspace }}/src_tests/allocator
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Test the allocator, SysTick, I2C deadlines and FreeRTOS IO buffers
-      if: matrix.mcu == 'STM32L496'
+    - name: Run the STM32 firmware regressions in QEMU
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
   build-arm-clang:
@@ -175,7 +174,6 @@ jobs:
         echo "build-output-dir=${{ github.workspace }}/build-clang-${{ matrix.mcu }}" >> "$GITHUB_OUTPUT"
 
     - name: Install Cortex-M emulator
-      if: matrix.mcu == 'STM32L496'
       run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
 
     - name: Configure CMake
@@ -187,12 +185,12 @@ jobs:
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
         -DUNI_HAL_HSE_VALUE=8000000
+        -DUNI_HAL_TEST_ADC_QEMU=ON
         ${{ matrix.mcu == 'STM32L496' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
         -S ${{ github.workspace }}/src_tests/allocator
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Test the allocator, picolibc TLS, SysTick, I2C deadlines and FreeRTOS IO buffers
-      if: matrix.mcu == 'STM32L496'
+    - name: Run the STM32 firmware regressions in QEMU
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error

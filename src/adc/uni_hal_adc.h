@@ -32,7 +32,12 @@ extern "C" {
 //
 
 /**
- * Initializes ADC module
+ * Initializes the ADC and starts the configured regular conversions.
+ * On STM32 an initialized context keeps its current sequence. Calling init again with the same
+ * configuration returns the current readiness. The configuration, DMA context and destination
+ * buffer must remain valid and unchanged throughout acquisition. A rejected repeat call leaves
+ * the active hardware running. If a later setup step fails during first initialization, a DMA
+ * context initialized by this call may remain initialized without a running transfer.
  * @param ctx pointer to the ADC context
  * @return true on success
  */
@@ -48,8 +53,8 @@ bool uni_hal_adc_is_inited(const uni_hal_adc_context_t* ctx);
 /**
  * Get raw ADC rank value
  * @param ctx ADC context
- * @param channel ADC channel
- * @return raw value in ADC points
+ * @param rank zero-based position in the regular conversion sequence
+ * @return raw ADC value, or UINT16_MAX when the rank or buffer is unavailable
  */
 uint16_t uni_hal_adc_get_rank_raw(const uni_hal_adc_context_t *ctx, uint32_t rank);
 

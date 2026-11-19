@@ -30,7 +30,7 @@ bool uni_hal_adc_is_inited(const uni_hal_adc_context_t *ctx) {
 
 uint16_t uni_hal_adc_get_rank_raw(const uni_hal_adc_context_t *ctx, uint32_t rank) {
     uint16_t result = UINT16_MAX;
-    if (uni_hal_adc_is_inited(ctx) && rank < ctx->config.channels_count) {
+    if (uni_hal_adc_is_inited(ctx) && rank < UNI_HAL_ADC_CHANNELS_MAX && rank < ctx->config.channels_count) {
         const volatile uint16_t *array = ctx->config.data;
         if (array != NULL) {
             result = array[rank];

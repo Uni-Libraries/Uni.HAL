@@ -74,12 +74,12 @@ typedef struct {
     uni_hal_gpio_pin_context_t * pins[UNI_HAL_ADC_CHANNELS_MAX];
 
     /**
-     * Pointer to the data array
+     * DMA destination with at least channels_count halfwords. Optional in direct register mode.
      */
     volatile uint16_t* data;
 
     /**
-     * Number of enabled channels, must be synced with ::channels
+     * Number of enabled channels (1..16), must be synced with ::channels
      */
     uint32_t channels_count;
 
