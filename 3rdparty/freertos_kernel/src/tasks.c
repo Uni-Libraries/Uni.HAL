@@ -509,7 +509,8 @@ PRIVILEGED_DATA STATIC volatile BaseType_t xSchedulerRunning = pdFALSE;
 PRIVILEGED_DATA STATIC volatile TickType_t xPendedTicks = ( TickType_t ) 0U;
 PRIVILEGED_DATA STATIC volatile BaseType_t xYieldPendings[ configNUMBER_OF_CORES ] = { pdFALSE };
 PRIVILEGED_DATA STATIC volatile BaseType_t xNumOfOverflows = ( BaseType_t ) 0;
-PRIVILEGED_DATA STATIC UBaseType_t uxTaskNumber = ( UBaseType_t ) 0U;
+/* Kernel-aware debuggers read this counter even when task tracing is disabled. */
+PRIVILEGED_DATA STATIC volatile UBaseType_t uxTaskNumber = ( UBaseType_t ) 0U;
 PRIVILEGED_DATA STATIC volatile TickType_t xNextTaskUnblockTime = ( TickType_t ) 0U; /* Initialised to portMAX_DELAY before the scheduler starts. */
 PRIVILEGED_DATA STATIC TaskHandle_t xIdleTaskHandles[ configNUMBER_OF_CORES ];       /**< Holds the handles of the idle tasks.  The idle tasks are created automatically when the scheduler is started. */
 

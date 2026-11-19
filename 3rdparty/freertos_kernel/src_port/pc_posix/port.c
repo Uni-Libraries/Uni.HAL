@@ -67,7 +67,6 @@
 #include <string.h>
 #include <sys/time.h>
 #include <sys/times.h>
-#include <time.h>
 #include <unistd.h>
 
 /* Scheduler includes. */
@@ -110,7 +109,6 @@ static volatile BaseType_t uxCriticalNesting;
 static BaseType_t xSchedulerEnd = pdFALSE;
 static pthread_t hTimerTickThread;
 static bool xTimerTickThreadShouldRun;
-static uint64_t prvStartTimeNs;
 static pthread_key_t xThreadKey = 0;
 /*-----------------------------------------------------------*/
 
@@ -435,16 +433,6 @@ void vPortClearInterruptMask( UBaseType_t uxMask )
 }
 /*-----------------------------------------------------------*/
 
-static uint64_t prvGetTimeNs( void )
-{
-    struct timespec t;
-
-    clock_gettime( CLOCK_MONOTONIC, &t );
-
-    return ( uint64_t ) t.tv_sec * ( uint64_t ) 1000000000UL + ( uint64_t ) t.tv_nsec;
-}
-/*-----------------------------------------------------------*/
-
 /* commented as part of the code below in vPortSystemTickHandler,
  * to adjust timing according to full demo requirements */
 /* static uint64_t prvTickCount; */
@@ -480,8 +468,6 @@ void prvSetupTimerInterrupt( void )
 {
     xTimerTickThreadShouldRun = true;
     pthread_create( &hTimerTickThread, NULL, prvTimerTickHandler, NULL );
-
-    prvStartTimeNs = prvGetTimeNs();
 }
 /*-----------------------------------------------------------*/
 

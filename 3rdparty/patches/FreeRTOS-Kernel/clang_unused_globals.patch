@@ -1,0 +1,50 @@
+diff --git a/3rdparty/freertos_kernel/src/tasks.c b/3rdparty/freertos_kernel/src/tasks.c
+index 43c9063..f169521 100644
+--- a/3rdparty/freertos_kernel/src/tasks.c
++++ b/3rdparty/freertos_kernel/src/tasks.c
+@@ -510,5 +510,6 @@ PRIVILEGED_DATA STATIC volatile TickType_t xPendedTicks = ( TickType_t ) 0U;
+ PRIVILEGED_DATA STATIC volatile BaseType_t xYieldPendings[ configNUMBER_OF_CORES ] = { pdFALSE };
+ PRIVILEGED_DATA STATIC volatile BaseType_t xNumOfOverflows = ( BaseType_t ) 0;
+-PRIVILEGED_DATA STATIC UBaseType_t uxTaskNumber = ( UBaseType_t ) 0U;
++/* Kernel-aware debuggers read this counter even when task tracing is disabled. */
++PRIVILEGED_DATA STATIC volatile UBaseType_t uxTaskNumber = ( UBaseType_t ) 0U;
+ PRIVILEGED_DATA STATIC volatile TickType_t xNextTaskUnblockTime = ( TickType_t ) 0U; /* Initialised to portMAX_DELAY before the scheduler starts. */
+ PRIVILEGED_DATA STATIC TaskHandle_t xIdleTaskHandles[ configNUMBER_OF_CORES ];       /**< Holds the handles of the idle tasks.  The idle tasks are created automatically when the scheduler is started. */
+diff --git a/3rdparty/freertos_kernel/src_port/pc_posix/port.c b/3rdparty/freertos_kernel/src_port/pc_posix/port.c
+index a1b1ca8..bef26e0 100644
+--- a/3rdparty/freertos_kernel/src_port/pc_posix/port.c
++++ b/3rdparty/freertos_kernel/src_port/pc_posix/port.c
+@@ -68,5 +68,4 @@
+ #include <sys/time.h>
+ #include <sys/times.h>
+-#include <time.h>
+ #include <unistd.h>
+
+@@ -111,5 +110,4 @@ static BaseType_t xSchedulerEnd = pdFALSE;
+ static pthread_t hTimerTickThread;
+ static bool xTimerTickThreadShouldRun;
+-static uint64_t prvStartTimeNs;
+ static pthread_key_t xThreadKey = 0;
+ /*-----------------------------------------------------------*/
+@@ -436,14 +434,4 @@ void vPortClearInterruptMask( UBaseType_t uxMask )
+ /*-----------------------------------------------------------*/
+
+-static uint64_t prvGetTimeNs( void )
+-{
+-    struct timespec t;
+-
+-    clock_gettime( CLOCK_MONOTONIC, &t );
+-
+-    return ( uint64_t ) t.tv_sec * ( uint64_t ) 1000000000UL + ( uint64_t ) t.tv_nsec;
+-}
+-/*-----------------------------------------------------------*/
+-
+ /* commented as part of the code below in vPortSystemTickHandler,
+  * to adjust timing according to full demo requirements */
+@@ -481,6 +469,4 @@ void prvSetupTimerInterrupt( void )
+     xTimerTickThreadShouldRun = true;
+     pthread_create( &hTimerTickThread, NULL, prvTimerTickHandler, NULL );
+-
+-    prvStartTimeNs = prvGetTimeNs();
+ }
+ /*-----------------------------------------------------------*/
