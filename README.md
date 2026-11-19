@@ -39,6 +39,7 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 | `UNI_HAL_CAN_USE_FD` | `OFF` | CAN messages hold up to 64 data bytes, for CAN FD on the STM32H7 |
 | `UNI_HAL_IO_PRINTF_LARGE_FORMAT` | `OFF` | `uni_hal_io_stdio_*printf` understand `ll`, `j`, `z`, `t` (`%llu`, `%zu`) |
 | `UNI_HAL_RTOS_HEAP_SIZE` | `100*1024` | `configTOTAL_HEAP_SIZE` |
+| `UNI_HAL_LIBC_HEAP_SIZE` | `8192` | STM32 with FreeRTOS, C library heap size in bytes |
 | `UNI_HAL_RTOS_HEAP_APP` | `OFF` | the application defines `ucHeap` itself |
 | `UNI_HAL_RTOS_MAX_PRIORITIES` | `5` | `configMAX_PRIORITIES` |
 | `UNI_HAL_RTOS_MINIMAL_STACK_SIZE` | `512` | `configMINIMAL_STACK_SIZE` of the MCU targets, in words |
@@ -52,6 +53,16 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 peripheral clock has its nominal value. The STM32L4 driver does not fail there: without HSE it
 feeds the PLL from HSI, and `uni_hal_rcc_stm32l4_status_get()` tells which oscillators came up.
 SysTick runs from `uni_hal_rcc_init()` on, and the drivers use it for their timeouts.
+
+**Dynamic memory with FreeRTOS.** Blocks from the C library (`malloc`, `calloc`,
+`realloc`, aligned allocations and the newlib reentrant functions) belong to the C
+library and are released with `free`. FreeRTOS allocations use `pvPortMalloc` and
+`vPortFree`. When upgrading firmware that mixed these APIs, update each deallocation to
+match the allocator that supplied the block. Call these APIs at startup or from task context.
+On STM32, size the C library pool with `UNI_HAL_LIBC_HEAP_SIZE` independently of the RTOS heap. The pool
+uses ordinary RAM on L496 and section `.RAM_D1` on H743. An application supplying
+its own `_sbrk` (or picolibc `sbrk`) controls its own pool. On Zynq, the BSP uses
+the linker script's `_HEAP_SIZE` (64 KiB by default).
 
 **Interrupt priorities.** A handler that uses a FreeRTOS `...FromISR()` function must not have
 a priority above `configMAX_SYSCALL_INTERRUPT_PRIORITY`, which is 4 here. Where a driver takes
@@ -129,3 +140,15 @@ ctest --test-dir build
 
 The tests cover the logic that does not need hardware: DWT tick arithmetic, the I2C timing, the
 CAN bit timings for both phases and the CAN FD data length codes.
+
+The allocator regression links a firmware executable and checks the providers of the libc
+and FreeRTOS symbols in its linker map. With Arm GCC and `qemu-system-arm` on the path, run
+the allocation, resize, alignment and out-of-memory checks at startup and from a FreeRTOS task:
+
+```sh
+cmake -S src_tests/allocator -B build-allocator \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchain.cmake" \
+  -DUNI_HAL_TARGET_MCU=STM32L496 -DUNI_HAL_HSE_VALUE=8000000 -DUNI_HAL_TEST_ALLOCATOR_QEMU=ON
+cmake --build build-allocator
+ctest --test-dir build-allocator --output-on-failure
+```

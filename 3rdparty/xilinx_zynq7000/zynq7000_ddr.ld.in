@@ -7,7 +7,7 @@
 ******************************************************************************/
 
 _STACK_SIZE = DEFINED(_STACK_SIZE) ? _STACK_SIZE : 0x2000;
-/* newlib-internal allocations (_malloc_r); malloc()/free() themselves go to the FreeRTOS heap */
+/* C library heap for malloc, realloc and the reentrant newlib entry points. */
 _HEAP_SIZE = DEFINED(_HEAP_SIZE) ? _HEAP_SIZE : 0x10000;
 
 _ABORT_STACK_SIZE = DEFINED(_ABORT_STACK_SIZE) ? _ABORT_STACK_SIZE : 1024;

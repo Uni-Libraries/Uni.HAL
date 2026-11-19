@@ -120,6 +120,19 @@ endif()
 
 
 
+if(UNI_HAL_TARGET_MCU MATCHES "^STM32")
+    include(CheckSymbolExists)
+    check_symbol_exists(PICOLIBC_TLS "picolibc.h" UNI_HAL_STM32_PICOLIBC_TLS)
+    if(UNI_HAL_STM32_PICOLIBC_TLS)
+        target_sources(${UNI_HAL_DFP_LIBRARY} PRIVATE "3rdparty/st_stm32_common/src_extra/picolibc_startup.c")
+        target_link_options(${UNI_HAL_DFP_LIBRARY} INTERFACE "LINKER:--wrap=__libc_init_array")
+        # Our static image keeps constructors in flash and TLS in RAM, with no runtime loader.
+        if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+            target_link_options(${UNI_HAL_DFP_LIBRARY} INTERFACE "LINKER:-z,norelro")
+        endif()
+    endif()
+endif()
+
 #
 # Uni.HAL
 #

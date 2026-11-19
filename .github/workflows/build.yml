@@ -104,6 +104,10 @@ jobs:
         
         echo "${TOOLCHAIN_DIR}/bin" >> $GITHUB_PATH
 
+    - name: Install Cortex-M emulator
+      if: matrix.mcu == 'STM32L496' && matrix.freertos == 'ON'
+      run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+
     - name: Set reusable strings
       id: strings
       shell: bash
@@ -119,10 +123,15 @@ jobs:
         -DUNI_HAL_HSE_VALUE=8000000
         -DUNI_HAL_USE_FREERTOS=${{ matrix.freertos }}
         -DUNI_HAL_CAN_USE_FD=${{ matrix.can_fd }}
-        -S ${{ github.workspace }}
+        ${{ matrix.mcu == 'STM32L496' && matrix.freertos == 'ON' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
+        -S ${{ github.workspace }}/${{ matrix.freertos == 'ON' && 'src_tests/allocator' || '.' }}
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+    - name: Test allocator before and after FreeRTOS start
+      if: matrix.mcu == 'STM32L496' && matrix.freertos == 'ON'
+      run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
   build-arm-clang:
     name: arm/clang (${{ matrix.mcu }}) on ubuntu-latest
@@ -155,6 +164,10 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build-clang-${{ matrix.mcu }}" >> "$GITHUB_OUTPUT"
 
+    - name: Install Cortex-M emulator
+      if: matrix.mcu == 'STM32L496'
+      run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+
     - name: Configure CMake
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
@@ -164,7 +177,12 @@ jobs:
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
         -DUNI_HAL_HSE_VALUE=8000000
-        -S ${{ github.workspace }}
+        ${{ matrix.mcu == 'STM32L496' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
+        -S ${{ github.workspace }}/src_tests/allocator
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+    - name: Test allocator and picolibc TLS
+      if: matrix.mcu == 'STM32L496'
+      run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error

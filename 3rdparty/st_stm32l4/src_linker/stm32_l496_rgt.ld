@@ -52,12 +52,6 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Highest address of the user mode stack */
-_estack = ORIGIN(RAM) + LENGTH(RAM);    /* end of RAM */
-/* Generate a link error if heap and stack don't fit into RAM */
-_Min_Heap_Size = 0x200;      /* required amount of heap  */
-_Min_Stack_Size = 0x400; /* required amount of stack */
-
 /* Specify the memory areas */
 MEMORY
 {
@@ -65,6 +59,12 @@ RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 256K
 RAM2 (xrw)      : ORIGIN = 0x10000000, LENGTH = 64K
 FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 1024K
 }
+
+/* Highest address of the user mode stack */
+PROVIDE (_estack = ORIGIN(RAM) + LENGTH(RAM));    /* end of RAM */
+/* Generate a link error if heap and stack don't fit into RAM */
+_Min_Heap_Size = 0x200;      /* required amount of heap  */
+_Min_Stack_Size = 0x400; /* required amount of stack */
 
 /* Define output sections */
 SECTIONS
@@ -99,6 +99,7 @@ SECTIONS
   {
     . = ALIGN(8);
     *(.rodata)         /* .rodata sections (constants, strings, etc.) */
+    *(.got .got.*)     /* static GOT entries can be read directly from flash */
     *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
     . = ALIGN(8);
   } >FLASH
@@ -161,6 +162,31 @@ SECTIONS
   } >RAM AT> FLASH
 
   
+  /* The initial TLS block lives in SRAM. New tasks copy .tdata from flash. */
+  .tdata : ALIGN(__tls_align)
+  {
+    *(.tdata .tdata.* .gnu.linkonce.td.*)
+  } >RAM AT> FLASH
+  .tbss (NOLOAD) :
+  {
+    *(.tbss .tbss.* .gnu.linkonce.tb.* .tcommon)
+  } >RAM
+
+  __tls_base = ADDR(.tdata);
+  __tls_align = MAX(1, MAX(ALIGNOF(.tdata), ALIGNOF(.tbss)));
+  __tdata_source = LOADADDR(.tdata);
+  __tdata_size = SIZEOF(.tdata);
+  __tbss_offset = ADDR(.tbss) - __tls_base;
+  __tbss_size = SIZEOF(.tbss);
+  __tls_size = __tbss_offset + __tbss_size;
+  __arm32_tls_tcb_offset = MAX(8, __tls_align);
+
+  /* ld.bfd may leave the RAM cursor at .tbss start. lld already reserves it. */
+  .tbss_space (NOLOAD) :
+  {
+    . += MAX(ABSOLUTE(.), ADDR(.tbss) + SIZEOF(.tbss)) - ABSOLUTE(.);
+  } >RAM
+
   /* Uninitialized data section */
   . = ALIGN(4);
   .bss :
@@ -178,12 +204,14 @@ SECTIONS
   } >RAM
 
   /* User_heap_stack section, used to check that there is enough RAM left */
-  ._user_heap_stack :
+  ._user_heap_stack (NOLOAD) :
   {
     . = ALIGN(8);
     PROVIDE ( end = . );
     PROVIDE ( _end = . );
+    PROVIDE ( __heap_start = . );
     . = . + _Min_Heap_Size;
+    PROVIDE ( __heap_end = . );
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM

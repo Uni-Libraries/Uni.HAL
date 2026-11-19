@@ -58,6 +58,24 @@ target_sources(freertos_kernel INTERFACE
     "src_hooks/freertos_alloc.c"
 )
 
+if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC")
+    target_sources(freertos_kernel INTERFACE "src_hooks/freertos_libc_lock.c" "src_hooks/freertos_libc_heap.c")
+
+    include(CheckSymbolExists)
+    check_symbol_exists(__PICOLIBC__ "stdlib.h" UNI_HAL_HAS_PICOLIBC)
+    if(UNI_HAL_HAS_PICOLIBC)
+        # Picolibc puts its default locks and the global lock object in one archive member.
+        target_link_options(freertos_kernel INTERFACE
+            "LINKER:--wrap=__retarget_lock_acquire_recursive"
+            "LINKER:--wrap=__retarget_lock_release_recursive")
+    endif()
+
+    if(UNI_HAL_TARGET_MCU MATCHES "^STM32")
+        set(UNI_HAL_LIBC_HEAP_SIZE "8192" CACHE STRING "STM32 C library heap size in bytes")
+        target_compile_definitions(freertos_kernel INTERFACE "UNI_HAL_LIBC_HEAP_SIZE=(${UNI_HAL_LIBC_HEAP_SIZE})")
+    endif()
+endif()
+
 target_include_directories(freertos_kernel PUBLIC "include")
 target_include_directories(freertos_kernel PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/")
 
@@ -166,6 +184,15 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "#define configASSERT(x)  do { if((x) == 0){vAssertCalled(__LINE__, __FILE__);} } while(0) \n"
         "                                                                               \n"
 )
+
+if(UNI_HAL_HAS_PICOLIBC AND UNI_HAL_TARGET_MCU MATCHES "^STM32")
+    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
+        "#include <picolibc.h>\n"
+        "#if defined(PICOLIBC_TLS)\n"
+        "#define configUSE_PICOLIBC_TLS 1\n"
+        "#endif\n"
+    )
+endif()
 
 if(NOT UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
