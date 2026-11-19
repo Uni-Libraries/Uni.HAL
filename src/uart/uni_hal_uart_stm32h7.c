@@ -217,10 +217,12 @@ static void _uni_hal_usart_tx_trigger(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_i
         uni_hal_usart_context_t *ctx_fn = (uni_hal_usart_context_t *)ctx_fn_r;
         USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx_fn->instance);
         if (instance != nullptr) {
-            LL_USART_ClearFlag_TC(instance);
-            LL_USART_DisableIT_TC(instance);
-            LL_USART_ClearFlag_IDLE(instance);
-            LL_USART_EnableIT_TXE_TXFNF(instance);
+            // A previous IRQ can already have consumed the byte just enqueued. Preserve its TC.
+            const uint32_t mask = uni_hal_core_irq_pause();
+            if (UNI_HAL_USART_IsEnabledIT_RXNE(instance)) { // Driver IRQ sources are enabled as a group.
+                LL_USART_EnableIT_TXE_TXFNF(instance);
+            }
+            uni_hal_core_irq_resume(mask);
         }
     }
 }
@@ -277,17 +279,25 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
     if (LL_USART_IsEnabledIT_TXE_TXFNF(dev_handle) && LL_USART_IsActiveFlag_TXE_TXFNF(dev_handle)) {
         uint8_t data = 0U;
 
-        if (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
+        // Move the byte from software to the active transmission without exposing an idle gap.
+        const uint32_t mask = uni_hal_core_irq_pause();
+        const bool have_byte = uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken) != 0U;
+        const bool starting = have_byte && !ctx->in_transmission;
+        if (starting) {
+            ctx->in_transmission = true;
+        }
+        uni_hal_core_irq_resume(mask);
+
+        if (have_byte) {
             // We have data to send -> TXE path is active, TC interrupt must be off.
             LL_USART_DisableIT_TC(dev_handle);
 
-            if (!ctx->in_transmission) {
-                if (ctx_io->handlers.tx_start) {
-                    ctx_io->handlers.tx_start(ctx_io, ctx_io->handlers.tx_start_ctx);
-                }
-                ctx->in_transmission = true;
+            if (starting && ctx_io->handlers.tx_start) {
+                ctx_io->handlers.tx_start(ctx_io, ctx_io->handlers.tx_start_ctx);
             }
 
+            // Only a committed next byte supersedes a completion already latched in the hardware.
+            LL_USART_ClearFlag_TC(dev_handle);
             LL_USART_TransmitData8(dev_handle, data);
             ctx_io->stats.tx_transmited++;
         }
@@ -295,8 +305,11 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
             // No more bytes to write into TDR -> wait for last byte to fully shift out.
             LL_USART_DisableIT_TXE_TXFNF(dev_handle);
             if (ctx->in_transmission) {
-                LL_USART_ClearFlag_TC(dev_handle);
                 LL_USART_EnableIT_TC(dev_handle);
+            }
+            // A higher-priority producer may have triggered TXE between the pop and the mask.
+            if (!uni_hal_io_buffer_is_empty(&ctx_io->buf_tx)) {
+                LL_USART_EnableIT_TXE_TXFNF(dev_handle);
             }
         }
     }
@@ -314,8 +327,7 @@ static BaseType_t _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
             LL_USART_DisableIT_TC(dev_handle);
         }
         else if (uni_hal_io_buffer_is_empty(&ctx_io->buf_tx)) {
-            // no more bytes pending, end transmission
-            LL_USART_DisableIT_TXE_TXFNF(dev_handle);
+            // A concurrent enqueue can already have re-enabled TXE for the next burst.
             LL_USART_DisableIT_TC(dev_handle);
             ctx->in_transmission = false;
 
@@ -544,32 +556,23 @@ bool uni_hal_usart_irq_enable(uni_hal_usart_context_t *ctx, bool value) {
     if (uni_hal_uart_is_inited(ctx)) {
         USART_TypeDef *instance = _uni_hal_uart_handle_get(ctx->instance);
         if (instance != nullptr) {
+            const uint32_t mask = uni_hal_core_irq_pause();
             if (value) {
-                // RX path (used by higher-level UART drivers)
                 LL_USART_EnableIT_IDLE(instance);
                 UNI_HAL_USART_EnableIT_RXNE(instance);
-
-                // TX path is enabled on demand via tx_trigger.
-                LL_USART_DisableIT_TC(instance);
-                LL_USART_DisableIT_TXE_TXFNF(instance);
-                LL_USART_ClearFlag_TC(instance);
-            }
-            else {
-                // Stop generating interrupts first (prevents ISR storm during long ops)
+                if (ctx->in_transmission || !uni_hal_io_buffer_is_empty(&ctx->io->buf_tx)) {
+                    LL_USART_EnableIT_TXE_TXFNF(instance);
+                }
+            } else {
                 UNI_HAL_USART_DisableIT_RXNE(instance);
                 LL_USART_DisableIT_IDLE(instance);
-
                 LL_USART_DisableIT_TXE_TXFNF(instance);
                 LL_USART_DisableIT_TC(instance);
-
-                // Clear flags to avoid spurious pending IRQs on re-enable.
-                LL_USART_ClearFlag_TC(instance);
+                // An in-flight byte can finish while masked. Leave TC and the RS-485 state intact.
                 LL_USART_ClearFlag_IDLE(instance);
                 LL_USART_ClearFlag_ORE(instance);
-
-                // Best-effort: mark transmission inactive.
-                ctx->in_transmission = false;
             }
+            uni_hal_core_irq_resume(mask);
 
             result = true;
         }

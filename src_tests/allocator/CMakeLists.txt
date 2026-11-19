@@ -22,8 +22,8 @@ add_custom_command(TARGET allocator_regression POST_BUILD
 # The QEMU F405 board has the same Cortex-M4 and flash base, with 128 KiB of SRAM.
 # The allocator test uses the CPU and FreeRTOS, without accessing STM32 peripherals.
 option(UNI_HAL_TEST_ALLOCATOR_QEMU "Run the allocator on an emulated Cortex-M4" OFF)
-option(UNI_HAL_TEST_ADC_QEMU "Run the STM32 ADC regressions on an emulated Cortex-M" OFF)
-if(UNI_HAL_TEST_ALLOCATOR_QEMU OR UNI_HAL_TEST_ADC_QEMU)
+option(UNI_HAL_TEST_STM32_QEMU "Run the STM32 peripheral regressions on an emulated Cortex-M" OFF)
+if(UNI_HAL_TEST_ALLOCATOR_QEMU OR UNI_HAL_TEST_STM32_QEMU)
     find_program(QEMU_SYSTEM_ARM qemu-system-arm NO_CMAKE_FIND_ROOT_PATH REQUIRED)
     enable_testing()
 endif()
@@ -66,6 +66,9 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     target_sources(i2c_h7_recovery_link PRIVATE ../i2c_h7/link_recover.c)
 endif()
 
-if(UNI_HAL_TEST_ADC_QEMU)
+if(UNI_HAL_TEST_STM32_QEMU)
     add_subdirectory(../adc adc)
+    if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
+        add_subdirectory(../uart_h7 uart_h7)
+    endif()
 endif()
