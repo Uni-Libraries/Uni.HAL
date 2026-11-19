@@ -36,7 +36,7 @@ function(uni_hal_add_test test_path)
     set_target_properties(uni_hal_test_${test_name} PROPERTIES CXX_STANDARD 23)
     set_target_properties(uni_hal_test_${test_name} PROPERTIES CXX_STANDARD_REQUIRED ON)
 
-    catch_discover_tests(uni_hal_test_${test_name})
+    catch_discover_tests(uni_hal_test_${test_name} ${ARGN})
 endfunction()
 
 
@@ -50,3 +50,9 @@ uni_hal_add_test(dwt)
 uni_hal_add_test(i2c)
 uni_hal_add_test(can)
 add_subdirectory(i2c_transfer)
+
+uni_hal_add_test(rcc PROPERTIES TIMEOUT 10)
+target_include_directories(uni_hal_test_rcc SYSTEM PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/st_stm32l4/include_device"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/st_stm32l4/include_hal"
+)

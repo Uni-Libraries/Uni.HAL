@@ -167,6 +167,7 @@ typedef struct {
 // Functions
 //
 
+/** Store a copy of the startup and CSS recovery configuration. Call from a single writer. */
 bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config);
 
 /**

@@ -48,11 +48,14 @@ Uni.Common and nanoprintf are downloaded by CPM during the configuration.
 ## What the application has to get right
 
 **Start-up order.** `uni_hal_pwr_init()`, then `uni_hal_core_irq_init()`, then
-`uni_hal_rcc_stmXX_config_set()` and `uni_hal_rcc_init()`. Check the result of
-`uni_hal_rcc_init()`: when it is `false` the MCU runs from its internal oscillator and no
-peripheral clock has its nominal value. The STM32L4 driver does not fail there: without HSE it
-feeds the PLL from HSI, and `uni_hal_rcc_stm32l4_status_get()` tells which oscillators came up.
-SysTick runs from `uni_hal_rcc_init()` on, and the drivers use it for their timeouts.
+`uni_hal_rcc_stmXX_config_set()` and `uni_hal_rcc_init()`. Check the result before starting
+peripherals. On STM32H7, a failure leaves the nominal peripheral clocks unavailable.
+On STM32L4, loss of HSE triggers an attempt to reproduce the configured PLL
+frequency from HSI. If the PLL cannot deliver that frequency, the driver can use HSI directly.
+An application that requires the PLL should check `pll_inited` as well as `sys_inited` in
+`uni_hal_rcc_stm32l4_status_get()`. The CSS callback runs in NMI context. If HSE fails
+during initialization, `uni_hal_rcc_init()` finishes recovery after the handler returns.
+The drivers use SysTick for their timeouts.
 
 **Dynamic memory with FreeRTOS.** Blocks from the C library (`malloc`, `calloc`,
 `realloc`, aligned allocations and the newlib reentrant functions) belong to the C
@@ -141,7 +144,8 @@ ctest --test-dir build
 ```
 
 The host suite covers DWT tick arithmetic, I2C timing and CAN timings and data lengths. It
-also runs the STM32L496 I2C driver with controlled interrupts and deadlines.
+also runs the STM32L496 I2C driver with controlled interrupts and deadlines, and exercises
+clock recovery against an RCC register model with a frozen SysTick.
 
 The allocator regression links a firmware executable and checks the providers of the libc
 and FreeRTOS symbols in its linker map. With Arm GCC and `qemu-system-arm` on the path, run

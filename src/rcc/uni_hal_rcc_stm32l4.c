@@ -7,11 +7,9 @@
 
 // ST
 #include <stm32l4xx_ll_bus.h>
-#include <stm32l4xx_ll_cortex.h>
 #include <stm32l4xx_ll_pwr.h>
 #include <stm32l4xx_ll_rcc.h>
 #include <stm32l4xx_ll_system.h>
-#include <stm32l4xx_ll_utils.h>
 
 // Uni.Common
 #include <uni_common.h>
@@ -29,8 +27,11 @@
 // Globals
 //
 
-uni_hal_rcc_stm32l4_config_t *g_uni_hal_rcc_config = NULL;
-uni_hal_rcc_stm32l4_status_t g_uni_hal_rcc_status = {0};
+static uni_hal_rcc_stm32l4_config_t rcc_configs[2];
+static const uni_hal_rcc_stm32l4_config_t *volatile g_uni_hal_rcc_config;
+static volatile uni_hal_rcc_stm32l4_status_t g_uni_hal_rcc_status;
+static volatile bool rcc_init_in_progress;
+static volatile bool css_during_init;
 
 /**
  * Reset flags (upper byte of RCC_CSR) as found at start-up, before they were cleared
@@ -53,76 +54,41 @@ UNI_COMMON_COMPILER_WEAK const uint32_t MSIRangeTable[12] = {
 // Private
 //
 
-static uint32_t _uni_hal_rcc_pll_get_m(uint32_t val)
-{
-    uint32_t result  = LL_RCC_PLLM_DIV_1;
-    switch (val)
-    {
-    case 1:
-        result = LL_RCC_PLLM_DIV_1;
-        break;
-    case 2:
-        result = LL_RCC_PLLM_DIV_2;
-        break;
-    case 3:
-        result = LL_RCC_PLLM_DIV_3;
-        break;
-    case 4:
-        result = LL_RCC_PLLM_DIV_4;
-        break;
-    case 5:
-        result = LL_RCC_PLLM_DIV_5;
-        break;
-    case 6:
-        result = LL_RCC_PLLM_DIV_6;
-        break;
-    case 7:
-        result = LL_RCC_PLLM_DIV_7;
-        break;
-    case 8:
-        result = LL_RCC_PLLM_DIV_8;
-        break;
-    default:
-        break;
-    }
-    return result;
+typedef uint32_t (*rcc_read_flag_t)(void);
+
+// Flash latency changes take effect within a few bus accesses. PLL lock time is at most
+// 40 us (DS11585, table 62). Allow 4096 register polls in NMI without relying on interrupts.
+static bool _uni_hal_rcc_poll(rcc_read_flag_t read_flag, uint32_t expected, uint32_t polls) {
+    do {
+        if (read_flag() == expected) {
+            return true;
+        }
+    } while (--polls);
+    return false;
 }
 
-
-static uint32_t _uni_hal_rcc_pll_get_n(uint32_t val)
-{
-    uint32_t result  = 8;
-    if (val >= 8 && val <= 127)
-    {
-        result = val;
+static bool _uni_hal_rcc_wait(rcc_read_flag_t read_flag, uint32_t expected, uint32_t timeout_ms, bool recovery) {
+    if (recovery) {
+        return _uni_hal_rcc_poll(read_flag, expected, timeout_ms ? 4096U : 1U);
     }
-    return result;
-}
 
-
-static uint32_t _uni_hal_rcc_pll_get_r(uint32_t val)
-{
-    uint32_t result  = LL_RCC_PLLR_DIV_2;
-    switch (val)
-    {
-    case 2:
-        result = LL_RCC_PLLR_DIV_2;
-        break;
-    case 4:
-        result = LL_RCC_PLLR_DIV_4;
-        break;
-    case 6:
-        result = LL_RCC_PLLR_DIV_6;
-        break;
-    case 8:
-        result = LL_RCC_PLLR_DIV_8;
-        break;
-    default:
-        break;
+    // Also bound startup when the SysTick IRQ is masked. At up to 80 MHz a tick should
+    // advance well before 80 000 polls. A working tick retains the configured timeout.
+    uint32_t start = uni_hal_systick_get_ms();
+    uint32_t last_tick = start;
+    uint32_t polls = 0;
+    while (read_flag() != expected) {
+        uint32_t now = uni_hal_systick_get_ms();
+        if (now != last_tick) {
+            last_tick = now;
+            polls = 0;
+        }
+        if (now - start >= timeout_ms || ++polls >= 80'000U) {
+            return false;
+        }
     }
-    return result;
+    return true;
 }
-
 
 /**
  * Get HCLK frequency
@@ -154,10 +120,9 @@ static uint32_t _uni_hal_rcc_get_pclk2_freq(void) {
  * Configure FLASH latency
  * TODO: move out
  */
-static void _uni_hal_stm_rcc_flash(void) {
-    LL_FLASH_SetLatency(LL_FLASH_LATENCY_4);
-    while (LL_FLASH_GetLatency() != LL_FLASH_LATENCY_4) {
-    }
+static bool _uni_hal_stm_rcc_flash(uint32_t latency) {
+    LL_FLASH_SetLatency(latency);
+    return _uni_hal_rcc_poll(LL_FLASH_GetLatency, latency, 16U);
 }
 
 /**
@@ -166,10 +131,10 @@ static void _uni_hal_stm_rcc_flash(void) {
  * HCLK is known the surplus only slows every flash access down.
  * @param hclk_hz HCLK frequency
  */
-static void _uni_hal_stm_rcc_flash_adjust(uint32_t hclk_hz) {
+static bool _uni_hal_stm_rcc_flash_adjust(uint32_t hclk_hz) {
     // the limits below are those of voltage range 1 (RM0351, table 12)
     if (LL_PWR_GetRegulVoltageScaling() != LL_PWR_REGU_VOLTAGE_SCALE1) {
-        return;
+        return true;
     }
 
     uint32_t latency = LL_FLASH_LATENCY_4;
@@ -186,9 +151,7 @@ static void _uni_hal_stm_rcc_flash_adjust(uint32_t hclk_hz) {
         latency = LL_FLASH_LATENCY_3;
     }
 
-    LL_FLASH_SetLatency(latency);
-    while (LL_FLASH_GetLatency() != latency) {
-    }
+    return _uni_hal_stm_rcc_flash(latency);
 }
 
 
@@ -198,7 +161,6 @@ static void _uni_hal_stm_rcc_flash_adjust(uint32_t hclk_hz) {
  * @return true on success
  */
 static bool _uni_hal_stm_rcc_hse() {
-    bool result = false;
 
     if (g_uni_hal_rcc_config->hse_bypass)
     {
@@ -209,19 +171,8 @@ static bool _uni_hal_stm_rcc_hse() {
     LL_RCC_HSE_Enable();
 
     // Wait till HSE is ready
-    uint32_t ticks = uni_hal_systick_get_ms();
-    while (!LL_RCC_HSE_IsReady() && (uni_hal_systick_get_ms() - ticks) < g_uni_hal_rcc_config->timeout.hse) {
-    }
-
-    // save HSE status
-    result = g_uni_hal_rcc_status.hse_inited = LL_RCC_HSE_IsReady();
-
-    // enable HSE
-    if (result && g_uni_hal_rcc_config->hse_css) {
-        LL_RCC_HSE_EnableCSS();
-    }
-
-    return result;
+    g_uni_hal_rcc_status.hse_inited = _uni_hal_rcc_wait(LL_RCC_HSE_IsReady, 1U, g_uni_hal_rcc_config->timeout.hse, false);
+    return g_uni_hal_rcc_status.hse_inited;
 }
 
 /**
@@ -229,17 +180,13 @@ static bool _uni_hal_stm_rcc_hse() {
  * @param ctx RCC context
  * @return true on success
  */
-static bool _uni_hal_stm_rcc_hsi() {
+static bool _uni_hal_stm_rcc_hsi(bool recovery) {
     bool result = false;
 
     LL_RCC_HSI_Enable();
 
     /* Wait till HSI is ready */
-    uint32_t ticks = uni_hal_systick_get_ms();
-    while (!LL_RCC_HSI_IsReady() && (uni_hal_systick_get_ms() - ticks) < g_uni_hal_rcc_config->timeout.hsi) {
-    }
-
-    result = g_uni_hal_rcc_status.hsi_inited = LL_RCC_HSI_IsReady();
+    result = g_uni_hal_rcc_status.hsi_inited = _uni_hal_rcc_wait(LL_RCC_HSI_IsReady, 1U, g_uni_hal_rcc_config->timeout.hsi, recovery);
 
     if (result) {
         LL_RCC_HSI_SetCalibTrimming(64);
@@ -297,13 +244,8 @@ static bool _uni_hal_stm_rcc_lse() {
         LL_RCC_LSE_Enable();
 
         /* Wait till LSE is ready */
-        uint32_t ticks = uni_hal_systick_get_ms();
-        while (!LL_RCC_LSE_IsReady() && (uni_hal_systick_get_ms() - ticks) < g_uni_hal_rcc_config->timeout.lse) {
-        }
+        result = g_uni_hal_rcc_status.lse_inited = _uni_hal_rcc_wait(LL_RCC_LSE_IsReady, 1U, g_uni_hal_rcc_config->timeout.lse, false);
         uni_hal_pwr_stm_set_backup_access(false);
-
-        // Check LSE_IsReady flag
-        result = g_uni_hal_rcc_status.lse_inited = LL_RCC_LSE_IsReady();
 
         // Try one time to reset Backup Domain and init LSE again
         if (!result && g_uni_hal_rcc_config->lse_backup_reset && !g_uni_hal_rcc_status.lse_backup_reseted) {
@@ -328,107 +270,157 @@ static bool _uni_hal_stm_rcc_lsi() {
     LL_RCC_LSI_Enable();
 
     // Wait till LSE is ready
-    uint32_t ticks = uni_hal_systick_get_ms();
-    while (!LL_RCC_LSI_IsReady() && (uni_hal_systick_get_ms() - ticks) < g_uni_hal_rcc_config->timeout.lsi) {
-    }
-
-    result = g_uni_hal_rcc_status.lsi_inited = LL_RCC_LSI_IsReady();
+    result = g_uni_hal_rcc_status.lsi_inited = _uni_hal_rcc_wait(LL_RCC_LSI_IsReady, 1U, g_uni_hal_rcc_config->timeout.lsi, false);
 
 
     return result;
 }
 
-/**
- * Configure phase locked loops
- * @param ctx RCC context
- * @return true on success
- */
-static bool _uni_hal_stm_rcc_pll() {
-    bool result = false;
-
-    uint32_t clock_source = LL_RCC_PLLSOURCE_NONE;
-    uint32_t pll_division = 1;
-
-    if (g_uni_hal_rcc_status.hse_inited) {
-        clock_source = LL_RCC_PLLSOURCE_HSE;
-        pll_division = 1;
-    } else if (g_uni_hal_rcc_status.hsi_inited) {
-        clock_source = LL_RCC_PLLSOURCE_HSI;
-        pll_division = HSI_VALUE / HSE_VALUE;
+// Convert the board's HSE-based PLL configuration to legal factors for the selected source.
+static bool _uni_hal_rcc_pll_factors(uni_hal_rcc_stm32l4_config_pll_t *pll, uint32_t source) {
+    if (pll->m < 1 || pll->m > 8 || pll->n < 8 || pll->n > 86 ||
+        pll->r < 2 || pll->r > 8 || pll->r % 2 != 0) {
+        return false;
     }
 
-    if (clock_source != LL_RCC_PLLSOURCE_NONE) {
-        //PPL1
-        LL_RCC_PLL_ConfigDomain_SYS(clock_source,
-            _uni_hal_rcc_pll_get_m(g_uni_hal_rcc_config->pll[0].m * pll_division),
-            _uni_hal_rcc_pll_get_n(g_uni_hal_rcc_config->pll[0].n),
-            _uni_hal_rcc_pll_get_r(g_uni_hal_rcc_config->pll[0].r));
-        LL_RCC_PLL_EnableDomain_SYS();
+    // Validate against DS11585 table 62 without rounding a fractional clock down.
+    uint64_t vco = (uint64_t)HSE_VALUE * pll->n;  // VCO frequency times M
+    bool range1 = LL_PWR_GetRegulVoltageScaling() == LL_PWR_REGU_VOLTAGE_SCALE1;
+    uint32_t max_vco = range1 ? 344'000'000U : 128'000'000U;
+    uint32_t max_sys = range1 ? 80'000'000U : 26'000'000U;
+    if (HSE_VALUE < 4'000'000U * pll->m || HSE_VALUE > 16'000'000U * pll->m ||
+        vco < 64'000'000U * pll->m || vco > (uint64_t)max_vco * pll->m ||
+        vco > (uint64_t)max_sys * pll->m * pll->r) {
+        return false;
+    }
+    if (source == LL_RCC_PLLSOURCE_HSE) {
+        return true;
+    }
 
-        LL_RCC_PLL_Enable();
-
-        /* Wait till PLL is ready */
-        uint32_t ticks = uni_hal_systick_get_ms();
-        while (!LL_RCC_PLL_IsReady() && (uni_hal_systick_get_ms() - ticks) < g_uni_hal_rcc_config->timeout.pll) {
+    // Keep the VCO (and therefore every output) exact. Prefer the original N.
+    uint64_t scaled_m = (uint64_t)HSI_VALUE * pll->m;
+    if (scaled_m % HSE_VALUE == 0 && scaled_m / HSE_VALUE <= 8) {
+        pll->m = (uint32_t)(scaled_m / HSE_VALUE);
+        return true;
+    }
+    for (uint32_t m = 1; m <= 8; ++m) {
+        if (HSI_VALUE < 4'000'000U * m || HSI_VALUE > 16'000'000U * m) {
+            continue;
         }
-
-        result = g_uni_hal_rcc_status.pll_inited = LL_RCC_PLL_IsReady();
+        uint64_t scaled_n = vco * m;
+        uint32_t n = (uint32_t)(scaled_n / scaled_m);
+        if (scaled_n % scaled_m == 0 && n >= 8 && n <= 86) {
+            pll->m = m;
+            pll->n = n;
+            return true;
+        }
     }
-
-    return result;
+    return false;
 }
 
-/**
- * Configure device system clock
- * @param ctx RCC context
- * @return true on success
- */
-static bool _uni_hal_stm_rcc_sysclk() {
-    bool result = false;
+static bool _uni_hal_stm_rcc_pll(bool recovery) {
+    g_uni_hal_rcc_status.pll_inited = false;
+    uint32_t source = g_uni_hal_rcc_status.hse_inited ? LL_RCC_PLLSOURCE_HSE : LL_RCC_PLLSOURCE_HSI;
+    uni_hal_rcc_stm32l4_config_pll_t pll = g_uni_hal_rcc_config->pll[0];
+    if ((!g_uni_hal_rcc_status.hse_inited && !g_uni_hal_rcc_status.hsi_inited) ||
+        !_uni_hal_rcc_pll_factors(&pll, source)) {
+        return false;
+    }
+    uint32_t divider = (pll.m - 1U) << RCC_PLLCFGR_PLLM_Pos;
+    uint32_t output = (pll.r / 2U - 1U) << RCC_PLLCFGR_PLLR_Pos;
+    uint32_t timeout = g_uni_hal_rcc_config->timeout.pll;
+    if (LL_RCC_GetSysClkSource() == LL_RCC_SYS_CLKSOURCE_STATUS_PLL) {
+        // A running system PLL cannot be disabled or rewritten.
+        g_uni_hal_rcc_status.pll_inited = LL_RCC_PLL_IsReady() && LL_RCC_PLL_GetMainSource() == source &&
+            LL_RCC_PLL_GetDivider() == divider && LL_RCC_PLL_GetN() == pll.n && LL_RCC_PLL_GetR() == output;
+        return g_uni_hal_rcc_status.pll_inited;
+    }
+    LL_RCC_PLL_Disable();
+    if (!_uni_hal_rcc_wait(LL_RCC_PLL_IsReady, 0U, timeout, recovery)) {
+        return false;
+    }
+    // Source and M are shared with both SAI PLLs and are locked while either runs.
+    if ((RCC->CR & (RCC_CR_PLLSAI1ON | RCC_CR_PLLSAI1RDY | RCC_CR_PLLSAI2ON | RCC_CR_PLLSAI2RDY)) &&
+        (LL_RCC_PLL_GetMainSource() != source || LL_RCC_PLL_GetDivider() != divider)) {
+        return false;
+    }
+    LL_RCC_PLL_ConfigDomain_SYS(source, divider, pll.n, output);
+    LL_RCC_PLL_EnableDomain_SYS();
+    LL_RCC_PLL_Enable();
+    g_uni_hal_rcc_status.pll_inited = _uni_hal_rcc_wait(LL_RCC_PLL_IsReady, 1U, timeout, recovery);
+    if (!g_uni_hal_rcc_status.pll_inited) {
+        LL_RCC_PLL_Disable();
+    }
+    return g_uni_hal_rcc_status.pll_inited;
+}
 
-    uint32_t clock_source = 0;
-    uint32_t clock_source_status = 0;
+// Rescale the existing time base after a clock change, including the automatic CSS switch.
+// Leave NVIC priority, interrupt enable and clock selection under their current owner's control.
+static void _uni_hal_rcc_update_timebase(void) {
+    uint32_t old_hclk = SystemCoreClock;
+    uint32_t old_reload = SysTick->LOAD;
+    SystemCoreClockUpdate();
+    if (old_hclk == SystemCoreClock || old_hclk == 0 || old_reload == 0) {
+        return;
+    }
 
+    // Both possible SysTick sources scale with HCLK. Preserve the active tick period,
+    // including an RTOS-configured rate, even if CSS temporarily selected MSI.
+    uint64_t scaled = (uint64_t)(old_reload + 1U) * SystemCoreClock;
+    uint64_t period = (scaled + old_hclk / 2U) / old_hclk;
+    if (period > SysTick_LOAD_RELOAD_Msk + 1U) {
+        period = SysTick_LOAD_RELOAD_Msk + 1U;
+    }
+    SysTick->LOAD = period > 1U ? (uint32_t)period - 1U : 1U;
+    SysTick->VAL = 0;
+}
+
+static bool _uni_hal_stm_rcc_sysclk(bool recovery) {
+    uint32_t source;
+    uint32_t expected;
+    g_uni_hal_rcc_status.sys_inited = false;
     if (g_uni_hal_rcc_status.pll_inited) {
-        clock_source = LL_RCC_SYS_CLKSOURCE_PLL;
-        clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_PLL;
-    } else if (g_uni_hal_rcc_status.hse_inited) {
-        clock_source = LL_RCC_SYS_CLKSOURCE_HSE;
-        clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_HSE;
+        source = LL_RCC_SYS_CLKSOURCE_PLL;
+        expected = LL_RCC_SYS_CLKSOURCE_STATUS_PLL;
+    } else if (g_uni_hal_rcc_status.hse_inited && HSE_VALUE <= 48'000'000U &&
+               (LL_PWR_GetRegulVoltageScaling() == LL_PWR_REGU_VOLTAGE_SCALE1 || HSE_VALUE <= 26'000'000U)) {
+        source = LL_RCC_SYS_CLKSOURCE_HSE;
+        expected = LL_RCC_SYS_CLKSOURCE_STATUS_HSE;
     } else if (g_uni_hal_rcc_status.hsi_inited) {
-        clock_source = LL_RCC_SYS_CLKSOURCE_HSI;
-        clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_HSI;
+        source = LL_RCC_SYS_CLKSOURCE_HSI;
+        expected = LL_RCC_SYS_CLKSOURCE_STATUS_HSI;
+    } else {
+        _uni_hal_rcc_update_timebase();
+        return false;
     }
 
-    // Reconfigure sysclk
-    LL_RCC_SetSysClkSource(clock_source);
-
-    /* Wait till System clock is ready */
-    uint32_t ticks = uni_hal_systick_get_ms();
-    while (LL_RCC_GetSysClkSource() != clock_source_status && (uni_hal_systick_get_ms() - ticks) <
-            g_uni_hal_rcc_config->timeout.pll) {
+    LL_RCC_SetSysClkSource(source);
+    if (!_uni_hal_rcc_wait(LL_RCC_GetSysClkSource, expected, g_uni_hal_rcc_config->timeout.pll, recovery)) {
+        // Cancel an unacknowledged request so the clock cannot switch after we return.
+        LL_RCC_SetSysClkSource(LL_RCC_GetSysClkSource() >> RCC_CFGR_SWS_Pos);
+        _uni_hal_rcc_update_timebase();
+        return false;
     }
 
-    result = LL_RCC_GetSysClkSource() == clock_source_status;
-    g_uni_hal_rcc_status.sys_inited = result;
+    LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
+    LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
+    LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
+    _uni_hal_rcc_update_timebase();
+    g_uni_hal_rcc_status.sys_inited = _uni_hal_stm_rcc_flash_adjust(SystemCoreClock);
+    return g_uni_hal_rcc_status.sys_inited;
+}
 
-    if (result) {
-        // Set prescalers
-        LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
-        LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
-        LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
-
-        // Update sysclk value
-        SystemCoreClockUpdate();
-
-        // the clock is final now: drop the wait states it does not need
-        _uni_hal_stm_rcc_flash_adjust(_uni_hal_rcc_get_hclk_freq());
-
-        // Reconfigure systick
-        _uni_hal_rcc_systick();
+static bool _uni_hal_rcc_recover(void) {
+    g_uni_hal_rcc_status.hse_inited = false;
+    g_uni_hal_rcc_status.pll_inited = false;
+    g_uni_hal_rcc_status.sys_inited = false;
+    _uni_hal_stm_rcc_hsi(true);
+    if (!_uni_hal_stm_rcc_flash(LL_FLASH_LATENCY_4)) {
+        _uni_hal_rcc_update_timebase();
+        return false;
     }
-
-    return result;
+    _uni_hal_stm_rcc_pll(true);
+    return _uni_hal_stm_rcc_sysclk(true);
 }
 
 /**
@@ -518,17 +510,29 @@ static uint32_t _uni_hal_rcc_apb2_prescaler_get(){
 //
 
 bool uni_hal_rcc_init() {
-    bool result = false;
+    if (!g_uni_hal_rcc_config) {
+        return false;
+    }
+
+    bool was_inited = g_uni_hal_rcc_status.inited;
+    css_during_init = false;
+    rcc_init_in_progress = true;
+    g_uni_hal_rcc_status = (uni_hal_rcc_stm32l4_status_t){
+        .lse_backup_reseted = g_uni_hal_rcc_status.lse_backup_reseted
+    };
 
     // enable configuration clocking
     uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_SYSCFG, true);
     uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_PWR, true);
 
     // set flash latency
-    _uni_hal_stm_rcc_flash();
-
-    // initialize systick
-    _uni_hal_rcc_systick();
+    if (!_uni_hal_stm_rcc_flash(LL_FLASH_LATENCY_4) || (!was_inited && !_uni_hal_rcc_systick())) {
+        rcc_init_in_progress = false;
+        if (css_during_init) {
+            _uni_hal_rcc_update_timebase();
+        }
+        return false;
+    }
 
     // basic settings
     _uni_hal_rcc_update_status_reg();
@@ -541,7 +545,7 @@ bool uni_hal_rcc_init() {
     }
 
     // HSI
-    _uni_hal_stm_rcc_hsi();
+    _uni_hal_stm_rcc_hsi(false);
 
     // LSE
     if (g_uni_hal_rcc_config->lse_enable) {
@@ -552,18 +556,25 @@ bool uni_hal_rcc_init() {
     _uni_hal_stm_rcc_lsi();
 
     // PLL
-    _uni_hal_stm_rcc_pll();
+    _uni_hal_stm_rcc_pll(false);
 
-    // SYSCLK
-    _uni_hal_stm_rcc_sysclk();
-
-    // PERIPHERIALS
-    _uni_hal_stm_rcc_peripherials();
-
-    result = true;
-    g_uni_hal_rcc_status.inited = true;
-
-    return result;
+    // Arm CSS before switching away from the current system clock. If the NMI
+    // interrupts this sequence, it records the fault and this invocation owns recovery.
+    if (g_uni_hal_rcc_status.hse_inited && g_uni_hal_rcc_config->hse_css) {
+        LL_RCC_HSE_EnableCSS();
+    }
+    if (_uni_hal_stm_rcc_sysclk(false)) {
+        _uni_hal_stm_rcc_peripherials();
+        g_uni_hal_rcc_status.inited = true;
+    }
+    rcc_init_in_progress = false;
+    if (css_during_init) {
+        g_uni_hal_rcc_status.inited = _uni_hal_rcc_recover();
+        if (g_uni_hal_rcc_status.inited) {
+            _uni_hal_stm_rcc_peripherials();
+        }
+    }
+    return g_uni_hal_rcc_status.inited;
 }
 
 
@@ -1229,12 +1240,15 @@ uni_hal_rcc_stm32l4_status_t uni_hal_rcc_stm32l4_status_get(void) {
 
 bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config)
 {
-    bool result = false;
-    if (config != NULL) {
-        g_uni_hal_rcc_config = config;
-        result = true;
+    if (!config) {
+        return false;
     }
-    return result;
+    // NMI may preempt the copy. Publish a complete snapshot with one pointer store.
+    uni_hal_rcc_stm32l4_config_t *next = g_uni_hal_rcc_config == &rcc_configs[0] ? &rcc_configs[1] : &rcc_configs[0];
+    *next = *config;
+    __DMB();
+    g_uni_hal_rcc_config = next;
+    return true;
 }
 
 
@@ -1321,15 +1335,17 @@ UNI_COMMON_COMPILER_WEAK void uni_hal_rcc_css_callback(void) {
 void NMI_Handler(void) {
     if (LL_RCC_IsActiveFlag_HSECSS()) {
         LL_RCC_ClearFlag_HSECSS();
-        g_uni_hal_rcc_config->hse_enable = false;
-
-        g_uni_hal_rcc_status.hse_inited = false;
-        g_uni_hal_rcc_status.pll_inited = false;
-        g_uni_hal_rcc_status.sys_inited = false;
-
-        _uni_hal_stm_rcc_pll();
-        _uni_hal_stm_rcc_sysclk();
-
+        if (rcc_init_in_progress) {
+            css_during_init = true;
+            g_uni_hal_rcc_status.hse_inited = false;
+            g_uni_hal_rcc_status.pll_inited = false;
+            g_uni_hal_rcc_status.sys_inited = false;
+            g_uni_hal_rcc_status.inited = false;
+            // Init owns the in-flight HCLK/reload pair and will finish rescaling it.
+        } else if (g_uni_hal_rcc_config) {
+            bool was_inited = g_uni_hal_rcc_status.inited;
+            g_uni_hal_rcc_status.inited = _uni_hal_rcc_recover() && was_inited;
+        }
         uni_hal_rcc_css_callback();
     }
 }
