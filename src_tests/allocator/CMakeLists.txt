@@ -29,7 +29,7 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
     find_program(QEMU_SYSTEM_ARM qemu-system-arm NO_CMAKE_FIND_ROOT_PATH REQUIRED)
     enable_testing()
     uni_hal_add_executable(allocator_qemu)
-    target_sources(allocator_qemu PRIVATE main.c qemu_main.c)
+    target_sources(allocator_qemu PRIVATE main.c qemu_main.c ../io/freertos_buffers.c)
     target_compile_options(allocator_qemu PRIVATE -fno-builtin)
     target_link_options(allocator_qemu PRIVATE
         "LINKER:--defsym,_estack=0x20020000" "LINKER:--wrap=main")

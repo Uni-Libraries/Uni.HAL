@@ -76,7 +76,9 @@ bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t *ctx) {
     if (ctx && !ctx->initialized && ctx->io /*&& ctx->timer*/) {
         uni_hal_segger_rtt_init();
 
-        uni_hal_io_init(ctx->io);
+        if (!uni_hal_io_init(ctx->io)) {
+            return false;
+        }
 
         uni_hal_tim_init(ctx->timer);
         uni_hal_tim_register_callback(ctx->timer, _uni_hal_segger_rtt_stdio_timer, ctx);

@@ -73,7 +73,7 @@ jobs:
       run: ctest --build-config Release --output-on-failure --no-tests=error
 
   build-arm-gcc:
-    name: arm/gcc (${{ matrix.mcu }}, FreeRTOS ${{ matrix.freertos }}, CAN FD ${{ matrix.can_fd }}) on ubuntu-latest
+    name: arm/gcc (${{ matrix.mcu }}, FreeRTOS ${{ matrix.freertos }}, CAN FD ${{ matrix.can_fd }}${{ matrix.static_allocation == 'OFF' && ', dynamic allocation only' || '' }}) on ubuntu-latest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -81,11 +81,18 @@ jobs:
         mcu: [STM32H743, STM32L496]
         freertos: ["ON", "OFF"]
         can_fd: ["OFF"]
+        static_allocation: ["ON"]
         build_type: [Release]
         include:
           - mcu: STM32H743
             freertos: "ON"
             can_fd: "ON"
+            static_allocation: "ON"
+            build_type: Release
+          - mcu: STM32L496
+            freertos: "ON"
+            can_fd: "OFF"
+            static_allocation: "OFF"
             build_type: Release
 
     steps:
@@ -102,7 +109,7 @@ jobs:
         mkdir -p "${TOOLCHAIN_DIR}"
         tar -xf "${TOOLCHAIN_TAR}" -C "${TOOLCHAIN_DIR}" --strip-components=1
         
-        echo "${TOOLCHAIN_DIR}/bin" >> $GITHUB_PATH
+        echo "${TOOLCHAIN_DIR}/bin" >> "$GITHUB_PATH"
 
     - name: Install Cortex-M emulator
       if: matrix.mcu == 'STM32L496' && matrix.freertos == 'ON'
@@ -112,7 +119,7 @@ jobs:
       id: strings
       shell: bash
       run: |
-        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.freertos }}-${{ matrix.can_fd }}" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.freertos }}-${{ matrix.can_fd }}-${{ matrix.static_allocation }}" >> "$GITHUB_OUTPUT"
 
     - name: Configure CMake
       run: >
@@ -123,13 +130,14 @@ jobs:
         -DUNI_HAL_HSE_VALUE=8000000
         -DUNI_HAL_USE_FREERTOS=${{ matrix.freertos }}
         -DUNI_HAL_CAN_USE_FD=${{ matrix.can_fd }}
+        ${{ matrix.static_allocation == 'OFF' && format('-DUNI_HAL_RTOS_CONFIG_EXTRA={0}/src_tests/config/freertos_dynamic_only.h', github.workspace) || '' }}
         ${{ matrix.mcu == 'STM32L496' && matrix.freertos == 'ON' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
         -S ${{ github.workspace }}/${{ matrix.freertos == 'ON' && 'src_tests/allocator' || '.' }}
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Test allocator before and after FreeRTOS start
+    - name: Test the allocator and FreeRTOS IO buffers
       if: matrix.mcu == 'STM32L496' && matrix.freertos == 'ON'
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
@@ -156,7 +164,7 @@ jobs:
         mkdir -p "${TOOLCHAIN_DIR}"
         tar -xf "${TOOLCHAIN_TAR}" -C "${TOOLCHAIN_DIR}" --strip-components=1
         
-        echo "${TOOLCHAIN_DIR}/bin" >> $GITHUB_PATH
+        echo "${TOOLCHAIN_DIR}/bin" >> "$GITHUB_PATH"
 
     - name: Set reusable strings
       id: strings
@@ -183,6 +191,6 @@ jobs:
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Test allocator and picolibc TLS
+    - name: Test the allocator, picolibc TLS and FreeRTOS IO buffers
       if: matrix.mcu == 'STM32L496'
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error

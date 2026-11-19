@@ -67,6 +67,11 @@ uses ordinary RAM on L496 and section `.RAM_D1` on H743. An application supplyin
 its own `_sbrk` (or picolibc `sbrk`) controls its own pool. On Zynq, the BSP uses
 the linker script's `_HEAP_SIZE` (64 KiB by default).
 
+With `configSUPPORT_STATIC_ALLOCATION=0`, the RX and TX stream buffers created by
+`uni_hal_io_init()` use the FreeRTOS heap. Each configured size includes one reserved
+byte. Stop tasks and interrupt handlers that use the context before calling
+`uni_hal_io_deinit()` to release both buffers.
+
 **Interrupt priorities.** A handler that uses a FreeRTOS `...FromISR()` function must not have
 a priority above `configMAX_SYSCALL_INTERRUPT_PRIORITY`, which is 4 here. Where a driver takes
 the priority from its context (`isr_priority`, `irq_priority`), set it to 4 or a larger number.
@@ -158,3 +163,9 @@ cmake -S src_tests/allocator -B build-allocator \
 cmake --build build-allocator
 ctest --test-dir build-allocator --output-on-failure
 ```
+
+The same emulated task checks RX and TX capacity, data transfer, reinitialisation
+and cleanup. To exercise the dynamic-only configuration, use a fresh build directory
+and add `-DUNI_HAL_RTOS_CONFIG_EXTRA="$PWD/src_tests/config/freertos_dynamic_only.h"`
+to the configure command. This also tests that a failed TX allocation releases RX
+and that the context can be initialised again.

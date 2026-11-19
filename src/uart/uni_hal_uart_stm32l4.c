@@ -431,7 +431,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
 
         // enable IRQ
         result = _uni_hal_uart_nvic(ctx->instance, ctx->isr_priority) && result;
-        result =_uni_hal_usart_irq_rx_enable(ctx, true) && result;
+        result = _uni_hal_usart_irq_rx_enable(ctx, false) && result;
 
         void* handle = _uni_hal_uart_handle_get(ctx->instance);
 
@@ -464,28 +464,28 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 result = LL_USART_Init(handle, &USART_InitStruct) == SUCCESS;
             }
 
-            if(result) {
-                // set handlers
-                if (ctx->io) {
-                    uni_hal_io_init(ctx->io);
-                    ctx->io->handlers.tx_trigger = _uni_hal_usart_tx_trigger;
-                    ctx->io->handlers.tx_trigger_ctx = ctx;
-                }
-
-                // save context
-                _uni_hal_usart_save_ctx(ctx);
-
+            if (result) {
+                result = uni_hal_io_init(ctx->io);
+            }
+            if (result) {
                 // enable
                 if (handle == LPUART1)
                 {
                     LL_LPUART_Enable(handle);
-                    result = _uni_hal_usart_wait_enabled(handle);
                 }
                 else
                 {
                     LL_USART_ConfigAsyncMode(handle);
                     LL_USART_Enable(handle);
-                    result = _uni_hal_usart_wait_enabled(handle);
+                }
+                result = _uni_hal_usart_wait_enabled(handle);
+                if (result) {
+                    ctx->io->handlers.tx_trigger = _uni_hal_usart_tx_trigger;
+                    ctx->io->handlers.tx_trigger_ctx = ctx;
+                    _uni_hal_usart_save_ctx(ctx);
+                    (void)_uni_hal_usart_irq_rx_enable(ctx, true);
+                } else {
+                    uni_hal_io_deinit(ctx->io);
                 }
             }
         }

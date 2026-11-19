@@ -4,6 +4,7 @@
 #include <task.h>
 
 extern int __real_main(void);
+extern int uni_hal_test_io_buffers(void);
 
 [[noreturn]] static void exit_qemu(int result) {
     // Arm semihosting SYS_EXIT_EXTENDED reports the test's return code to CTest.
@@ -23,7 +24,11 @@ static void run_in_task(void *unused) {
     }
     free(block);
     (void)xTaskResumeAll();
-    exit_qemu(__real_main());
+    int result = __real_main();
+    if (result == 0) {
+        result = uni_hal_test_io_buffers();
+    }
+    exit_qemu(result);
 }
 
 int __wrap_main(void) {

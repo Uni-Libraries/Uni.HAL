@@ -23,7 +23,18 @@
 #if defined(UNI_HAL_USE_FREERTOS)
 
 static bool _uni_hal_io_buf_create(uni_hal_io_buffer_t *buf) {
+#if configSUPPORT_STATIC_ALLOCATION
+    if (buf->size == 0U || buf->array == nullptr) {
+        return false;
+    }
     buf->handle = xStreamBufferCreateStatic(buf->size, 1U, buf->array, &buf->cb);
+#else
+    if (buf->size < 2U) {
+        return false;
+    }
+    // FreeRTOS adds the reserved slot itself in its dynamic constructor.
+    buf->handle = xStreamBufferCreate(buf->size - 1U, 1U);
+#endif
     return buf->handle != nullptr;
 }
 
@@ -162,22 +173,35 @@ static size_t _uni_hal_io_buf_read_isr(uni_hal_io_buffer_t *buf, uint8_t *data, 
 //
 
 bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
-    bool result = false;
-
-    if (ctx != nullptr) {
-        (void) memset(&ctx->handlers, 0, sizeof(uni_hal_io_handlers_t));
-        (void) memset(&ctx->stats, 0, sizeof(uni_hal_io_stats_t));
-
-        // reset sync progress
-        ctx->buf_rx.sync_idx = 0U;
-        ctx->buf_tx.sync_idx = 0U;
-
-        bool const rx_ok = _uni_hal_io_buf_create(&ctx->buf_rx);
-        bool const tx_ok = _uni_hal_io_buf_create(&ctx->buf_tx);
-        result = rx_ok && tx_ok;
+    if (ctx == nullptr) {
+        return false;
     }
+    uni_hal_io_deinit(ctx);
+    if (!_uni_hal_io_buf_create(&ctx->buf_rx) || !_uni_hal_io_buf_create(&ctx->buf_tx)) {
+        uni_hal_io_deinit(ctx);
+        return false;
+    }
+    return true;
+}
 
-    return result;
+void uni_hal_io_deinit(uni_hal_io_context_t *ctx) {
+    if (ctx == nullptr) {
+        return;
+    }
+#if defined(UNI_HAL_USE_FREERTOS) && !configSUPPORT_STATIC_ALLOCATION
+    if (ctx->buf_rx.handle != nullptr) {
+        vStreamBufferDelete(ctx->buf_rx.handle);
+    }
+    if (ctx->buf_tx.handle != nullptr) {
+        vStreamBufferDelete(ctx->buf_tx.handle);
+    }
+#endif
+    ctx->buf_rx.handle = nullptr;
+    ctx->buf_tx.handle = nullptr;
+    ctx->buf_rx.sync_idx = 0U;
+    ctx->buf_tx.sync_idx = 0U;
+    ctx->handlers = (uni_hal_io_handlers_t){0};
+    ctx->stats = (uni_hal_io_stats_t){0};
 }
 
 

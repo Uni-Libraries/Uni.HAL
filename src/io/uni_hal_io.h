@@ -93,10 +93,12 @@ typedef struct {
      */
     StreamBufferHandle_t handle;
 
+#if configSUPPORT_STATIC_ALLOCATION
     /**
      * Buffer control block
      */
     StaticStreamBuffer_t cb;
+#endif
 #else
     /**
      * Buffer handle: points to `rb` once the buffer is initialised
@@ -110,12 +112,13 @@ typedef struct {
 #endif
 
     /**
-     * Buffer size
+     * Ring size in bytes, including the one slot reserved to distinguish full from empty.
+     * Dynamic-only FreeRTOS requires at least 2 bytes for one usable slot.
      */
     uint32_t size;
 
     /**
-     * Buffer array
+     * Caller-provided storage. Unused when FreeRTOS only supports dynamic allocation.
      */
     void* array;
 
@@ -173,19 +176,21 @@ typedef struct {
 // Defines
 //
 
-#define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx)                                                                  \
-    uint8_t name##_rx_buf[count_rx+1] = {0};                                                                            \
-    uint8_t name##_tx_buf[count_tx+1] = {0};                                                                            \
-    uni_hal_io_context_t name##_ctx = {                                                                                  \
-        .buf_rx = {                                                                                                     \
-            .size  = count_rx      ,                                                                                    \
-            .array = &name##_rx_buf,                                                                                    \
-        },                                                                                                              \
-       .buf_tx = {                                                                                                      \
-            .size  = count_tx      ,                                                                                    \
-            .array = &name##_tx_buf,                                                                                    \
-       },                                                                                                               \
-    }                                                                                                                   \
+#if defined(UNI_HAL_USE_FREERTOS) && !configSUPPORT_STATIC_ALLOCATION
+#define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx) \
+    uni_hal_io_context_t name##_ctx = {                 \
+        .buf_rx = { .size = (count_rx) },               \
+        .buf_tx = { .size = (count_tx) },               \
+    }
+#else
+#define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx)            \
+    uint8_t name##_rx_buf[(count_rx) + 1] = {0};                   \
+    uint8_t name##_tx_buf[(count_tx) + 1] = {0};                   \
+    uni_hal_io_context_t name##_ctx = {                            \
+        .buf_rx = { .size = (count_rx), .array = &name##_rx_buf }, \
+        .buf_tx = { .size = (count_tx), .array = &name##_tx_buf }, \
+    }
+#endif
 
 #define UNI_HAL_IO_DECLARATION(name)                                                                                     \
     extern uni_hal_io_context_t name##_ctx
@@ -195,7 +200,22 @@ typedef struct {
 // Functions/Init
 //
 
+/**
+ * Create both buffers or reinitialise them with the configured sizes.
+ * Use UNI_HAL_IO_DEFINITION or zero-initialise the context before setting its buffer
+ * configuration. Reinitialisation discards queued data, handlers and statistics.
+ * If either buffer cannot be created, both handles are cleared.
+ * Call init/deinit outside interrupts, after stopping all users (including blocked tasks).
+ * Keep the context at a fixed address while its buffers are active.
+ */
 bool uni_hal_io_init(uni_hal_io_context_t *ctx);
+
+/**
+ * Release the context's buffers and clear its runtime state. In a dynamic-only
+ * FreeRTOS build, call this before dropping the context to return both buffers to the heap.
+ * Buffer configuration is retained for the next init. Repeated deinit is safe.
+ */
+void uni_hal_io_deinit(uni_hal_io_context_t *ctx);
 
 
 //

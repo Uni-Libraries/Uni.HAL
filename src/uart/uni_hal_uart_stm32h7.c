@@ -416,13 +416,6 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
         // enable IRQ
         result = _uni_hal_uart_nvic(ctx->instance, ctx->isr_priority) && result;
 
-        // init IO
-        if (ctx->io != nullptr) {
-            uni_hal_io_init(ctx->io);
-            ctx->io->handlers.tx_trigger = _uni_hal_usart_tx_trigger;
-            ctx->io->handlers.tx_trigger_ctx = ctx;
-        }
-
         USART_TypeDef* handle = _uni_hal_uart_handle_get(ctx->instance);
         if(result && handle != nullptr) {
             // init
@@ -437,10 +430,10 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
             USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
             LL_USART_DeInit(handle);
             result = LL_USART_Init(handle, &USART_InitStruct) == SUCCESS;
-            if(result) {
-                // save context
-                _uni_hal_usart_save_ctx(ctx);
-
+            if (result) {
+                result = uni_hal_io_init(ctx->io);
+            }
+            if (result) {
                 // enable
                 LL_USART_ConfigAsyncMode(handle);
 
@@ -457,8 +450,13 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
 
                 result = _uni_hal_usart_wait_enabled(handle);
                 if (result) {
+                    ctx->io->handlers.tx_trigger = _uni_hal_usart_tx_trigger;
+                    ctx->io->handlers.tx_trigger_ctx = ctx;
+                    _uni_hal_usart_save_ctx(ctx);
                     LL_USART_EnableIT_IDLE(handle);
                     UNI_HAL_USART_EnableIT_RXNE(handle);
+                } else {
+                    uni_hal_io_deinit(ctx->io);
                 }
             }
         }

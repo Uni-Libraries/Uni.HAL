@@ -201,10 +201,6 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
             ctx->in_transmission = false;
             ctx->initialized = false;
 
-            uni_hal_io_init(ctx->io);
-            ctx->io->handlers.tx_trigger = _uni_hal_uart_zynq7000_tx_trigger;
-            ctx->io->handlers.tx_trigger_ctx = ctx;
-
             XUartPs_Config *cfg = XUartPs_LookupConfig(base);
             result = cfg != nullptr && XUartPs_CfgInitialize(dev, cfg, cfg->BaseAddress) == XST_SUCCESS;
             if (result && ctx->baudrate != 0U) {
@@ -216,11 +212,19 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 XUartPs_SetFifoThreshold(dev, UNI_HAL_UART_ZYNQ7000_RX_TRIGGER);
                 XUartPs_SetRecvTimeout(dev, UNI_HAL_UART_ZYNQ7000_RX_TIMEOUT);
 
+                result = uni_hal_io_init(ctx->io);
+            }
+            if (result) {
                 uint32_t prio = ctx->isr_priority != 0U ? ctx->isr_priority : UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT;
                 result = uni_hal_core_zynq7000_irq_connect(_uni_hal_uart_zynq7000_irq(ctx->instance),
                                                            _uni_hal_uart_zynq7000_irq_handler, ctx, prio, false);
+                if (!result) {
+                    uni_hal_io_deinit(ctx->io);
+                }
             }
             if (result) {
+                ctx->io->handlers.tx_trigger = _uni_hal_uart_zynq7000_tx_trigger;
+                ctx->io->handlers.tx_trigger_ctx = ctx;
                 XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, UNI_HAL_UART_ZYNQ7000_RX_IRQS);
                 ctx->initialized = true;
             }
