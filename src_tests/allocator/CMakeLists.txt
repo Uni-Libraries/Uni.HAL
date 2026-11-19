@@ -47,6 +47,15 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         -nographic -monitor none -serial none -semihosting-config enable=on,target=native
         -kernel $<TARGET_FILE:i2c_polling_qemu>)
     set_tests_properties(i2c_polling_cortex_m4 PROPERTIES TIMEOUT 15)
+
+    uni_hal_add_executable(dma_l4_qemu)
+    target_sources(dma_l4_qemu PRIVATE ../dma_l4/channel_irq_qemu.c)
+    target_link_options(dma_l4_qemu PRIVATE
+        "LINKER:--defsym,_estack=0x20020000" "LINKER:--wrap=uni_hal_rcc_clk_set")
+    add_test(NAME dma_l496_channel_irqs COMMAND "${QEMU_SYSTEM_ARM}" -M netduinoplus2
+        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+        -kernel $<TARGET_FILE:dma_l4_qemu>)
+    set_tests_properties(dma_l496_channel_irqs PROPERTIES TIMEOUT 15)
 endif()
 
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")

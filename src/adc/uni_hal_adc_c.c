@@ -15,7 +15,15 @@
 //
 
 bool uni_hal_adc_is_inited(const uni_hal_adc_context_t *ctx) {
-    return ctx != NULL && ctx->state.initialized != false;
+    if (ctx == NULL || !ctx->state.initialized) {
+        return false;
+    }
+#if defined(UNI_HAL_TARGET_MCU_STM32L496)
+    if (ctx->config.dma && uni_hal_dma_stm32l4_has_transfer_error(ctx->config.dma)) {
+        return false;
+    }
+#endif
+    return true;
 }
 
 

@@ -27,64 +27,42 @@
 // ISRs
 //
 
-void DMA1_Channel1_IRQHandler(void) {
-    // transfer complete
-    if (LL_DMA_IsActiveFlag_TC1(DMA1)) {
-        LL_DMA_ClearFlag_GI1(DMA1);
-    }
+// State belongs to the physical channel. A failed transfer stays visible after its W1C acknowledgement.
+static volatile bool transfer_error[2][7];
 
-    // transfer error
-    if (LL_DMA_IsActiveFlag_TE1(DMA1)) {
-        LL_DMA_ClearFlag_TE1(DMA1);
-    }
-}
-
-void DMA1_Channel2_IRQHandler(void)
+static void handle_channel_irq(DMA_TypeDef *module, uint32_t channel)
 {
-    // transfer complete
-    if (LL_DMA_IsActiveFlag_TC2(DMA1)) {
-        LL_DMA_ClearFlag_TC2(DMA1);
+    uint32_t const shift = 4U * channel;
+    uint32_t const causes = module->ISR & ((DMA_ISR_TEIF1 | DMA_ISR_HTIF1 | DMA_ISR_TCIF1) << shift);
+    if (causes & (DMA_ISR_TEIF1 << shift)) {
+        transfer_error[module == DMA2][channel] = true;
+        LL_DMA_DisableChannel(module, channel);
     }
-
-    if (LL_DMA_IsActiveFlag_HT2(DMA1)) {
-        LL_DMA_ClearFlag_HT2(DMA1);
-    }
-
-    // transfer error
-    if (LL_DMA_IsActiveFlag_TE2(DMA1)) {
-        LL_DMA_ClearFlag_TE2(DMA1);
+    if (causes) {
+        WRITE_REG(module->IFCR, causes);
     }
 }
 
-void DMA1_Channel3_IRQHandler(void) {
-    // transfer complete
-    if (LL_DMA_IsActiveFlag_TC3(DMA1)) {
-        LL_DMA_ClearFlag_GI3(DMA1);
+#define DMA_CHANNEL_IRQ(controller, number)                        \
+    void controller##_Channel##number##_IRQHandler(void)           \
+    {                                                              \
+        handle_channel_irq(controller, LL_DMA_CHANNEL_##number);   \
     }
 
-    // transfer error
-    if (LL_DMA_IsActiveFlag_TE3(DMA1)) {
-        LL_DMA_ClearFlag_TE3(DMA1);
-    }
-}
-
-void DMA1_Channel4_IRQHandler(void) {}
-
-void DMA1_Channel5_IRQHandler(void) {}
-
-void DMA1_Channel6_IRQHandler(void) {}
-
-void DMA1_Channel7_IRQHandler(void) {}
-
-void DMA2_Channel1_IRQHandler(void) {}
-
-void DMA2_Channel2_IRQHandler(void) {}
-
-void DMA2_Channel3_IRQHandler(void) {}
-
-void DMA2_Channel4_IRQHandler(void) {}
-
-void DMA2_Channel5_IRQHandler(void) {}
+DMA_CHANNEL_IRQ(DMA1, 1)
+DMA_CHANNEL_IRQ(DMA1, 2)
+DMA_CHANNEL_IRQ(DMA1, 3)
+DMA_CHANNEL_IRQ(DMA1, 4)
+DMA_CHANNEL_IRQ(DMA1, 5)
+DMA_CHANNEL_IRQ(DMA1, 6)
+DMA_CHANNEL_IRQ(DMA1, 7)
+DMA_CHANNEL_IRQ(DMA2, 1)
+DMA_CHANNEL_IRQ(DMA2, 2)
+DMA_CHANNEL_IRQ(DMA2, 3)
+DMA_CHANNEL_IRQ(DMA2, 4)
+DMA_CHANNEL_IRQ(DMA2, 5)
+DMA_CHANNEL_IRQ(DMA2, 6)
+DMA_CHANNEL_IRQ(DMA2, 7)
 
 
 //
@@ -292,42 +270,58 @@ uint32_t _uni_hal_dma_get_request(uni_hal_dma_request_e request) {
 //
 
 bool uni_hal_dma_init(uni_hal_dma_context_t *ctx) {
-    bool result = false;
-
-    // a channel that is already set up is not an error
-    if (ctx != NULL && ctx->state.initialized)
-    {
+    if (ctx == NULL) {
+        return false;
+    }
+    uint32_t const interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);
+    if (interrupt == 0U) {
+        return false;
+    }
+    if (ctx->state.initialized) {
         return true;
     }
-
-    if (ctx != NULL)
-    {
-        result = uni_hal_rcc_clk_set(ctx->config.instance, true);
-        if (result) {
-            // Enable interrupt
-            uint32_t dma_interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);
-            NVIC_SetPriority(dma_interrupt, UNI_HAL_DMA_INTERRUPT_PRIORITY);
-            NVIC_EnableIRQ(dma_interrupt);
-
-            ctx->state.initialized = true;
-        }
+    if (!uni_hal_rcc_clk_set(ctx->config.instance, true)) {
+        return false;
     }
+    NVIC_SetPriority(interrupt, UNI_HAL_DMA_INTERRUPT_PRIORITY);
+    NVIC_EnableIRQ(interrupt);
+    ctx->state.initialized = true;
+    return true;
+}
 
-    return result;
+
+bool uni_hal_dma_stm32l4_has_transfer_error(const uni_hal_dma_context_t *ctx)
+{
+    if (!uni_hal_dma_is_inited(ctx) || ctx->config.channel < UNI_HAL_DMA_CHANNEL_1 ||
+        ctx->config.channel > UNI_HAL_DMA_CHANNEL_7) {
+        return false;
+    }
+    DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
+    uint32_t const channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
+    return module != NULL && transfer_error[module == DMA2][channel];
 }
 
 
 bool uni_hal_dma_enable(uni_hal_dma_context_t *ctx, bool val) {
-    bool result = false;
-    if (uni_hal_dma_is_inited(ctx)) {
-        DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
-        uint32_t channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
-        val != false ? LL_DMA_EnableChannel(module, channel) : LL_DMA_DisableChannel(module, channel);
-        result = true;
+    if (!uni_hal_dma_is_inited(ctx)) {
+        return false;
     }
-    return result;
+    DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
+    uint32_t const channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
+    if (val) {
+        uint32_t const primask = uni_hal_core_irq_pause();
+        if (!LL_DMA_IsEnabledChannel(module, channel)) {
+            // Clear stale events before starting, so a pending IRQ cannot stop the new transfer.
+            WRITE_REG(module->IFCR, DMA_IFCR_CGIF1 << (4U * channel));
+            transfer_error[module == DMA2][channel] = false;
+            LL_DMA_EnableChannel(module, channel);
+        }
+        uni_hal_core_irq_resume(primask);
+    } else {
+        LL_DMA_DisableChannel(module, channel);
+    }
+    return true;
 }
-
 
 
 //

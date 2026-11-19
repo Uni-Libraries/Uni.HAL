@@ -121,6 +121,11 @@ for a value the ADC does not have. It waits up to `timeout` ms, 500 when left at
 calibration and again for the ADC to become ready: keep that below the period of a watchdog
 that is already running.
 
+On STM32L496 a DMA transfer error stops the affected channel. The ADC getters then report
+unavailable data, and `uni_hal_dma_stm32l4_has_transfer_error(dma)` reports the fault.
+Discard the old buffer contents, correct the transfer setup and reload its length before
+enabling the channel again. Starting the new transfer clears the fault indication.
+
 **UART output.** `uni_hal_usart_transmit_data()` and with it `printf()` queue the data for the
 interrupt handler and return; what does not fit into the TX buffer is dropped. Output that has
 to be complete, e.g. before a reset, is followed by a loop on `uni_hal_usart_transmit_busy()`.

@@ -78,6 +78,11 @@ bool uni_hal_dma_init(uni_hal_dma_context_t *ctx);
 bool uni_hal_dma_is_inited(const uni_hal_dma_context_t* ctx);
 
 
+#if defined(UNI_HAL_TARGET_MCU_STM32L496)
+/** True after a transfer error IRQ on this physical channel, until a new transfer starts. */
+bool uni_hal_dma_stm32l4_has_transfer_error(const uni_hal_dma_context_t *ctx);
+#endif
+
 bool uni_hal_dma_enable(uni_hal_dma_context_t* ctx, bool val);
 
 //
