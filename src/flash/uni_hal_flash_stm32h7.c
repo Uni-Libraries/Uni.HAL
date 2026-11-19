@@ -427,24 +427,6 @@ size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *dst)
     return bytes_written;
 }
 
-size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst)
-{
-    if (dst == NULL || size == 0 || addr <FLASH_BASE || addr >= FLASH_END)
-    {
-        return 0;
-    }
-
-    uint8_t *flash_ptr = (uint8_t *)addr;
-
-    for (size_t i = 0; i < size; i++)
-    {
-        dst[i] = flash_ptr[i];
-    }
-
-    return size;
-}
-
-
 bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_e sector) {
     bool result = false;
 
