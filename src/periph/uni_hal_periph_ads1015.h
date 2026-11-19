@@ -85,6 +85,7 @@ typedef enum
 
 typedef struct {
     uni_hal_i2c_context_t* i2c;
+    /** Milliseconds for one measurement, including trigger, ready polling and sample read. */
     uint32_t timeout;
     uint8_t address;
 
@@ -118,6 +119,7 @@ bool uni_hal_ads1015_is_inited(const uni_hal_ads1015_context_t* ctx);
 
 bool uni_hal_ads1015_configure(uni_hal_ads1015_context_t* ctx);
 
+/** Return the signed 12-bit sample, or INT16_MAX on I2C failure or timeout. A zero timeout skips the transfer. */
 int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx);
  
 int16_t uni_hal_ads1015_get_voltage_mv(uni_hal_ads1015_context_t* ctx);

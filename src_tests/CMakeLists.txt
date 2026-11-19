@@ -46,6 +46,7 @@ endfunction()
 #
 
 #uni_hal_add_test(io)
+uni_hal_add_test(ads1015 PROPERTIES TIMEOUT 10)
 uni_hal_add_test(dwt)
 uni_hal_add_test(i2c)
 uni_hal_add_test(can)
