@@ -243,8 +243,15 @@ static bool _uni_hal_can_is_started(const FDCAN_GlobalTypeDef *can) {
 }
 
 
+// Reserve completed buffers for their interrupt callback or blocking sender until
+// the outcome has been collected. A new request clears the hardware outcome.
+static uint32_t _uni_hal_can_tx_reserved(const uni_hal_can_stm32h7_instance_t *inst,
+                                         const uni_hal_can_context_t *ctx) {
+    return ctx->status.tx_waiting | (ctx->status.tx_callback != nullptr ? inst->tx_inflight : 0U);
+}
+
 /**
- * Put a frame into a free TX buffer
+ * With interrupts masked, put a frame into a free TX buffer
  * @param ctx CAN context, must be initialised
  * @param msg frame to send
  * @param tx_buffer receives the number of the buffer the frame went into, 0..2
@@ -257,6 +264,7 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
     }
     FDCAN_GlobalTypeDef *can = inst->can;
 
+    uint32_t const reserved = _uni_hal_can_tx_reserved(inst, ctx);
     uint32_t buffer = UNI_HAL_CAN_TX_BUFFERS;
     if (ctx->config.tx_fifo_priority) {
         // the buffers form a FIFO: the peripheral says where the next frame goes
@@ -266,7 +274,7 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
     }
     else {
         // dedicated buffers: any that has no request pending
-        uint32_t const pending = can->TXBRP;
+        uint32_t const pending = can->TXBRP | reserved;
         for (uint32_t idx = 0U; idx < UNI_HAL_CAN_TX_BUFFERS; idx++) {
             if ((pending & (1UL << idx)) == 0U) {
                 buffer = idx;
@@ -274,7 +282,7 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
             }
         }
     }
-    if (buffer >= UNI_HAL_CAN_TX_BUFFERS) {
+    if (buffer >= UNI_HAL_CAN_TX_BUFFERS || (reserved & (1UL << buffer)) != 0U) {
         return false;
     }
 
@@ -319,12 +327,9 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
         element[UNI_HAL_CAN_HEADER_WORDS + offset / 4U] = word;
     }
 
-    // the interrupt clears the same bookkeeping, so the request goes out with it masked
-    uint32_t const primask = uni_hal_core_irq_pause();
     ctx->status.tx_ok[buffer] = false;
     inst->tx_inflight |= 1UL << buffer;
     can->TXBAR = 1UL << buffer;
-    uni_hal_core_irq_resume(primask);
 
     *tx_buffer = buffer;
     return true;
@@ -440,9 +445,18 @@ static BaseType_t _uni_hal_can_irq_tx(uni_hal_can_stm32h7_instance_t *inst) {
 
     // Done is every buffer that was given a frame and has no request pending any more. Take
     // them all off the books before any callback runs: a callback may queue the next frame.
+    uint32_t const primask = uni_hal_core_irq_pause();
     uint32_t const done = inst->tx_inflight & ~can->TXBRP & UNI_HAL_CAN_TX_MASK;
     uint32_t const transmitted = can->TXBTO;
+    if (ctx != nullptr) {
+        for (uint32_t i = 0U; i < UNI_HAL_CAN_TX_BUFFERS; ++i) {
+            if (done & (1UL << i)) {
+                ctx->status.tx_ok[i] = (transmitted & (1UL << i)) != 0U;
+            }
+        }
+    }
     inst->tx_inflight &= ~done;
+    uni_hal_core_irq_resume(primask);
 
     for (uint32_t buffer = 0U; buffer < UNI_HAL_CAN_TX_BUFFERS; buffer++) {
         if ((done & (1UL << buffer)) != 0U) {
@@ -451,8 +465,6 @@ static BaseType_t _uni_hal_can_irq_tx(uni_hal_can_stm32h7_instance_t *inst) {
             bool const success = (transmitted & (1UL << buffer)) != 0U;
 
             if (ctx != nullptr) {
-                ctx->status.tx_ok[buffer] = success;
-
                 uni_hal_can_tx_callback_t const callback = ctx->status.tx_callback;
                 if (callback != nullptr && callback(ctx->status.tx_callback_cookie, buffer, success)) {
                     woken = pdTRUE;
@@ -892,16 +904,22 @@ bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bu
 uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
     uint32_t result = 0U;
     if (uni_hal_can_is_inited(ctx)) {
-        const FDCAN_GlobalTypeDef *can = _uni_hal_can_get_instance(ctx->config.instance)->can;
+        uint32_t const primask = uni_hal_core_irq_pause();
+        const uni_hal_can_stm32h7_instance_t *inst = _uni_hal_can_get_instance(ctx->config.instance);
+        const FDCAN_GlobalTypeDef *can = inst->can;
+        uint32_t const reserved = _uni_hal_can_tx_reserved(inst, ctx);
         if (ctx->config.tx_fifo_priority) {
-            result = (can->TXFQS & FDCAN_TXFQS_TFFL) >> FDCAN_TXFQS_TFFL_Pos;
-        }
-        else {
-            uint32_t const pending = can->TXBRP;
-            for (uint32_t buffer = 0U; buffer < UNI_HAL_CAN_TX_BUFFERS; buffer++) {
-                result += ((pending & (1UL << buffer)) == 0U) ? 1U : 0U;
+            uint32_t const status = can->TXFQS;
+            uint32_t const free = (status & FDCAN_TXFQS_TFFL) >> FDCAN_TXFQS_TFFL_Pos;
+            uint32_t index = (status & FDCAN_TXFQS_TFQPI) >> FDCAN_TXFQS_TFQPI_Pos;
+            while (result < free && index < UNI_HAL_CAN_TX_BUFFERS && (reserved & (1UL << index)) == 0U) {
+                ++result;
+                index = (index + 1U) % UNI_HAL_CAN_TX_BUFFERS;
             }
+        } else {
+            result = (uint32_t)__builtin_popcount(~(can->TXBRP | reserved) & UNI_HAL_CAN_TX_MASK);
         }
+        uni_hal_core_irq_resume(primask);
     }
     return result;
 }
@@ -912,11 +930,13 @@ bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_m
 
     if (uni_hal_can_is_inited(ctx) && msg != nullptr) {
         uint32_t tx_buffer = 0U;
+        uint32_t const primask = uni_hal_core_irq_pause();
         result = _uni_hal_can_queue(ctx, msg, &tx_buffer);
         if (result) {
             // counted when queued: the outcome of the frame is not followed up here
             ctx->status.count_tx++;
         }
+        uni_hal_core_irq_resume(primask);
     }
 
     return result;
@@ -932,6 +952,7 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
 
         // the transmit interrupts are only needed while somebody listens; switch them off first
         // so that they never see a half-updated callback
+        uint32_t const primask = uni_hal_core_irq_pause();
         CLEAR_BIT(can->IE, FDCAN_IE_TCE | FDCAN_IE_TCFE);
 
         ctx->status.tx_callback_cookie = cookie;
@@ -940,13 +961,12 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
         if (callback != nullptr) {
             // frames that completed before the callback existed are not reported: only what is
             // still on its way counts
-            uint32_t const primask = uni_hal_core_irq_pause();
-            inst->tx_inflight = can->TXBRP & UNI_HAL_CAN_TX_MASK;
-            uni_hal_core_irq_resume(primask);
-
-            can->IR = FDCAN_IR_TC | FDCAN_IR_TCF;
             can->TXBTIE = UNI_HAL_CAN_TX_MASK;
             can->TXBCIE = UNI_HAL_CAN_TX_MASK;
+            // Arm completion events before sampling the pending requests. An event
+            // for any request in this snapshot must survive until the IRQ runs.
+            can->IR = FDCAN_IR_TC | FDCAN_IR_TCF;
+            inst->tx_inflight = can->TXBRP & UNI_HAL_CAN_TX_MASK;
             SET_BIT(can->IE, FDCAN_IE_TCE | FDCAN_IE_TCFE);
         }
         else {
@@ -954,6 +974,7 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
             can->TXBCIE = 0U;
         }
 
+        uni_hal_core_irq_resume(primask);
         result = true;
     }
 
@@ -977,7 +998,14 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
     if (uni_hal_can_is_inited(ctx) && msg != nullptr) {
         uint32_t tx_buffer = 0U;
 
-        if (_uni_hal_can_queue(ctx, msg, &tx_buffer)) {
+        uint32_t primask = uni_hal_core_irq_pause();
+        bool const queued = _uni_hal_can_queue(ctx, msg, &tx_buffer);
+        if (queued) {
+            ctx->status.tx_waiting |= 1UL << tx_buffer;
+        }
+        uni_hal_core_irq_resume(primask);
+
+        if (queued) {
             FDCAN_GlobalTypeDef *can = _uni_hal_can_get_instance(ctx->config.instance)->can;
             uint32_t const buffer_bit = 1UL << tx_buffer;
 
@@ -997,12 +1025,17 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
             result = !timed_out && (can->TXBTO & buffer_bit) != 0U;
         }
 
+        primask = uni_hal_core_irq_pause();
+        if (queued) {
+            ctx->status.tx_waiting &= ~(1UL << tx_buffer);
+        }
         if (result) {
             ctx->status.count_tx++;
         }
         else {
             ctx->status.count_err++;
         }
+        uni_hal_core_irq_resume(primask);
     }
 
     return result;

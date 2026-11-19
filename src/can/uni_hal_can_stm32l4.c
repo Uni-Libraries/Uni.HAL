@@ -195,8 +195,22 @@ static bool _uni_hal_can_is_started(const CAN_TypeDef *can) {
 }
 
 
+// A new request clears the previous completion flags. Leave those flags for its IRQ
+// callback and retain a blocking sender's result until that sender has read it.
+static uint32_t _uni_hal_can_free_mask(const uni_hal_can_context_t *ctx, uint32_t tsr) {
+    uint32_t available = ((tsr >> CAN_TSR_TME0_Pos) & 7U) & ~ctx->status.tx_waiting;
+    if (ctx->status.tx_callback != nullptr) {
+        for (uint32_t i = 0U; i < UNI_HAL_CAN_TX_MAILBOXES; ++i) {
+            if (tsr & (CAN_TSR_RQCP0 << (8U * i))) {
+                available &= ~(1UL << i);
+            }
+        }
+    }
+    return available;
+}
+
 /**
- * Put a frame into a free TX mailbox
+ * With interrupts masked, put a frame into a free TX mailbox
  * @param ctx CAN context, must be initialised
  * @param msg frame to send
  * @param tx_mailbox receives the number of the mailbox the frame went into, 0..2
@@ -213,16 +227,11 @@ static bool _uni_hal_can_queue(uni_hal_can_context_t *ctx, const uni_hal_can_msg
         return false;
     }
 
-    uint32_t const tsr = can->TSR;
-    if ((tsr & (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2)) == 0U) {
+    uint32_t const available = _uni_hal_can_free_mask(ctx, can->TSR);
+    if (available == 0U) {
         return false;
     }
-
-    // CODE holds the number of the next free mailbox while at least one is free
-    uint32_t const mailbox = (tsr & CAN_TSR_CODE) >> CAN_TSR_CODE_Pos;
-    if (mailbox >= UNI_HAL_CAN_TX_MAILBOXES) {
-        return false;
-    }
+    uint32_t const mailbox = (uint32_t)__builtin_ctz(available);
 
     CAN_TxMailBox_TypeDef *box = &can->sTxMailBox[mailbox];
     uint32_t const dlc = (msg->dlc <= 8U) ? msg->dlc : 8U;
@@ -344,6 +353,22 @@ static BaseType_t _uni_hal_can_irq_rx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
 }
 
 
+// Caller masks interrupts. W1C clears the outcome as well as RQCP. Preserve
+// the observed results and leave any completion that arrives after this read for its IRQ.
+static uint32_t _uni_hal_can_acknowledge_tx(uni_hal_can_context_t *ctx, CAN_TypeDef *can) {
+    uint32_t const tsr = can->TSR;
+    uint32_t const done = tsr & (CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2);
+    if (ctx != nullptr) {
+        for (uint32_t i = 0U; i < UNI_HAL_CAN_TX_MAILBOXES; ++i) {
+            if (done & (CAN_TSR_RQCP0 << (8U * i))) {
+                ctx->status.tx_ok[i] = (tsr & (CAN_TSR_TXOK0 << (8U * i))) != 0U;
+            }
+        }
+    }
+    can->TSR = done;
+    return tsr;
+}
+
 /**
  * Transmit interrupt: one or more TX mailboxes are done with their frame
  * @return not 0 when a task of higher priority became ready
@@ -354,20 +379,16 @@ static BaseType_t _uni_hal_can_irq_tx(uni_hal_can_context_t *ctx, CAN_TypeDef *c
     // Take the completed requests and acknowledge all of them before any callback runs: a
     // callback may queue the next frame, and a new request on a mailbox clears its completion
     // flag, which would otherwise be lost for a mailbox that is still waiting its turn here.
-    uint32_t const tsr = can->TSR;
-    uint32_t const done = tsr & (CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2);
-    // RQCP is cleared by writing 1, which also clears TXOK, ALST and TERR of that mailbox
-    can->TSR = done;
+    uint32_t const primask = uni_hal_core_irq_pause();
+    uint32_t const tsr = _uni_hal_can_acknowledge_tx(ctx, can);
+    uni_hal_core_irq_resume(primask);
 
-    for (uint32_t mailbox = 0U; mailbox < UNI_HAL_CAN_TX_MAILBOXES; mailbox++) {
-        if ((done & (CAN_TSR_RQCP0 << (8U * mailbox))) != 0U) {
-            bool const success = (tsr & (CAN_TSR_TXOK0 << (8U * mailbox))) != 0U;
-
-            if (ctx != nullptr) {
-                ctx->status.tx_ok[mailbox] = success;
-
+    if (ctx != nullptr) {
+        for (uint32_t i = 0U; i < UNI_HAL_CAN_TX_MAILBOXES; ++i) {
+            if (tsr & (CAN_TSR_RQCP0 << (8U * i))) {
+                bool const success = (tsr & (CAN_TSR_TXOK0 << (8U * i))) != 0U;
                 uni_hal_can_tx_callback_t const callback = ctx->status.tx_callback;
-                if (callback != nullptr && callback(ctx->status.tx_callback_cookie, mailbox, success)) {
+                if (callback != nullptr && callback(ctx->status.tx_callback_cookie, i, success)) {
                     woken = pdTRUE;
                 }
             }
@@ -712,10 +733,10 @@ bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bu
 uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx) {
     uint32_t result = 0U;
     if (uni_hal_can_is_inited(ctx)) {
+        uint32_t const primask = uni_hal_core_irq_pause();
         uint32_t const tsr = _uni_hal_can_get_handle(ctx->config.instance)->TSR;
-        result += ((tsr & CAN_TSR_TME0) != 0U) ? 1U : 0U;
-        result += ((tsr & CAN_TSR_TME1) != 0U) ? 1U : 0U;
-        result += ((tsr & CAN_TSR_TME2) != 0U) ? 1U : 0U;
+        result = (uint32_t)__builtin_popcount(_uni_hal_can_free_mask(ctx, tsr));
+        uni_hal_core_irq_resume(primask);
     }
     return result;
 }
@@ -726,11 +747,13 @@ bool uni_hal_can_transmit_nowait(uni_hal_can_context_t *ctx, const uni_hal_can_m
 
     if (uni_hal_can_is_inited(ctx) && msg != nullptr) {
         uint32_t tx_mailbox = 0U;
+        uint32_t const primask = uni_hal_core_irq_pause();
         result = _uni_hal_can_queue(ctx, msg, &tx_mailbox);
         if (result) {
             // counted when queued: the outcome of the frame is not followed up here
             ctx->status.count_tx++;
         }
+        uni_hal_core_irq_resume(primask);
     }
 
     return result;
@@ -745,6 +768,7 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
 
         // the transmit interrupt is only needed while somebody listens; switch it off first so
         // that it never sees a half-updated callback
+        uint32_t const primask = uni_hal_core_irq_pause();
         CLEAR_BIT(can->IER, CAN_IER_TMEIE);
 
         ctx->status.tx_callback_cookie = cookie;
@@ -753,10 +777,11 @@ bool uni_hal_can_set_tx_callback(uni_hal_can_context_t *ctx, uni_hal_can_tx_call
         if (callback != nullptr) {
             // completions of frames sent before the callback existed are not reported: without
             // this their flags, still set, would raise the interrupt at once
-            can->TSR = CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2;
+            (void)_uni_hal_can_acknowledge_tx(ctx, can);
             SET_BIT(can->IER, CAN_IER_TMEIE);
         }
 
+        uni_hal_core_irq_resume(primask);
         result = true;
     }
 
@@ -782,7 +807,14 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
     if (uni_hal_can_is_inited(ctx) && msg != nullptr) {
         uint32_t tx_mailbox = 0U;
 
-        if (_uni_hal_can_queue(ctx, msg, &tx_mailbox)) {
+        uint32_t primask = uni_hal_core_irq_pause();
+        bool const queued = _uni_hal_can_queue(ctx, msg, &tx_mailbox);
+        if (queued) {
+            ctx->status.tx_waiting |= 1UL << tx_mailbox;
+        }
+        uni_hal_core_irq_resume(primask);
+
+        if (queued) {
             CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
 
             // the flags of the three mailboxes sit 8 bits apart in the status register
@@ -807,12 +839,17 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
             result = !timed_out && ((can->TSR & txok_mask) != 0U || ctx->status.tx_ok[tx_mailbox]);
         }
 
+        primask = uni_hal_core_irq_pause();
+        if (queued) {
+            ctx->status.tx_waiting &= ~(1UL << tx_mailbox);
+        }
         if (result) {
             ctx->status.count_tx++;
         }
         else {
             ctx->status.count_err++;
         }
+        uni_hal_core_irq_resume(primask);
     }
 
     return result;

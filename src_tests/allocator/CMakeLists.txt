@@ -68,6 +68,7 @@ endif()
 
 if(UNI_HAL_TEST_STM32_QEMU)
     add_subdirectory(../adc adc)
+    add_subdirectory(../can_tx can_tx)
     if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
         add_subdirectory(../uart_h7 uart_h7)
     endif()

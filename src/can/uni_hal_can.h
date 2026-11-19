@@ -273,6 +273,9 @@ typedef struct {
      */
     volatile bool tx_ok[3];
 
+    /** Mailboxes whose completion result is still owned by a blocking sender. */
+    uint8_t tx_waiting;
+
     /**
      * Error callback, see uni_hal_can_set_error_callback()
      */
@@ -448,6 +451,8 @@ bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, siz
  * @param ctx CAN context
  * @param msg frame to send
  * @return true when the frame was transmitted and acknowledged
+ * @note The driver masks interrupts only to queue the frame and collect its result.
+ *       Other senders may use the remaining mailboxes while the caller waits.
  */
 bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg);
 
@@ -470,8 +475,8 @@ uint32_t uni_hal_can_transmit_free(const uni_hal_can_context_t *ctx);
  * Register a function that is called whenever a frame has left its TX mailbox, successfully or
  * not. This is how a caller of uni_hal_can_transmit_nowait() learns what became of its frames
  * and when a mailbox is free again.
- * Register it before the first frame is sent: frames that completed earlier are not reported,
- * and a blocking uni_hal_can_transmit() that is under way in another task loses its result.
+ * Register before the first frame to receive every completion. Earlier completions are skipped
+ * by the new callback. A blocking sender retains the outcome of its own frame.
  * @param ctx CAN context, initialised
  * @param callback function to call; nullptr removes the callback
  * @param cookie value passed back to the callback
