@@ -62,7 +62,6 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=Release
         -DUNI_HAL_TARGET_MCU=PC
-        -DUNI_HAL_USE_FREERTOS=ON
         -S ${{ github.workspace }}
 
     - name: Build
@@ -73,24 +72,21 @@ jobs:
       run: ctest --build-config Release --output-on-failure --no-tests=error
 
   build-arm-gcc:
-    name: arm/gcc (${{ matrix.mcu }}, FreeRTOS ${{ matrix.freertos }}, CAN FD ${{ matrix.can_fd }}${{ matrix.static_allocation == 'OFF' && ', dynamic allocation only' || '' }}) on ubuntu-latest
+    name: arm/gcc (${{ matrix.mcu }}, CAN FD ${{ matrix.can_fd }}${{ matrix.static_allocation == 'OFF' && ', dynamic allocation only' || '' }}) on ubuntu-latest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         mcu: [STM32H743, STM32L496]
-        freertos: ["ON", "OFF"]
         can_fd: ["OFF"]
         static_allocation: ["ON"]
         build_type: [Release]
         include:
           - mcu: STM32H743
-            freertos: "ON"
             can_fd: "ON"
             static_allocation: "ON"
             build_type: Release
           - mcu: STM32L496
-            freertos: "ON"
             can_fd: "OFF"
             static_allocation: "OFF"
             build_type: Release
@@ -112,14 +108,14 @@ jobs:
         echo "${TOOLCHAIN_DIR}/bin" >> "$GITHUB_PATH"
 
     - name: Install Cortex-M emulator
-      if: matrix.mcu == 'STM32L496' && matrix.freertos == 'ON'
+      if: matrix.mcu == 'STM32L496'
       run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
 
     - name: Set reusable strings
       id: strings
       shell: bash
       run: |
-        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.freertos }}-${{ matrix.can_fd }}-${{ matrix.static_allocation }}" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build-${{ matrix.mcu }}-${{ matrix.can_fd }}-${{ matrix.static_allocation }}" >> "$GITHUB_OUTPUT"
 
     - name: Configure CMake
       run: >
@@ -128,17 +124,16 @@ jobs:
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }}
         -DUNI_HAL_HSE_VALUE=8000000
-        -DUNI_HAL_USE_FREERTOS=${{ matrix.freertos }}
         -DUNI_HAL_CAN_USE_FD=${{ matrix.can_fd }}
         ${{ matrix.static_allocation == 'OFF' && format('-DUNI_HAL_RTOS_CONFIG_EXTRA={0}/src_tests/config/freertos_dynamic_only.h', github.workspace) || '' }}
-        ${{ matrix.mcu == 'STM32L496' && matrix.freertos == 'ON' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
-        -S ${{ github.workspace }}/${{ matrix.freertos == 'ON' && 'src_tests/allocator' || '.' }}
+        ${{ matrix.mcu == 'STM32L496' && '-DUNI_HAL_TEST_ALLOCATOR_QEMU=ON' || '' }}
+        -S ${{ github.workspace }}/src_tests/allocator
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
     - name: Test the allocator and FreeRTOS IO buffers
-      if: matrix.mcu == 'STM32L496' && matrix.freertos == 'ON'
+      if: matrix.mcu == 'STM32L496'
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
   build-arm-clang:

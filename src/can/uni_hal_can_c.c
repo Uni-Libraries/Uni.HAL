@@ -48,7 +48,7 @@ bool uni_hal_can_receive(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg, siz
 #if defined(UNI_HAL_CAN_USE_FREERTOS)
         result = xQueueReceive(ctx->status.queue_rx, msg, timeout_ms == portMAX_DELAY ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms)) == pdPASS;
 #else
-        // the receive buffer is polled: without an RTOS there is nothing to wait on
+        // The ring-buffer backend returns immediately when the queue is empty.
         (void)timeout_ms;
         // the receive interrupt writes to the same buffer
         uint32_t const primask = uni_hal_core_irq_pause();

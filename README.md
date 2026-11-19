@@ -27,19 +27,20 @@ target_sources(firmware PRIVATE main.c)
 
 Configure with `-DCMAKE_TOOLCHAIN_FILE=Uni.HAL/cmake/toolchain.cmake`. The dependencies
 Uni.Common and nanoprintf are downloaded by CPM during the configuration.
+All MCU targets and the PC target use the bundled FreeRTOS kernel. If an existing build
+directory cached `UNI_HAL_USE_FREERTOS=OFF`, pass `-UUNI_HAL_USE_FREERTOS` when reconfiguring it.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `UNI_HAL_TARGET_MCU` | none | target, required |
 | `UNI_HAL_ZYNQ7000_BSP_DIR` | none | ZYNQ7000: `<platform>/export/<platform>/sw/<domain>` of a Vitis platform (`include/`, `lib/`, `Xilinx.spec`); build with the Xilinx `arm-none-eabi-gcc` |
 | `UNI_HAL_HSE_VALUE` | none | HSE frequency in Hz, required for the MCU targets |
-| `UNI_HAL_USE_FREERTOS` | `ON` | build on FreeRTOS; `OFF` for a main loop without an RTOS |
 | `UNI_HAL_CAN_USE_FREERTOS` | `ON` | CAN receive queue is a FreeRTOS queue instead of a ring buffer |
 | `UNI_HAL_I2C_USE_FREERTOS` | `ON` | suspend the calling task while an interrupt-driven STM32L4 I2C memory transfer is in progress |
 | `UNI_HAL_CAN_USE_FD` | `OFF` | CAN messages hold up to 64 data bytes, for CAN FD on the STM32H7 |
 | `UNI_HAL_IO_PRINTF_LARGE_FORMAT` | `OFF` | `uni_hal_io_stdio_*printf` understand `ll`, `j`, `z`, `t` (`%llu`, `%zu`) |
 | `UNI_HAL_RTOS_HEAP_SIZE` | `100*1024` | `configTOTAL_HEAP_SIZE` |
-| `UNI_HAL_LIBC_HEAP_SIZE` | `8192` | STM32 with FreeRTOS, C library heap size in bytes |
+| `UNI_HAL_LIBC_HEAP_SIZE` | `8192` | STM32 C library heap size in bytes |
 | `UNI_HAL_RTOS_HEAP_APP` | `OFF` | the application defines `ucHeap` itself |
 | `UNI_HAL_RTOS_MAX_PRIORITIES` | `5` | `configMAX_PRIORITIES` |
 | `UNI_HAL_RTOS_MINIMAL_STACK_SIZE` | `512` | `configMINIMAL_STACK_SIZE` of the MCU targets, in words |
@@ -129,16 +130,6 @@ which replaces the one of the library.
 configuration sets `lse_backup_reset`, because that erases the RTC and the backup registers.
 For the same reason the RTC keeps the clock it was given on an earlier boot;
 `clock_source_change` in its context makes `uni_hal_rtc_init()` move it to the configured one.
-
-## Without an RTOS
-
-With `-DUNI_HAL_USE_FREERTOS=OFF` the kernel is not built. The IO buffers become ring buffers
-that are accessed with the interrupts masked. The following calls occupy the CPU while waiting:
-
-- `uni_hal_io_receive_data()` and `uni_hal_io_receive_sync()` occupy the CPU until their
-  timeout; call them with a timeout of 0 from a main loop.
-- STM32L4 I2C memory transfers with `irq_enable` wait for completion with interrupts enabled.
-  Call them from the main loop so that the I2C and SysTick handlers can run.
 
 ## Tests
 

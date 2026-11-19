@@ -11,10 +11,8 @@
 #include <xiltimer.h>
 
 // FreeRTOS
-#if defined(UNI_HAL_USE_FREERTOS)
 #include <FreeRTOS.h>
 #include <task.h>
-#endif
 
 // uni_hal
 #include "systick/uni_hal_systick.h"
@@ -60,12 +58,10 @@ void uni_hal_systick_delay(uint32_t val) {
     if (val == 0U) {
         val = 1U;
     }
-#if defined(UNI_HAL_USE_FREERTOS)
     if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
         vTaskDelay(pdMS_TO_TICKS(val));
         return;
     }
-#endif
     uint32_t start = uni_hal_systick_get_ms();
     while ((uni_hal_systick_get_ms() - start) < val) {
     }

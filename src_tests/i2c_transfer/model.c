@@ -8,9 +8,9 @@
 #include "systick/uni_hal_systick.h"
 #include "stm32l4xx_hal.h"
 #include "stm32l4xx_ll_i2c.h"
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-#include "semphr.h"
 #include "task.h"
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
+#include "semphr.h"
 #endif
 
 extern I2C_HandleTypeDef hi2c1;
@@ -23,12 +23,10 @@ static uni_hal_i2c_context_t ctx = {
                .pin_sda = &pins[1], .irq_enable = true},
 };
 static uint8_t buffer[1], competitor_buffer[1];
-static uint32_t now, irq_mask, irq_starts, resets, accesses, polls, scheduled_at, waits;
+static uint32_t now, irq_mask, irq_starts, resets, accesses, polls, scheduled_at, waits, delays;
 static bool deliver, fail, compete, read_direction, fail_init, fail_start;
 static bool complete_at_deadline;
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
 static bool scheduler_running;
-#endif
 
 static void advance(void)
 {
@@ -72,9 +70,13 @@ bool uni_hal_core_irq_enable(uni_hal_core_irq_e irq, uint32_t priority, uint32_t
     (void)irq; (void)priority; (void)sub; return true;
 }
 
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
 int xTaskGetSchedulerState(void) { return scheduler_running ? taskSCHEDULER_RUNNING : 0; }
-void vTaskDelay(TickType_t ticks) { while (ticks--) { advance(); } }
+void vTaskDelay(TickType_t ticks) {
+    assert(!irq_mask && scheduler_running);
+    ++delays;
+    while (ticks--) { advance(); }
+}
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
 SemaphoreHandle_t xSemaphoreCreateBinaryStatic(StaticSemaphore_t *storage) { storage->count = 0; return storage; }
 BaseType_t xSemaphoreGiveFromISR(SemaphoreHandle_t event, BaseType_t *woken) {
     assert(!event->count);
@@ -213,12 +215,15 @@ int main(void)
     assert(uni_hal_i2c_init(&ctx));
     exercise(uni_hal_i2c_mem_read);
     exercise(uni_hal_i2c_mem_write);
-    assert(waits == 0);
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
+    assert(waits == 0 && delays == 0);
     scheduler_running = true;
     exercise(uni_hal_i2c_mem_read);
     exercise(uni_hal_i2c_mem_write);
-    assert(configSUPPORT_STATIC_ALLOCATION ? waits > 0 : waits == 0);
+    assert(delays > 0); // A competing task yields while another transfer owns the bus.
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
+    assert(waits > 0);
+#else
+    assert(waits == 0);
 #endif
     deliver = false;
     fail_init = true;

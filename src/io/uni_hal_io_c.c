@@ -4,23 +4,15 @@
 
 // stdlib
 #include <string.h>
-#include <time.h>
 
 // uni_hal
-#include "core/uni_hal_core.h"
 #include "io/uni_hal_io.h"
-#include "os/uni_hal_os.h"
 #include "systick/uni_hal_systick.h"
 
 
 //
 // Private
 //
-// The buffers are FreeRTOS stream buffers when the library is built on the RTOS and
-// Uni.Common ring buffers otherwise. Everything below this section is the same for both.
-//
-
-#if defined(UNI_HAL_USE_FREERTOS)
 
 static bool _uni_hal_io_buf_create(uni_hal_io_buffer_t *buf) {
 #if configSUPPORT_STATIC_ALLOCATION
@@ -36,14 +28,6 @@ static bool _uni_hal_io_buf_create(uni_hal_io_buffer_t *buf) {
     buf->handle = xStreamBufferCreate(buf->size - 1U, 1U);
 #endif
     return buf->handle != nullptr;
-}
-
-static size_t _uni_hal_io_buf_available(const uni_hal_io_buffer_t *buf) {
-    return xStreamBufferBytesAvailable(buf->handle);
-}
-
-static bool _uni_hal_io_buf_reset(uni_hal_io_buffer_t *buf) {
-    return xStreamBufferReset(buf->handle) == pdPASS;
 }
 
 /**
@@ -96,77 +80,6 @@ static size_t _uni_hal_io_buf_write(uni_hal_io_buffer_t *buf, const uint8_t *dat
     return result;
 }
 
-static size_t _uni_hal_io_buf_write_isr(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len, BaseType_t *woken) {
-    return xStreamBufferSendFromISR(buf->handle, data, data_len, woken);
-}
-
-static size_t _uni_hal_io_buf_read_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, BaseType_t *woken) {
-    return xStreamBufferReceiveFromISR(buf->handle, data, data_len, woken);
-}
-
-#else
-
-// Without an RTOS the main loop and the interrupt handlers share the ring buffers, so every
-// access runs with the interrupts masked. The sections are a few instructions long.
-
-static bool _uni_hal_io_buf_create(uni_hal_io_buffer_t *buf) {
-    buf->handle = nullptr;
-    if (uni_common_ringbuffer_init(&buf->rb, (uint8_t *)buf->array, 1U, buf->size)) {
-        buf->handle = &buf->rb;
-    }
-    return buf->handle != nullptr;
-}
-
-static size_t _uni_hal_io_buf_available(const uni_hal_io_buffer_t *buf) {
-    uint32_t const primask = uni_hal_core_irq_pause();
-    size_t const result = uni_common_ringbuffer_length(buf->handle);
-    uni_hal_core_irq_resume(primask);
-    return result;
-}
-
-static bool _uni_hal_io_buf_reset(uni_hal_io_buffer_t *buf) {
-    uint32_t const primask = uni_hal_core_irq_pause();
-    bool const result = uni_common_ringbuffer_clear(buf->handle);
-    uni_hal_core_irq_resume(primask);
-    return result;
-}
-
-static size_t _uni_hal_io_buf_read(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, uint32_t wait_ms) {
-    // nothing to sleep on: the callers poll until their timeout
-    (void)wait_ms;
-
-    uint32_t const primask = uni_hal_core_irq_pause();
-    size_t const available = uni_common_ringbuffer_length(buf->handle);
-    size_t const result = uni_common_ringbuffer_pop(buf->handle, data, (available < data_len) ? available : data_len);
-    uni_hal_core_irq_resume(primask);
-    return result;
-}
-
-static size_t _uni_hal_io_buf_write(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len) {
-    uint32_t const primask = uni_hal_core_irq_pause();
-    // The ring buffer keeps one element free to tell full from empty, and a push into a full
-    // buffer overwrites the oldest data. Only what fits is pushed, so that new data is refused
-    // instead, as a stream buffer does.
-    size_t const capacity = buf->handle->size_total / buf->handle->size_object - 1U;
-    size_t const used = uni_common_ringbuffer_length(buf->handle);
-    size_t const space = (capacity > used) ? (capacity - used) : 0U;
-    size_t const result = uni_common_ringbuffer_push(buf->handle, data, (space < data_len) ? space : data_len);
-    uni_hal_core_irq_resume(primask);
-    return result;
-}
-
-static size_t _uni_hal_io_buf_write_isr(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len, BaseType_t *woken) {
-    (void)woken;
-    return _uni_hal_io_buf_write(buf, data, data_len);
-}
-
-static size_t _uni_hal_io_buf_read_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, BaseType_t *woken) {
-    (void)woken;
-    return _uni_hal_io_buf_read(buf, data, data_len, 0U);
-}
-
-#endif
-
 
 //
 // Functions/Init
@@ -188,7 +101,7 @@ void uni_hal_io_deinit(uni_hal_io_context_t *ctx) {
     if (ctx == nullptr) {
         return;
     }
-#if defined(UNI_HAL_USE_FREERTOS) && !configSUPPORT_STATIC_ALLOCATION
+#if !configSUPPORT_STATIC_ALLOCATION
     if (ctx->buf_rx.handle != nullptr) {
         vStreamBufferDelete(ctx->buf_rx.handle);
     }
@@ -212,7 +125,7 @@ void uni_hal_io_deinit(uni_hal_io_context_t *ctx) {
 size_t uni_hal_io_buffer_push_isr(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len, BaseType_t *woken) {
     size_t result = 0U;
     if (buf != nullptr && buf->handle != nullptr && data != nullptr) {
-        result = _uni_hal_io_buf_write_isr(buf, data, data_len, woken);
+        result = xStreamBufferSendFromISR(buf->handle, data, data_len, woken);
     }
     return result;
 }
@@ -221,14 +134,14 @@ size_t uni_hal_io_buffer_push_isr(uni_hal_io_buffer_t *buf, const uint8_t *data,
 size_t uni_hal_io_buffer_pop_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, BaseType_t *woken) {
     size_t result = 0U;
     if (buf != nullptr && buf->handle != nullptr && data != nullptr) {
-        result = _uni_hal_io_buf_read_isr(buf, data, data_len, woken);
+        result = xStreamBufferReceiveFromISR(buf->handle, data, data_len, woken);
     }
     return result;
 }
 
 
 bool uni_hal_io_buffer_is_empty(const uni_hal_io_buffer_t *buf) {
-    return buf == nullptr || buf->handle == nullptr || _uni_hal_io_buf_available(buf) == 0U;
+    return buf == nullptr || buf->handle == nullptr || xStreamBufferBytesAvailable(buf->handle) == 0U;
 }
 
 
@@ -239,7 +152,7 @@ bool uni_hal_io_buffer_is_empty(const uni_hal_io_buffer_t *buf) {
 size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
     size_t result = 0;
     if (ctx != nullptr && ctx->buf_rx.handle != nullptr) {
-        result = _uni_hal_io_buf_available(&ctx->buf_rx);
+        result = xStreamBufferBytesAvailable(ctx->buf_rx.handle);
     }
     return result;
 }
@@ -250,7 +163,7 @@ bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
     if (ctx != nullptr && ctx->buf_rx.handle != nullptr) {
         // reset sync progress and buffer
         ctx->buf_rx.sync_idx = 0U;
-        result = _uni_hal_io_buf_reset(&ctx->buf_rx);
+        result = xStreamBufferReset(ctx->buf_rx.handle) == pdPASS;
     }
     return result;
 }

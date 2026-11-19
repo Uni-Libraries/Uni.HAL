@@ -12,12 +12,9 @@
 #include <stm32h7xx_ll_pwr.h>
 
 // FreeRTOS
-//TODO: guard with define
-#if defined(UNI_HAL_USE_FREERTOS)
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include <task.h>
-#endif
 
 // Uni.HAL
 #include "dwt/uni_hal_dwt.h"
@@ -30,12 +27,7 @@
 // Globals
 //
 
-#if defined(UNI_HAL_USE_FREERTOS)
 static SemaphoreHandle_t xFlashDoneSem;
-#else
-static volatile bool flash_op_done = false;
-static bool flash_inited = false;
-#endif
 static volatile bool flash_op_failed = false;
 BaseType_t flash_wake_up = pdFALSE;
 
@@ -66,62 +58,17 @@ typedef struct {
 // HAL
 //
 
-// The end of an erase is signalled from the FLASH interrupt: through a semaphore when there is
-// an RTOS to sleep on, through a flag that is polled otherwise.
-
-static void _uni_hal_flash_done_signal(void)
-{
-#if defined(UNI_HAL_USE_FREERTOS)
-    xSemaphoreGiveFromISR(xFlashDoneSem, &flash_wake_up);
-#else
-    flash_op_done = true;
-#endif
-}
-
-static bool _uni_hal_flash_done_ready(void)
-{
-#if defined(UNI_HAL_USE_FREERTOS)
-    return xFlashDoneSem != NULL;
-#else
-    return flash_inited;
-#endif
-}
-
-static void _uni_hal_flash_done_clear(void)
-{
-#if defined(UNI_HAL_USE_FREERTOS)
-    (void)xSemaphoreTake(xFlashDoneSem, 0U);
-#else
-    flash_op_done = false;
-#endif
-}
-
-static bool _uni_hal_flash_done_wait(uint32_t timeout_ms)
-{
-#if defined(UNI_HAL_USE_FREERTOS)
-    return xSemaphoreTake(xFlashDoneSem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
-#else
-    uint32_t const start_ms = uni_hal_systick_get_ms();
-    while (!flash_op_done) {
-        if ((uni_hal_systick_get_ms() - start_ms) > timeout_ms) {
-            return false;
-        }
-    }
-    return true;
-#endif
-}
-
 void HAL_FLASH_EndOfOperationCallback(uint32_t ReturnValue)
 {
     (void)ReturnValue;
-    _uni_hal_flash_done_signal();
+    xSemaphoreGiveFromISR(xFlashDoneSem, &flash_wake_up);
 }
 
 void HAL_FLASH_OperationErrorCallback(uint32_t ReturnValue)
 {
     (void)ReturnValue;
     flash_op_failed = true;
-    _uni_hal_flash_done_signal();
+    xSemaphoreGiveFromISR(xFlashDoneSem, &flash_wake_up);
 }
 
 
@@ -420,11 +367,7 @@ static bool _uni_hal_flash_apply_latency(uint32_t latency, uint32_t wrhighfreq) 
 
 void uni_hal_flash_init()
 {
-#if defined(UNI_HAL_USE_FREERTOS)
     xFlashDoneSem = xSemaphoreCreateBinary();
-#else
-    flash_inited = true;
-#endif
     HAL_NVIC_SetPriority(FLASH_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(FLASH_IRQn);
 }
@@ -505,7 +448,7 @@ size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst)
 bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_e sector) {
     bool result = false;
 
-    if (!_uni_hal_flash_done_ready()) {
+    if (xFlashDoneSem == nullptr) {
         return false;
     }
 
@@ -521,7 +464,7 @@ bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_
     __HAL_FLASH_SET_PSIZE(FLASH_PSIZE_DOUBLE_WORD, FLASH_BANK_2);
 
     // drop a completion left over from an earlier operation
-    _uni_hal_flash_done_clear();
+    (void)xSemaphoreTake(xFlashDoneSem, 0U);
     flash_op_failed = false;
 
     FLASH_EraseInitTypeDef ei = {
@@ -534,7 +477,7 @@ bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_
 
     if (HAL_FLASHEx_Erase_IT(&ei) == HAL_OK)
     {
-        bool const done = _uni_hal_flash_done_wait(UNI_HAL_FLASH_ERASE_TIMEOUT_MS);
+        bool const done = xSemaphoreTake(xFlashDoneSem, pdMS_TO_TICKS(UNI_HAL_FLASH_ERASE_TIMEOUT_MS)) == pdTRUE;
         result = done && !flash_op_failed;
     }
 
@@ -612,9 +555,7 @@ bool uni_hal_flash_swap_banks(void)
 
     // Keep other tasks away from the flash, but leave the interrupts on: the HAL option byte
     // functions time out on the tick, which does not advance inside a critical section.
-#if defined(UNI_HAL_USE_FREERTOS)
     vTaskSuspendAll();
-#endif
 
     if (_uni_hal_flash_unlock() && _uni_hal_flash_unlock_ob())
     {
@@ -643,9 +584,7 @@ bool uni_hal_flash_swap_banks(void)
     // unreachable on success
     _uni_hal_flash_lock_ob();
     _uni_hal_flash_lock();
-#if defined(UNI_HAL_USE_FREERTOS)
     (void)xTaskResumeAll();
-#endif
 
     return result;
 }

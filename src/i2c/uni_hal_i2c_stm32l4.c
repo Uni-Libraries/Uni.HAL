@@ -10,9 +10,9 @@
 #include <stm32l4xx_ll_i2c.h>
 
 // FreeRTOS
-#if defined(UNI_HAL_I2C_USE_FREERTOS)
-    #include <FreeRTOS.h>
-    #include <task.h>
+#include <FreeRTOS.h>
+#include <task.h>
+#if defined(UNI_HAL_I2C_USE_FREERTOS) && configSUPPORT_STATIC_ALLOCATION
     #include <semphr.h>
 #endif
 
@@ -316,11 +316,9 @@ static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uin
         if (!timeout || __get_IPSR() || __get_PRIMASK() || __get_BASEPRI()) {
             return nullptr;
         }
-#if defined(UNI_HAL_USE_FREERTOS)
         if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
             vTaskDelay(1U);
         }
-#endif
     } while (remaining_ms(start, timeout));
     return nullptr;
 }

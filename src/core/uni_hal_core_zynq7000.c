@@ -13,10 +13,8 @@
 #include <xscutimer.h>
 
 // FreeRTOS
-#if defined(UNI_HAL_USE_FREERTOS)
 #include <FreeRTOS.h>
 #include <task.h>
-#endif
 
 // uni_hal
 #include "uni_hal_core.h"
@@ -152,8 +150,6 @@ void uni_hal_core_irq_resume(uint32_t primask) {
 // FreeRTOS GCC/ARM_CA9 port hooks
 //
 
-#if defined(UNI_HAL_USE_FREERTOS)
-
 static XScuTimer _uni_hal_core_zynq7000_tick_timer;
 
 extern void FreeRTOS_Tick_Handler(void);
@@ -204,5 +200,3 @@ void vApplicationFPUSafeIRQHandler(uint32_t ulICCIAR) {
         }
     }
 }
-
-#endif

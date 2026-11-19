@@ -17,13 +17,8 @@ extern "C" {
 // Uni.HAL OS layer
 #include "os/uni_hal_os.h"
 
-#if defined(UNI_HAL_USE_FREERTOS)
 // FreeRTOS
 #include <stream_buffer.h>
-#else
-// Uni.Common
-#include "uni_common.h"
-#endif
 
 
 
@@ -87,7 +82,6 @@ typedef struct {
 } uni_hal_io_handlers_t;
 
 typedef struct {
-#if defined(UNI_HAL_USE_FREERTOS)
     /**
      * Buffer handle
      */
@@ -98,17 +92,6 @@ typedef struct {
      * Buffer control block
      */
     StaticStreamBuffer_t cb;
-#endif
-#else
-    /**
-     * Buffer handle: points to `rb` once the buffer is initialised
-     */
-    uni_common_ringbuffer_context_t *handle;
-
-    /**
-     * Buffer control block
-     */
-    uni_common_ringbuffer_context_t rb;
 #endif
 
     /**
@@ -176,7 +159,7 @@ typedef struct {
 // Defines
 //
 
-#if defined(UNI_HAL_USE_FREERTOS) && !configSUPPORT_STATIC_ALLOCATION
+#if !configSUPPORT_STATIC_ALLOCATION
 #define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx) \
     uni_hal_io_context_t name##_ctx = {                 \
         .buf_rx = { .size = (count_rx) },               \

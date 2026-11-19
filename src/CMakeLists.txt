@@ -49,10 +49,7 @@ target_include_directories(uni.hal PUBLIC ".")
 # Definitions
 #
 
-target_compile_definitions(uni.hal PUBLIC UNI_HAL_TARGET_MCU_${UNI_HAL_TARGET_MCU})
-if(UNI_HAL_USE_FREERTOS)
-    target_compile_definitions(uni.hal PUBLIC UNI_HAL_USE_FREERTOS)
-endif()
+target_compile_definitions(uni.hal PUBLIC UNI_HAL_TARGET_MCU_${UNI_HAL_TARGET_MCU} UNI_HAL_USE_FREERTOS)
 if(UNI_HAL_CAN_USE_FREERTOS)
     target_compile_definitions(uni.hal PUBLIC UNI_HAL_CAN_USE_FREERTOS)
 endif()
@@ -72,9 +69,7 @@ endif()
 # Libraries
 #
 
-if(UNI_HAL_USE_FREERTOS)
-    target_link_libraries(uni.hal PUBLIC freertos_kernel)
-endif()
+target_link_libraries(uni.hal PUBLIC freertos_kernel)
 target_link_libraries(uni.hal PUBLIC uni.common)
 target_link_libraries(uni.hal PUBLIC nanoprintf)
 if(DEFINED UNI_HAL_DFP_LIBRARY)
