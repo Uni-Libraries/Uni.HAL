@@ -80,8 +80,12 @@ static uint32_t _uni_hal_uart_zynq7000_irq(uni_hal_core_periph_e instance) {
 static bool _uni_hal_uart_zynq7000_fill_fifo(uni_hal_usart_context_t *ctx, uint32_t base, BaseType_t *woken) {
     bool any = false;
     uint8_t data = 0U;
-    while ((XUartPs_ReadReg(base, XUARTPS_SR_OFFSET) & XUARTPS_SR_TXFULL) == 0U &&
-           uni_hal_io_buffer_pop_isr(&ctx->io->buf_tx, &data, 1U, woken)) {
+    while ((XUartPs_ReadReg(base, XUARTPS_SR_OFFSET) & XUARTPS_SR_TXFULL) == 0U) {
+        size_t count = woken ? uni_hal_io_buffer_pop_isr(&ctx->io->buf_tx, &data, 1U, woken) :
+                               xStreamBufferReceive(ctx->io->buf_tx.handle, &data, 1U, 0U);
+        if (count == 0U) {
+            break;
+        }
         XUartPs_WriteReg(base, XUARTPS_FIFO_OFFSET, data);
         ctx->io->stats.tx_transmited++;
         any = true;
@@ -95,29 +99,41 @@ static bool _uni_hal_uart_zynq7000_fill_fifo(uni_hal_usart_context_t *ctx, uint3
 // IO handlers
 //
 
-static void _uni_hal_uart_zynq7000_tx_trigger(void *ctx_io_r, void *ctx_fn_r) {
-    (void)ctx_io_r;
-    uni_hal_usart_context_t *ctx = (uni_hal_usart_context_t *)ctx_fn_r;
-    if (ctx == nullptr || !ctx->initialized) {
-        return;
-    }
-
-    uint32_t base = _uni_hal_uart_zynq7000_base(ctx->instance);
-    BaseType_t woken = pdFALSE;
-
-    // the UART interrupt (priority >= configMAX_API_CALL_INTERRUPT_PRIORITY) is masked here
-    taskENTER_CRITICAL();
+static void _uni_hal_uart_zynq7000_start_tx(uni_hal_usart_context_t *ctx, uint32_t base, BaseType_t *woken) {
     if (!ctx->in_transmission) {
         if (ctx->io->handlers.tx_start) {
             ctx->io->handlers.tx_start(ctx->io, ctx->io->handlers.tx_start_ctx);
         }
-        if (_uni_hal_uart_zynq7000_fill_fifo(ctx, base, &woken)) {
+        if (_uni_hal_uart_zynq7000_fill_fifo(ctx, base, woken)) {
             ctx->in_transmission = true;
             // the TX-empty event fires when the FIFO drains
             XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, XUARTPS_IXR_TXEMPTY);
         }
     }
-    taskEXIT_CRITICAL();
+}
+
+static void _uni_hal_uart_zynq7000_tx_trigger(void *ctx_io_r, void *ctx_fn_r) {
+    (void)ctx_io_r;
+    uni_hal_usart_context_t *ctx = ctx_fn_r;
+    if (ctx == nullptr || !ctx->initialized) {
+        return;
+    }
+
+    uint32_t const base = _uni_hal_uart_zynq7000_base(ctx->instance);
+    if (xPortIsInsideInterrupt()) {
+        BaseType_t woken = pdFALSE;
+        UBaseType_t const mask = taskENTER_CRITICAL_FROM_ISR();
+        _uni_hal_uart_zynq7000_start_tx(ctx, base, &woken);
+        taskEXIT_CRITICAL_FROM_ISR(mask);
+        // The Cortex-A9 port retains this request until the outermost interrupt returns.
+        if (woken) {
+            portYIELD_FROM_ISR(pdTRUE);
+        }
+    } else {
+        taskENTER_CRITICAL();
+        _uni_hal_uart_zynq7000_start_tx(ctx, base, nullptr);
+        taskEXIT_CRITICAL();
+    }
 }
 
 

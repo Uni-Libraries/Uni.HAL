@@ -55,6 +55,7 @@ add_subdirectory(i2c_transfer)
 add_subdirectory(i2c_h7)
 add_subdirectory(i2c_timeout)
 add_subdirectory(io_sync)
+add_subdirectory(uart_zynq)
 
 uni_hal_add_test(rcc PROPERTIES TIMEOUT 10)
 target_include_directories(uni_hal_test_rcc SYSTEM PRIVATE

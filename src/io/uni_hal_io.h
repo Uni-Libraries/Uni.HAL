@@ -58,7 +58,7 @@ typedef struct {
     void *tx_start_ctx;
 
     /**
-     * TX trigger handler
+     * TX trigger handler. Runs in the caller's task or IRQ context after bytes are queued.
      */
     uni_hal_io_tx_trigger_fn tx_trigger;
 

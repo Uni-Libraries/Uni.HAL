@@ -1,0 +1,9 @@
+function(add_uart_zynq_test name)
+    add_executable(${name} driver.c model.c ${ARGN})
+    target_include_directories(${name} PRIVATE fakes)
+    target_link_libraries(${name} PRIVATE uni.hal)
+    add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES TIMEOUT 10)
+endfunction()
+
+add_uart_zynq_test(uart_zynq_tunnel tunnel_io.c test_tunnel.c)

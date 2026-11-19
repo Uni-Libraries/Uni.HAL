@@ -67,9 +67,13 @@ static size_t _uni_hal_io_buf_write(uni_hal_io_buffer_t *buf, const uint8_t *dat
     taskEXIT_CRITICAL();
 #else
     if (xPortIsInsideInterrupt()) {
+        BaseType_t woken = pdFALSE;
         UBaseType_t const saved_mask = taskENTER_CRITICAL_FROM_ISR();
-        result = xStreamBufferSendFromISR(buf->handle, data, data_len, nullptr);
+        result = xStreamBufferSendFromISR(buf->handle, data, data_len, &woken);
         taskEXIT_CRITICAL_FROM_ISR(saved_mask);
+        if (woken) {
+            portYIELD_FROM_ISR(pdTRUE);
+        }
     } else {
         taskENTER_CRITICAL();
         result = xStreamBufferSend(buf->handle, data, data_len, 0U);
@@ -292,7 +296,7 @@ size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, 
         result = _uni_hal_io_buf_write(&ctx->buf_tx, data, data_len);
 
         // call TX trigger hook
-        if (ctx->handlers.tx_trigger != nullptr) {
+        if (result != 0U && ctx->handlers.tx_trigger != nullptr) {
             ctx->handlers.tx_trigger(ctx, ctx->handlers.tx_trigger_ctx);
         }
     }
