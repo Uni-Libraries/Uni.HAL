@@ -164,20 +164,35 @@ typedef struct {
 // Defines
 //
 
-#if !configSUPPORT_STATIC_ALLOCATION
-#define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx) \
-    uni_hal_io_context_t name##_ctx = {                 \
-        .buf_rx = { .size = (count_rx) },               \
-        .buf_tx = { .size = (count_tx) },               \
-    }
+#if defined(__cplusplus)
+// Name every aggregate member for C++ builds with -Wmissing-field-initializers.
+#if configSUPPORT_STATIC_ALLOCATION
+#define UNI_HAL_IO_BUFFER_INITIALIZER(count, storage) \
+    { .handle = nullptr, .cb = {}, .size = (count), .array = (storage), .sync_idx = 0U }
 #else
-#define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx)            \
-    uint8_t name##_rx_buf[(count_rx) + 1] = {0};                   \
-    uint8_t name##_tx_buf[(count_tx) + 1] = {0};                   \
-    uni_hal_io_context_t name##_ctx = {                            \
-        .buf_rx = { .size = (count_rx), .array = &name##_rx_buf }, \
-        .buf_tx = { .size = (count_tx), .array = &name##_tx_buf }, \
-    }
+#define UNI_HAL_IO_BUFFER_INITIALIZER(count, storage) \
+    { .handle = nullptr, .size = (count), .array = (storage), .sync_idx = 0U }
+#endif
+#define UNI_HAL_IO_CONTEXT_INITIALIZER(rx_size, rx_array, tx_size, tx_array) \
+    { .buf_rx = UNI_HAL_IO_BUFFER_INITIALIZER(rx_size, rx_array),            \
+      .buf_tx = UNI_HAL_IO_BUFFER_INITIALIZER(tx_size, tx_array),            \
+      .handlers = {}, .stats = {}, .sync_pattern_addr = 0U, .sync_pattern_len = 0U }
+#else
+#define UNI_HAL_IO_CONTEXT_INITIALIZER(rx_size, rx_array, tx_size, tx_array) \
+    { .buf_rx = { .size = (rx_size), .array = (rx_array) },                  \
+      .buf_tx = { .size = (tx_size), .array = (tx_array) } }
+#endif
+
+#if configSUPPORT_STATIC_ALLOCATION
+#define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx)                        \
+    uint8_t name##_rx_buf[(count_rx) + 1] = {0};                               \
+    uint8_t name##_tx_buf[(count_tx) + 1] = {0};                               \
+    uni_hal_io_context_t name##_ctx = UNI_HAL_IO_CONTEXT_INITIALIZER(          \
+        count_rx, name##_rx_buf, count_tx, name##_tx_buf)
+#else
+#define UNI_HAL_IO_DEFINITION(name, count_rx, count_tx)                        \
+    uni_hal_io_context_t name##_ctx = UNI_HAL_IO_CONTEXT_INITIALIZER(          \
+        count_rx, NULL, count_tx, NULL)
 #endif
 
 #define UNI_HAL_IO_DECLARATION(name)                                                                                     \
