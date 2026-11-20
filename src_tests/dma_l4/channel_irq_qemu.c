@@ -115,6 +115,11 @@ static unsigned check_channel(unsigned module, unsigned channel)
     dma->ISR |= (DMA_ISR_GIF1 | DMA_ISR_TEIF1) << shift;
     CHECK(uni_hal_dma_enable(&ctx, false));
     CHECK(uni_hal_dma_stm32l4_has_transfer_error(&ctx));
+    CHECK(uni_hal_dma_set_length(&ctx, 0U) && regs->CNDTR == 0U);
+    CHECK(uni_hal_dma_set_length(&ctx, UINT16_MAX) && regs->CNDTR == UINT16_MAX);
+    CHECK(!uni_hal_dma_set_length(&ctx, (uint32_t)UINT16_MAX + 1U));
+    CHECK(!uni_hal_dma_set_length(&ctx, UINT32_MAX));
+    CHECK(regs->CNDTR == UINT16_MAX);
     CHECK(uni_hal_dma_set_length(&ctx, 4));
     CHECK(uni_hal_dma_enable(&ctx, true));
     irq();

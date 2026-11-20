@@ -570,7 +570,7 @@ bool uni_hal_dma_set_address(uni_hal_dma_context_t* ctx, uint32_t addr_from, uin
 bool uni_hal_dma_set_length(uni_hal_dma_context_t* ctx, uint32_t length)
 {
     bool result = false;
-    if (uni_hal_dma_is_inited(ctx))
+    if (uni_hal_dma_is_inited(ctx) && length <= UINT16_MAX)
     {
         DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
         uint32_t channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
