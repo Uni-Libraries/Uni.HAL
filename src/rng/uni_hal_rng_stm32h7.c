@@ -16,7 +16,7 @@
 // UNI_HAL
 #include "rcc/uni_hal_rcc.h"
 #include "rng/uni_hal_rng.h"
-#include "systick/uni_hal_systick.h"
+#include "rng/uni_hal_rng_stm32_wait.h"
 
 
 
@@ -44,64 +44,6 @@ static RNG_TypeDef *_uni_hal_rng_get_instance(uni_hal_core_periph_e instance) {
 }
 
 
-enum {
-    /** longest wait for one random word */
-    UNI_HAL_RNG_TIMEOUT_MS = 100U,
-};
-
-/**
- * Start the HSI48 oscillator
- * @return true when it is ready
- */
-static bool _uni_hal_rng_hsi48_start(void) {
-    uint32_t const start_ms = uni_hal_systick_get_ms();
-
-    LL_RCC_HSI48_Enable();
-    while (LL_RCC_HSI48_IsReady() == 0U) {
-        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_RNG_TIMEOUT_MS) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/**
- * Read one random word once the generator has it ready
- * @param instance RNG instance
- * @param out receives the random word
- * @return false when no valid word showed up in time (no kernel clock, seed or clock error)
- */
-static bool _uni_hal_rng_read_32u(RNG_TypeDef *instance, uint32_t *out) {
-    uint32_t const start_ms = uni_hal_systick_get_ms();
-
-    for (;;) {
-        if (LL_RNG_IsActiveFlag_SEIS(instance) != 0U) {
-            // seed error: the data on hand must not be used, restart the generator
-            LL_RNG_ClearFlag_SEIS(instance);
-            LL_RNG_Disable(instance);
-            LL_RNG_Enable(instance);
-        }
-        else if (LL_RNG_IsActiveFlag_DRDY(instance) != 0U) {
-            break;
-        }
-
-        if (LL_RNG_IsActiveFlag_CEIS(instance) != 0U) {
-            LL_RNG_ClearFlag_CEIS(instance);
-        }
-
-        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_RNG_TIMEOUT_MS) {
-            return false;
-        }
-    }
-
-    uint32_t const value = LL_RNG_ReadRandData32(instance);
-    *out = value;
-    return true;
-}
-
-
-
 //
 // Functions
 //
@@ -118,7 +60,7 @@ bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
 
             result = true;
             if (clock_source == UNI_HAL_RCC_CLKSRC_HSI48) {
-                result = _uni_hal_rng_hsi48_start();
+                result = uni_hal_rng_stm32_start_hsi48();
             }
             result = result && uni_hal_rcc_clksrc_set(UNI_HAL_CORE_PERIPH_RNG, clock_source);
             result = result && uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_RNG, true);
@@ -127,7 +69,7 @@ bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
 
                 // without a running kernel clock the generator never delivers
                 uint32_t probe = 0U;
-                result = _uni_hal_rng_read_32u(instance, &probe);
+                result = uni_hal_rng_stm32_read_word(instance, &probe);
                 ctx->inited = result;
             }
         }
@@ -157,7 +99,7 @@ uint32_t uni_hal_rng_get_32u(uni_hal_rng_context_t *ctx) {
         RNG_TypeDef *instance = _uni_hal_rng_get_instance(ctx->instance);
         if (instance != NULL) {
             // result stays 0 when the generator does not deliver
-            (void)_uni_hal_rng_read_32u(instance, &result);
+            (void)uni_hal_rng_stm32_read_word(instance, &result);
         }
     }
     return result;
@@ -175,7 +117,7 @@ bool uni_hal_rng_get(uni_hal_rng_context_t *ctx, uint8_t* buf, size_t buf_len) {
             size_t offset = 0U;
             while (result && offset < buf_len) {
                 uint32_t rng_val = 0U;
-                result = _uni_hal_rng_read_32u(instance, &rng_val);
+                result = uni_hal_rng_stm32_read_word(instance, &rng_val);
                 if (result) {
                     size_t const chunk = uni_common_math_min(buf_len - offset, sizeof(rng_val));
                     memcpy(&buf[offset], &rng_val, chunk);
