@@ -146,6 +146,7 @@ typedef struct {
     uint32_t t_high_min;
     uint32_t t_su_dat_min;
     uint32_t t_rise_max;
+    uint32_t t_fall_max;
 } uni_hal_i2c_timing_spec_t;
 
 enum {
@@ -168,13 +169,13 @@ uint32_t uni_hal_i2c_timing_calc(uint32_t clock_hz, uni_hal_i2c_speed_e speed) {
     uni_hal_i2c_timing_spec_t spec;
     switch (speed) {
     case UNI_HAL_I2C_SPEED_100KHZ:
-        spec = (uni_hal_i2c_timing_spec_t){100'000U, 4700U, 4000U, 250U, 1000U};
+        spec = (uni_hal_i2c_timing_spec_t){100'000U, 4700U, 4000U, 250U, 1000U, 300U};
         break;
     case UNI_HAL_I2C_SPEED_400KHZ:
-        spec = (uni_hal_i2c_timing_spec_t){400'000U, 1300U, 600U, 100U, 300U};
+        spec = (uni_hal_i2c_timing_spec_t){400'000U, 1300U, 600U, 100U, 300U, 300U};
         break;
     case UNI_HAL_I2C_SPEED_1MHZ:
-        spec = (uni_hal_i2c_timing_spec_t){1'000'000U, 500U, 260U, 50U, 120U};
+        spec = (uni_hal_i2c_timing_spec_t){1'000'000U, 500U, 260U, 50U, 120U, 120U};
         break;
     default:
         return 0U;
@@ -199,6 +200,11 @@ uint32_t uni_hal_i2c_timing_calc(uint32_t clock_hz, uni_hal_i2c_speed_e speed) {
     uint64_t const sync_ticks = 2U * ((((uint64_t)UNI_HAL_I2C_TIMING_AF_MIN_NS * clock_hz) / 1'000'000'000ULL) + 2U);
     uint64_t const counted_ticks = (period_ticks > sync_ticks) ? (period_ticks - sync_ticks) : 0U;
 
+    // RM0351/RM0433: keep SDA stable across the SCL falling edge. With DNF=0,
+    // the analog filter and three kernel clocks already cover part of that interval.
+    uint64_t const hold_ticks = _uni_hal_i2c_ns_to_ticks(spec.t_fall_max - UNI_HAL_I2C_TIMING_AF_MIN_NS, clock_hz);
+    uint64_t const extra_hold_ticks = hold_ticks > 3U ? hold_ticks - 3U : 0U;
+
     // smallest prescaler first: it gives the finest resolution
     for (uint32_t presc = 0U; presc < 16U; presc++) {
         uint64_t const div = (uint64_t)presc + 1U;
@@ -206,7 +212,8 @@ uint32_t uni_hal_i2c_timing_calc(uint32_t clock_hz, uni_hal_i2c_speed_e speed) {
         // SCLDEL: data set-up time, counted from the end of the rising edge
         uint64_t const scldel =
                 _uni_hal_i2c_div_ceil(_uni_hal_i2c_ns_to_ticks(spec.t_rise_max + spec.t_su_dat_min, clock_hz), div);
-        if (scldel > 16U) {
+        uint64_t const sdadel = _uni_hal_i2c_div_ceil(extra_hold_ticks, div);
+        if (scldel > 16U || sdadel > 15U) {
             continue;
         }
 
@@ -232,8 +239,8 @@ uint32_t uni_hal_i2c_timing_calc(uint32_t clock_hz, uni_hal_i2c_speed_e speed) {
         }
 
         uint64_t const scldel_reg = (scldel > 0U) ? (scldel - 1U) : 0U;
-        // SDADEL stays 0: the minimum data hold time of the bus is 0
-        return (presc << 28U) | ((uint32_t)scldel_reg << 20U) | ((uint32_t)(high - 1U) << 8U) | (uint32_t)(low - 1U);
+        return (presc << 28U) | ((uint32_t)scldel_reg << 20U) | ((uint32_t)sdadel << 16U) |
+               ((uint32_t)(high - 1U) << 8U) | (uint32_t)(low - 1U);
     }
 
     return 0U;

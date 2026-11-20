@@ -36,15 +36,16 @@ namespace {
         double t_high_min_ns;
         double t_su_dat_min_ns;
         double t_rise_max_ns;
+        uint32_t t_fall_max_ns;
     };
 
     const Spec specs[] = {
-        {UNI_HAL_I2C_SPEED_100KHZ, 100e3, 4700.0, 4000.0, 250.0, 1000.0},
-        {UNI_HAL_I2C_SPEED_400KHZ, 400e3, 1300.0, 600.0, 100.0, 300.0},
-        {UNI_HAL_I2C_SPEED_1MHZ, 1e6, 500.0, 260.0, 50.0, 120.0},
+        {UNI_HAL_I2C_SPEED_100KHZ, 100e3, 4700.0, 4000.0, 250.0, 1000.0, 300U},
+        {UNI_HAL_I2C_SPEED_400KHZ, 400e3, 1300.0, 600.0, 100.0, 300.0, 300U},
+        {UNI_HAL_I2C_SPEED_1MHZ, 1e6, 500.0, 260.0, 50.0, 120.0, 120U},
     };
 
-    const uint32_t clocks_hz[] = {8'000'000U,  16'000'000U, 25'000'000U, 32'000'000U, 48'000'000U,
+    const uint32_t clocks_hz[] = {8'000'000U, 12'000'000U, 12'000'001U, 16'000'000U, 25'000'000U, 32'000'000U, 48'000'000U,
                                   50'000'000U, 54'000'000U, 64'000'000U, 80'000'000U, 100'000'000U, 120'000'000U};
 }
 
@@ -74,7 +75,14 @@ TEST_CASE("i2c_timing_meets_bus_limits", "[hal_i2c]") {
             REQUIRE(t_low_ns >= spec.t_low_min_ns);
             REQUIRE(t_high_ns >= spec.t_high_min_ns);
             REQUIRE(t_scldel_ns >= spec.t_rise_max_ns + spec.t_su_dat_min_ns);
-            REQUIRE(d.sdadel == 0U);
+            // Express time in ns * Hz to check the falling-edge bound without rounding.
+            uint64_t const fall = uint64_t{spec.t_fall_max_ns} * clock_hz;
+            uint64_t const fixed_hold = uint64_t{50} * clock_hz + 3'000'000'000ULL;
+            uint64_t const presc_period = (d.presc + 1ULL) * 1'000'000'000ULL;
+            REQUIRE(fixed_hold + d.sdadel * presc_period >= fall);
+            if (d.sdadel != 0U) {
+                REQUIRE(fixed_hold + (d.sdadel - 1U) * presc_period < fall);
+            }
 
             // never faster than asked for, even with the shortest synchronisation delays
             const double sync_min_ns = 2.0 * (50.0 + 2.0 * 1e9 / clock_hz);
