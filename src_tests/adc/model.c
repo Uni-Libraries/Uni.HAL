@@ -41,8 +41,10 @@ unsigned adc_peripheral_calls;
 // Substitute the board services only within this driver's translation unit.
 #define uni_hal_gpio_pin_init model_gpio_init
 #define uni_hal_gpio_pin_is_inited model_gpio_is_inited
+#if !defined(UNI_HAL_TEST_ADC_REAL_RCC)
 #define uni_hal_rcc_clk_set model_clock
 #define uni_hal_rcc_clksrc_set model_clock_source
+#endif
 #define uni_hal_systick_get_ms model_tick
 #define uni_hal_dwt_delay_ms model_delay
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)

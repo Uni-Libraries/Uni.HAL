@@ -38,7 +38,7 @@ extern "C" {
  * buffer must remain valid and unchanged throughout acquisition. A rejected repeat call leaves
  * the active hardware running. If a later setup step fails during first initialization, a DMA
  * context initialized by this call may remain initialized without a running transfer.
- * On STM32H743, a second context cannot start the same converter during setup or regular conversion.
+ * On STM32, a second context cannot start the same converter during setup or regular conversion.
  * On STM32L496, startup fails if the requested DMA channel already serves another transfer.
  * @param ctx pointer to the ADC context
  * @return true on success

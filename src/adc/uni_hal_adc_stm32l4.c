@@ -668,6 +668,10 @@ static bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
 
 static bool initialize_converter(uni_hal_adc_context_t *ctx, uni_hal_rcc_clksrc_e clock_source) {
     const uni_hal_adc_config_t *config = &ctx->config;
+    ADC_TypeDef *adc = _uni_hal_adc_get_instance(config->instance);
+    if (!uni_hal_rcc_clk_set(config->instance, true) || LL_ADC_REG_IsConversionOngoing(adc)) {
+        return false;
+    }
     for (uint32_t rank = 0; rank < config->channels_count; ++rank) {
         uni_hal_gpio_pin_context_t *pin = config->pins[rank];
         if (pin != nullptr && !uni_hal_gpio_pin_is_inited(pin)) {
@@ -677,7 +681,7 @@ static bool initialize_converter(uni_hal_adc_context_t *ctx, uni_hal_rcc_clksrc_
         }
     }
 
-    if (!uni_hal_rcc_clksrc_set(config->instance, clock_source) || !uni_hal_rcc_clk_set(config->instance, true)) {
+    if (!uni_hal_rcc_clksrc_set(config->instance, clock_source)) {
         return false;
     }
     const uint32_t interrupt = _uni_hal_adc_get_interrupt(config->instance);
@@ -690,7 +694,6 @@ static bool initialize_converter(uni_hal_adc_context_t *ctx, uni_hal_rcc_clksrc_
     }
     if (config->dma != nullptr && !start_dma(ctx)) {
         // No conversion has been started. Return the ADC to a configurable state for a retry.
-        ADC_TypeDef *adc = _uni_hal_adc_get_instance(config->instance);
         LL_ADC_Disable(adc);
         if (uni_hal_adc_wait_startup_flag(&adc->CR, ADC_CR_ADEN | ADC_CR_ADDIS, false, config->timeout)) {
             LL_ADC_ClearFlag_ADRDY(adc);
