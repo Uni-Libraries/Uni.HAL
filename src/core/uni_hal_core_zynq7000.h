@@ -60,6 +60,9 @@ extern XScuGic g_uni_hal_core_zynq7000_gic;
  */
 void uni_hal_core_zynq7000_init(void);
 
+/** True if CPU0's global timer PPI is disabled and still has the BSP's unclaimed vector. */
+bool uni_hal_core_zynq7000_global_timer_irq_available(void);
+
 /**
  * Connects a handler to a GIC interrupt (SPI/PPI id) and enables it.
  * @param irq_id GIC interrupt id, e.g. XPS_UART0_INT_ID

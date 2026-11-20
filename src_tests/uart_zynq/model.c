@@ -1,6 +1,8 @@
 #include "model.h"
 #include "xuartps.h"
 #include "xparameters_ps.h"
+#include "xiltimer.h"
+#include "xil_io.h"
 #include "zynq_core.h"
 
 static struct {
@@ -11,7 +13,18 @@ static struct {
 } ports[2];
 static XUartPs_Config cfgs[] = {{XPS_UART0_BASEADDR}, {XPS_UART1_BASEADDR}};
 static struct { Xil_InterruptHandler handler; void *ctx; } vectors[96];
-static bool in_isr;
+static bool in_isr, event;
+static uint64_t clock_count, comparator;
+bool uart_model_ppi_available = true;
+unsigned uart_model_fail_irq;
+XScuGic g_uni_hal_core_zynq7000_gic;
+bool uart_model_irq_connected(unsigned id) { return vectors[id].handler != nullptr; }
+void XScuGic_Disconnect(XScuGic *gic, uint32_t id) {
+    (void)gic;
+    vectors[id].handler = nullptr;
+    vectors[id].ctx = nullptr;
+}
+uint32_t uart_model_timer_control = 1U;
 unsigned uart_model_bad_task_critical, uart_model_yields;
 
 unsigned uart_model_tx_count(unsigned port) { return ports[port].sent; }
@@ -55,6 +68,12 @@ void XUartPs_WriteReg(uint32_t address, uint32_t offset, uint32_t value) {
     default: break;
     }
 }
+void uart_model_drain(unsigned p, bool shifting) {
+    ports[p].queued = 0;
+    ports[p].shifting = shifting;
+    ports[p].status |= XUARTPS_IXR_TXEMPTY;
+}
+void uart_model_finish(unsigned p) { ports[p].shifting = false; }
 void uart_model_rx(unsigned p, uint8_t byte) {
     ports[p].rx_ready = true;
     ports[p].rx_byte = byte;
@@ -63,10 +82,12 @@ void uart_model_rx(unsigned p, uint8_t byte) {
 bool uni_hal_core_zynq7000_irq_connect(uint32_t id, Xil_InterruptHandler handler, void *ctx,
                                        uint32_t priority, bool edge) {
     (void)priority; (void)edge;
+    if (id == uart_model_fail_irq) return false;
     vectors[id].handler = handler;
     vectors[id].ctx = ctx;
     return true;
 }
+bool uni_hal_core_zynq7000_global_timer_irq_available(void) { return uart_model_ppi_available; }
 static void dispatch(unsigned id) {
     bool outer = in_isr;
     in_isr = true;
@@ -75,4 +96,25 @@ static void dispatch(unsigned id) {
 }
 void uart_model_irq(unsigned p) {
     if (ports[p].mask & ports[p].status) dispatch(p == 0U ? XPS_UART0_INT_ID : XPS_UART1_INT_ID);
+}
+
+void XTime_GetTime(XTime *time) { *time = clock_count; }
+uint32_t Xil_In32(uint32_t address) {
+    return address == XPAR_GLOBAL_TMR_BASEADDR + 8U ? uart_model_timer_control : (uint32_t)event;
+}
+void Xil_Out32(uint32_t address, uint32_t value) {
+    switch (address - XPAR_GLOBAL_TMR_BASEADDR) {
+    case 8U: uart_model_timer_control = value; break;
+    case 12U: if (value & 1U) event = false; break;
+    case 16U: comparator = (comparator & 0xFFFFFFFF00000000ULL) | value; break;
+    case 20U: comparator = ((uint64_t)value << 32) | (uint32_t)comparator; break;
+    }
+}
+bool uart_model_alarm_armed(void) { return (uart_model_timer_control & 7U) == 7U; }
+void uart_model_alarm(void) {
+    if (uart_model_alarm_armed()) {
+        clock_count = comparator;
+        event = true;
+        dispatch(XPS_GLOBAL_TMR_INT_ID);
+    }
 }

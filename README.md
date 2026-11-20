@@ -13,6 +13,13 @@ Not every module exists for every target; the header of a module says what it co
 library bundles CMSIS, the ST HAL/LL drivers, the FreeRTOS kernel and SEGGER RTT under
 `3rdparty/`.
 
+On Zynq-7000, the PS UART driver reserves CPU0's global timer comparator and its private
+interrupt (PPI 27) when the first UART is initialized. Leave both available when using a
+PS UART. Initialization fails if the alarm or interrupt is already in use. The driver
+checks the shift register after the FIFO empties, including before FreeRTOS starts when
+interrupts are enabled. The BSP keeps its free-running time counter and FreeRTOS uses
+the separate private tick timer.
+
 ## Using it from CMake
 
 ```cmake

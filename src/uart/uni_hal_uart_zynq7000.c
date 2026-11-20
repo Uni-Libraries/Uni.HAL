@@ -8,6 +8,7 @@
 //
 // TX: the task side fills the FIFO under a critical section when the transmitter is idle and
 // enables the TX-empty interrupt; the interrupt handler refills the FIFO from the TX buffer.
+// If the FIFO drains before the last stop bit, the global timer comparator checks for wire idle.
 // RX: FIFO trigger level / timeout interrupts move the bytes into the RX buffer.
 //
 
@@ -18,6 +19,8 @@
 // Xilinx BSP
 #include <xparameters_ps.h>
 #include <xuartps.h>
+#include <xiltimer.h>
+#include <xil_io.h>
 
 // FreeRTOS
 #include <FreeRTOS.h>
@@ -76,6 +79,52 @@ static uint32_t _uni_hal_uart_zynq7000_irq(uni_hal_core_periph_e instance) {
 }
 
 
+// CPU0's banked Cortex-A9 global timer comparator. The counter remains owned by the BSP.
+#define GT_CONTROL (XPAR_GLOBAL_TMR_BASEADDR + 0x08U)
+#define GT_STATUS  (XPAR_GLOBAL_TMR_BASEADDR + 0x0CU)
+#define GT_CMP_LO  (XPAR_GLOBAL_TMR_BASEADDR + 0x10U)
+#define GT_CMP_HI  (XPAR_GLOBAL_TMR_BASEADDR + 0x14U)
+#define GT_ENABLE       (1U << 0)
+#define GT_COMPARE      (1U << 1)
+#define GT_IRQ          (1U << 2)
+#define GT_AUTOINCREMENT (1U << 3)
+
+static uni_hal_usart_context_t *draining[UNI_HAL_UART_ZYNQ7000_COUNT];
+static bool alarm_connected, alarm_armed;
+static uint64_t alarm_deadline;
+
+static bool alarm_available(void) {
+    uint32_t const control = Xil_In32(GT_CONTROL);
+    return (control & (GT_ENABLE | GT_COMPARE | GT_IRQ | GT_AUTOINCREMENT)) == GT_ENABLE &&
+           !(Xil_In32(GT_STATUS) & 1U) && uni_hal_core_zynq7000_global_timer_irq_available();
+}
+
+// UARTs share one alarm. An earlier deadline can advance an existing check for the other port.
+static void schedule_check(unsigned port) {
+    XTime now;
+    XTime_GetTime(&now);
+    uint32_t const control = Xil_In32(GT_CONTROL);
+    uint32_t const prescaler = 1U + ((control >> 8) & 0xFFU);
+    uint32_t const baud = _uni_hal_uart_zynq7000_dev[port].BaudRate;
+    // At TXEMPTY there is at most one 8N1 character on the wire. TACTIVE decides completion.
+    uint64_t const counts = 10ULL * COUNTS_PER_SECOND / prescaler;
+    uint64_t const delay = (counts + baud - 1U) / baud;
+    uint64_t const deadline = now + delay;
+    if (alarm_armed && alarm_deadline <= deadline) {
+        return;
+    }
+    uint32_t const disabled = control & ~(GT_COMPARE | GT_IRQ);
+    Xil_Out32(GT_CONTROL, disabled);
+    Xil_Out32(GT_CMP_LO, (uint32_t)deadline);
+    Xil_Out32(GT_CMP_HI, (uint32_t)(deadline >> 32));
+    Xil_Out32(GT_STATUS, 1U);
+    alarm_deadline = deadline;
+    alarm_armed = true;
+    // Zynq-7000 uses Cortex-A9 r3p0: count >= comparator also fires a deadline passed during setup.
+    Xil_Out32(GT_CONTROL, disabled | GT_COMPARE | GT_IRQ);
+}
+
+
 /* moves bytes from the TX buffer into the TX FIFO; must not race with itself (ISR or masked) */
 static bool _uni_hal_uart_zynq7000_fill_fifo(uni_hal_usart_context_t *ctx, uint32_t base, BaseType_t *woken) {
     bool any = false;
@@ -85,6 +134,12 @@ static bool _uni_hal_uart_zynq7000_fill_fifo(uni_hal_usart_context_t *ctx, uint3
                                xStreamBufferReceive(ctx->io->buf_tx.handle, &data, 1U, 0U);
         if (count == 0U) {
             break;
+        }
+        if (!ctx->in_transmission) {
+            ctx->in_transmission = true;
+            if (ctx->io->handlers.tx_start) {
+                ctx->io->handlers.tx_start(ctx->io, ctx->io->handlers.tx_start_ctx);
+            }
         }
         XUartPs_WriteReg(base, XUARTPS_FIFO_OFFSET, data);
         ctx->io->stats.tx_transmited++;
@@ -100,15 +155,10 @@ static bool _uni_hal_uart_zynq7000_fill_fifo(uni_hal_usart_context_t *ctx, uint3
 //
 
 static void _uni_hal_uart_zynq7000_start_tx(uni_hal_usart_context_t *ctx, uint32_t base, BaseType_t *woken) {
-    if (!ctx->in_transmission) {
-        if (ctx->io->handlers.tx_start) {
-            ctx->io->handlers.tx_start(ctx->io, ctx->io->handlers.tx_start_ctx);
-        }
-        if (_uni_hal_uart_zynq7000_fill_fifo(ctx, base, woken)) {
-            ctx->in_transmission = true;
-            // the TX-empty event fires when the FIFO drains
-            XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, XUARTPS_IXR_TXEMPTY);
-        }
+    unsigned const port = (unsigned)_uni_hal_uart_zynq7000_index(ctx->instance);
+    if ((!ctx->in_transmission || draining[port] != nullptr) && _uni_hal_uart_zynq7000_fill_fifo(ctx, base, woken)) {
+        draining[port] = nullptr;
+        XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, XUARTPS_IXR_TXEMPTY);
     }
 }
 
@@ -141,6 +191,55 @@ static void _uni_hal_uart_zynq7000_tx_trigger(void *ctx_io_r, void *ctx_fn_r) {
 //
 // IRQ handler
 //
+
+static void finish_or_defer(uni_hal_usart_context_t *ctx, uint32_t base, BaseType_t *woken) {
+    unsigned const port = (unsigned)_uni_hal_uart_zynq7000_index(ctx->instance);
+    uint32_t const status = XUartPs_ReadReg(base, XUARTPS_SR_OFFSET);
+    if (!(status & XUARTPS_SR_TXEMPTY)) {
+        // A stale empty event after a refill: wait for the fresh FIFO interrupt.
+        draining[port] = nullptr;
+        XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, XUARTPS_IXR_TXEMPTY);
+        return;
+    }
+    XUartPs_WriteReg(base, XUARTPS_IDR_OFFSET, XUARTPS_IXR_TXEMPTY);
+    if (status & XUARTPS_SR_TACTIVE) {
+        draining[port] = ctx;
+        schedule_check(port);
+    } else {
+        draining[port] = nullptr;
+        ctx->in_transmission = false;
+        if (ctx->io->handlers.tx_end) {
+            ctx->io->handlers.tx_end(ctx->io, ctx->io->handlers.tx_end_ctx);
+        }
+        if (ctx->callback && ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
+            *woken = pdTRUE;
+        }
+    }
+}
+
+static void check_shift_registers(void *unused) {
+    (void)unused;
+    BaseType_t woken = pdFALSE;
+    UBaseType_t const mask = taskENTER_CRITICAL_FROM_ISR();
+    if (Xil_In32(GT_STATUS) & 1U) {
+        Xil_Out32(GT_CONTROL, Xil_In32(GT_CONTROL) & ~(GT_COMPARE | GT_IRQ));
+        Xil_Out32(GT_STATUS, 1U);
+        alarm_armed = false;
+        for (unsigned port = 0; port < UNI_HAL_UART_ZYNQ7000_COUNT; ++port) {
+            uni_hal_usart_context_t *ctx = draining[port];
+            if (ctx != nullptr) {
+                uint32_t const base = _uni_hal_uart_zynq7000_base(ctx->instance);
+                // A producer may already have queued bytes before its trigger runs.
+                _uni_hal_uart_zynq7000_start_tx(ctx, base, &woken);
+                if (draining[port] != nullptr) {
+                    finish_or_defer(ctx, base, &woken);
+                }
+            }
+        }
+    }
+    taskEXIT_CRITICAL_FROM_ISR(mask);
+    portYIELD_FROM_ISR(woken);
+}
 
 static void _uni_hal_uart_zynq7000_irq_handler(void *arg) {
     uni_hal_usart_context_t *ctx = (uni_hal_usart_context_t *)arg;
@@ -180,19 +279,11 @@ static void _uni_hal_uart_zynq7000_irq_handler(void *arg) {
 
     // TX: the FIFO has drained
     if ((isr & XUARTPS_IXR_TXEMPTY) != 0U) {
-        if (!_uni_hal_uart_zynq7000_fill_fifo(ctx, base, &woken)) {
-            // nothing left: the last bytes are in the shift register
-            XUartPs_WriteReg(base, XUARTPS_IDR_OFFSET, XUARTPS_IXR_TXEMPTY);
-            if (ctx->in_transmission) {
-                ctx->in_transmission = false;
-                if (ctx_io->handlers.tx_end) {
-                    ctx_io->handlers.tx_end(ctx_io, ctx_io->handlers.tx_end_ctx);
-                }
-                if (ctx->callback && ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
-                    woken = pdTRUE;
-                }
-            }
+        UBaseType_t const mask = taskENTER_CRITICAL_FROM_ISR();
+        if (ctx->in_transmission && !_uni_hal_uart_zynq7000_fill_fifo(ctx, base, &woken)) {
+            finish_or_defer(ctx, base, &woken);
         }
+        taskEXIT_CRITICAL_FROM_ISR(mask);
     }
 
     portYIELD_FROM_ISR(woken);
@@ -208,7 +299,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
     if (ctx != nullptr && ctx->io != nullptr) {
         int32_t idx = _uni_hal_uart_zynq7000_index(ctx->instance);
-        if (idx >= 0) {
+        if (idx >= 0 && (alarm_connected || alarm_available())) {
             XUartPs *dev = &_uni_hal_uart_zynq7000_dev[idx];
             uint32_t base = _uni_hal_uart_zynq7000_base(ctx->instance);
 
@@ -231,14 +322,27 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 result = uni_hal_io_init(ctx->io);
             }
             if (result) {
-                uint32_t prio = ctx->isr_priority != 0U ? ctx->isr_priority : UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT;
-                result = uni_hal_core_zynq7000_irq_connect(_uni_hal_uart_zynq7000_irq(ctx->instance),
-                                                           _uni_hal_uart_zynq7000_irq_handler, ctx, prio, false);
+                uint32_t const prio = ctx->isr_priority != 0U ? ctx->isr_priority : UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT;
+                uint32_t const mask = uni_hal_core_irq_pause();
+                bool const had_alarm = alarm_connected;
+                if (!had_alarm) {
+                    alarm_connected = alarm_available() && uni_hal_core_zynq7000_irq_connect(
+                        XPS_GLOBAL_TMR_INT_ID, check_shift_registers, nullptr, UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT, true);
+                }
+                // Publish the caller's pointer to the UART vector only when everything else is ready.
+                result = alarm_connected && uni_hal_core_zynq7000_irq_connect(
+                    _uni_hal_uart_zynq7000_irq(ctx->instance), _uni_hal_uart_zynq7000_irq_handler, ctx, prio, false);
+                if (!result && !had_alarm && alarm_connected) {
+                    XScuGic_Disconnect(&g_uni_hal_core_zynq7000_gic, XPS_GLOBAL_TMR_INT_ID);
+                    alarm_connected = false;
+                }
+                uni_hal_core_irq_resume(mask);
                 if (!result) {
                     uni_hal_io_deinit(ctx->io);
                 }
             }
             if (result) {
+                draining[idx] = nullptr;
                 ctx->io->handlers.tx_trigger = _uni_hal_uart_zynq7000_tx_trigger;
                 ctx->io->handlers.tx_trigger_ctx = ctx;
                 XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, UNI_HAL_UART_ZYNQ7000_RX_IRQS);

@@ -6,4 +6,5 @@ function(add_uart_zynq_test name)
     set_tests_properties(${name} PROPERTIES TIMEOUT 10)
 endfunction()
 
+add_uart_zynq_test(uart_zynq_completion completion.c)
 add_uart_zynq_test(uart_zynq_tunnel tunnel_io.c test_tunnel.c)

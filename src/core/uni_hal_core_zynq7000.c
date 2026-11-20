@@ -39,6 +39,7 @@ extern const uint32_t uni_hal_core_vector_table_ca9[];
 //
 
 static bool _uni_hal_core_zynq7000_gic_ready = false;
+static Xil_InterruptHandler global_timer_default_handler;
 
 static uint32_t _uni_hal_core_zynq7000_irq_id(uni_hal_core_irq_e irq) {
     switch (irq) {
@@ -93,11 +94,23 @@ void uni_hal_core_irq_init(void) {
         __asm volatile("isb" ::: "memory");
 
         XScuGic_Config *cfg = XScuGic_LookupConfig(XPAR_XSCUGIC_0_BASEADDR);
+        // CfgInitialize installs its private stub only into unclaimed vector slots.
+        const bool timer_unclaimed = cfg != nullptr && cfg->HandlerTable[XPS_GLOBAL_TMR_INT_ID].Handler == nullptr;
         if (cfg != nullptr &&
             XScuGic_CfgInitialize(&g_uni_hal_core_zynq7000_gic, cfg, cfg->CpuBaseAddress) == XST_SUCCESS) {
             _uni_hal_core_zynq7000_gic_ready = true;
+            if (timer_unclaimed) {
+                global_timer_default_handler = cfg->HandlerTable[XPS_GLOBAL_TMR_INT_ID].Handler;
+            }
         }
     }
+}
+
+
+bool uni_hal_core_zynq7000_global_timer_irq_available(void) {
+    return global_timer_default_handler != nullptr &&
+           g_uni_hal_core_zynq7000_gic.Config->HandlerTable[XPS_GLOBAL_TMR_INT_ID].Handler == global_timer_default_handler &&
+           !(XScuGic_DistReadReg(&g_uni_hal_core_zynq7000_gic, XSCUGIC_ENABLE_SET_OFFSET) & (1U << XPS_GLOBAL_TMR_INT_ID));
 }
 
 
