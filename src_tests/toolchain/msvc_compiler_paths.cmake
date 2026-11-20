@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.29)
+set(UNI_HAL_TARGET_MCU PC)
+set(TOOLCHAIN_ARCH "")
+
+function(read_flags module out)
+    include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/${module}.cmake")
+    set(${out} "${CMAKE_C_FLAGS};${CMAKE_CXX_FLAGS};${CMAKE_ASM_FLAGS};${CMAKE_EXE_LINKER_FLAGS_INIT}" PARENT_SCOPE)
+endfunction()
+
+function(check_profile c_compiler cxx_compiler profile)
+    set(CMAKE_C_COMPILER "${c_compiler}")
+    set(CMAKE_CXX_COMPILER "${cxx_compiler}")
+    read_flags("toolchain_compiler_${profile}" expected)
+    read_flags(toolchain_compiler actual)
+    if(NOT actual STREQUAL expected)
+        message(FATAL_ERROR "Expected ${profile} flags for C='${c_compiler}', CXX='${cxx_compiler}', got '${actual}'")
+    endif()
+endfunction()
+
+# CMake resolves the command name to an absolute path in the compiler cache.
+check_profile(cl cl msvc)
+check_profile("/opt/msvc/bin/cl" "/opt/msvc/bin/cl" msvc)
+check_profile([[C:\Program Files\MSVC\bin\CL.EXE]] "" msvc)
+check_profile("" "C:/Program Files/MSVC/bin/cl.exe" msvc)
+check_profile("/opt/cl/clang-cl.exe" "/opt/cl/clang-cl.exe" gcc)
