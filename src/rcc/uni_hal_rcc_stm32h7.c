@@ -1706,6 +1706,20 @@ bool uni_hal_rcc_stm32h7_config_set(const uni_hal_rcc_stm32h7_config_t *config) 
     // An NMI can interrupt the copy. Publish only the completed snapshot.
     uni_hal_rcc_stm32h7_config_t *next = g_uni_hal_rcc_config == &rcc_configs[0] ? &rcc_configs[1] : &rcc_configs[0];
     *next = *config;
+    for (size_t i = 0; i < sizeof(next->pll) / sizeof(next->pll[0]); ++i) {
+        uni_hal_rcc_stm32h7_config_pll_t *pll = &next->pll[i];
+        if (pll->fracn < 8192U || (pll->p == 0U && pll->q == 0U && pll->r == 0U)) {
+            continue;
+        }
+        // The public endpoint 8192/8192 adds one to N. Hardware stores
+        // only 13 fractional bits and accepts effective N from 4 to 512.
+        if (pll->fracn > 8192U || pll->n < 3U || pll->n >= 512U) {
+            uni_hal_core_irq_resume(mask);
+            return false;
+        }
+        ++pll->n;
+        pll->fracn = 0U;
+    }
     __DMB();
     g_uni_hal_rcc_config = next;
     uni_hal_core_irq_resume(mask);

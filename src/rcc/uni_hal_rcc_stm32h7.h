@@ -42,7 +42,8 @@ typedef struct {
     uint32_t r;
 
     /**
-     * PLL fractional part (0..8192)
+     * Fractional numerator (0..8192) in units of 1/8192.
+     * At 8192 the multiplier becomes N + 1, which must fit the hardware range 4..512.
      */
     uint32_t fracn;
 } uni_hal_rcc_stm32h7_config_pll_t;
@@ -166,7 +167,10 @@ typedef struct {
 // Functions
 //
 
-/** Copy the configuration for startup and clock recovery. Returns false during clock initialization. */
+/**
+ * Copy the configuration for startup and clock recovery. Returns false during clock
+ * initialization or when an enabled PLL's fractional part cannot be represented.
+ */
 bool uni_hal_rcc_stm32h7_config_set(const uni_hal_rcc_stm32h7_config_t *config);
 
 uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get(void);
