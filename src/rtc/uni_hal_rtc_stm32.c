@@ -21,7 +21,7 @@
 #endif
 
 // Uni.HAL
-#include "rtc/uni_hal_rtc.h"
+#include "rtc/uni_hal_rtc_calendar.h"
 #include "systick/uni_hal_systick.h"
 
 
@@ -31,9 +31,6 @@
 //
 
 enum {
-    /** the calendar registers hold two digits of the year */
-    UNI_HAL_RTC_YEAR_BASE = 2000U,
-
     /** 1 Hz from the 32.768 kHz crystal: 32768 / (127 + 1) / (255 + 1) */
     UNI_HAL_RTC_LSE_PREDIV_A = 127U,
     UNI_HAL_RTC_LSE_PREDIV_S = 255U,
@@ -59,15 +56,6 @@ static void _uni_hal_rtc_bus_clock_enable(void) {
 #else
     LL_APB4_GRP1_EnableClock(LL_APB4_GRP1_PERIPH_RTCAPB);
 #endif
-}
-
-static bool _uni_hal_rtc_datetime_is_valid(const uni_hal_rtc_datetime_t *datetime) {
-    return datetime != nullptr &&
-           datetime->year >= UNI_HAL_RTC_YEAR_BASE && datetime->year < (UNI_HAL_RTC_YEAR_BASE + 100U) &&
-           datetime->month >= 1U && datetime->month <= 12U &&
-           datetime->day >= 1U && datetime->day <= 31U &&
-           datetime->weekday >= 1U && datetime->weekday <= 7U &&
-           datetime->hours <= 23U && datetime->minutes <= 59U && datetime->seconds <= 59U;
 }
 
 
@@ -240,7 +228,7 @@ bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *d
 bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *datetime) {
     bool result = false;
 
-    if (uni_hal_rtc_is_inited(ctx) && _uni_hal_rtc_datetime_is_valid(datetime)) {
+    if (uni_hal_rtc_is_inited(ctx) && uni_hal_rtc_datetime_is_valid(datetime)) {
         LL_RTC_DateTypeDef date = {
             .WeekDay = datetime->weekday,
             .Month = datetime->month,
