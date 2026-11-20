@@ -82,6 +82,11 @@
 
 /* A critical section is exited when the critical section nesting count reaches
  * this value. */
+/* ulCriticalNesting is saved on every task switch. Its high bit remembers
+ * an IRQ mask inherited by the outermost task critical section. */
+#define portINHERITED_IRQ_MASK           ( 1UL << 31 )
+#define portCPSR_IRQ_MASK                ( 1UL << 7 )
+
 #define portNO_CRITICAL_NESTING          ( ( uint32_t ) 0 )
 
 /* In all GICs 255 can be written to the priority mask register to unmask all
@@ -124,14 +129,30 @@
     __asm volatile ( "CPSIE i" ::: "memory" );
 
 
+static inline uint32_t prvSaveAndDisableIRQ( void )
+{
+    uint32_t ulCPSR;
+
+    __asm volatile ( "MRS %0, CPSR\nCPSID i" : "=r" ( ulCPSR ) :: "memory" );
+    return ulCPSR & portCPSR_IRQ_MASK;
+}
+
+static inline void prvRestoreIRQ( uint32_t ulSavedMask )
+{
+    if( ulSavedMask == 0U )
+    {
+        portCPU_IRQ_ENABLE();
+    }
+}
+
 /* Macro to unmask all interrupt priorities. */
 #define portCLEAR_INTERRUPT_MASK()                            \
     {                                                         \
-        portCPU_IRQ_DISABLE();                                \
+        uint32_t ulSavedMask = prvSaveAndDisableIRQ();         \
         portICCPMR_PRIORITY_MASK_REGISTER = portUNMASK_VALUE; \
         __asm volatile ( "DSB        \n"                      \
                          "ISB        \n" );                   \
-        portCPU_IRQ_ENABLE();                                 \
+        prvRestoreIRQ( ulSavedMask );                         \
     }
 
 #define portINTERRUPT_PRIORITY_REGISTER_OFFSET    0x400UL
@@ -418,7 +439,7 @@ void vPortEnterCritical( void )
      * cost hundreds of cycles, and a network packet takes dozens of critical sections (half of the CPU
      * at 600 Mbit/s). Interrupts above configMAX_API_CALL_INTERRUPT_PRIORITY are masked as well. The
      * I bit is part of the task context, so a yield inside a critical section keeps it. */
-    portCPU_IRQ_DISABLE();
+    uint32_t ulSavedMask = prvSaveAndDisableIRQ();
 
     /* Now that interrupts are disabled, ulCriticalNesting can be accessed
      * directly.  Increment ulCriticalNesting to keep a count of how many times
@@ -432,6 +453,10 @@ void vPortEnterCritical( void )
      * assert function also uses a critical section. */
     if( ulCriticalNesting == 1 )
     {
+        if( ulSavedMask != 0U )
+        {
+            ulCriticalNesting |= portINHERITED_IRQ_MASK;
+        }
         configASSERT( ulPortInterruptNesting == 0 );
     }
 }
@@ -445,9 +470,12 @@ void vPortExitCritical( void )
          * exited. */
         ulCriticalNesting--;
 
-        /* If the nesting level has reached zero then all interrupt
-         * priorities must be re-enabled. */
-        if( ulCriticalNesting == portNO_CRITICAL_NESTING )
+        /* Only the outermost exit may restore the IRQ mask. */
+        if( ulCriticalNesting == portINHERITED_IRQ_MASK )
+        {
+            ulCriticalNesting = portNO_CRITICAL_NESTING;
+        }
+        else if( ulCriticalNesting == portNO_CRITICAL_NESTING )
         {
             portCPU_IRQ_ENABLE();
         }
@@ -512,7 +540,7 @@ uint32_t ulPortSetInterruptMask( void )
 
     /* Interrupt in the CPU must be turned off while the ICCPMR is being
      * updated. */
-    portCPU_IRQ_DISABLE();
+    uint32_t ulSavedMask = prvSaveAndDisableIRQ();
 
     if( portICCPMR_PRIORITY_MASK_REGISTER == ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) )
     {
@@ -527,7 +555,7 @@ uint32_t ulPortSetInterruptMask( void )
                          "isb        \n" ::: "memory" );
     }
 
-    portCPU_IRQ_ENABLE();
+    prvRestoreIRQ( ulSavedMask );
 
     return ulReturn;
 }

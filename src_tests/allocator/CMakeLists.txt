@@ -144,3 +144,18 @@ if(UNI_HAL_TEST_STM32_QEMU)
         add_subdirectory(../uart_l4 uart_l4)
     endif()
 endif()
+
+option(UNI_HAL_TEST_ZYNQ_QEMU "Run the Zynq BSP and FreeRTOS on an emulated Cortex-A9" OFF)
+if(UNI_HAL_TEST_ZYNQ_QEMU)
+    if(NOT UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
+        message(FATAL_ERROR "The Cortex-A9 IRQ test uses ZYNQ7000")
+    endif()
+    find_program(QEMU_SYSTEM_ARM qemu-system-arm NO_CMAKE_FIND_ROOT_PATH REQUIRED)
+    enable_testing()
+    uni_hal_add_executable(irq_nesting_zynq)
+    target_sources(irq_nesting_zynq PRIVATE ../irq_zynq/nesting.c)
+    add_test(NAME irq_nesting_zynq COMMAND "${QEMU_SYSTEM_ARM}" -M xilinx-zynq-a9
+        -nographic -nodefaults -monitor none -serial none -semihosting-config enable=on,target=native
+        -device "loader,file=$<TARGET_FILE:irq_nesting_zynq>,cpu-num=0")
+    set_tests_properties(irq_nesting_zynq PROPERTIES TIMEOUT 15)
+endif()

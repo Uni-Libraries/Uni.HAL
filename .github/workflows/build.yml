@@ -185,8 +185,9 @@ jobs:
       run: |
         cmake -S src_tests/allocator -B build-zynq \
           -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchain.cmake" -DCMAKE_BUILD_TYPE=Release \
-          -DUNI_HAL_TARGET_MCU=ZYNQ7000 -DUNI_HAL_ZYNQ7000_BSP_DIR="$UNI_HAL_ZYNQ7000_BSP_DIR"
-        cmake --build build-zynq --target public_api_link
+          -DUNI_HAL_TARGET_MCU=ZYNQ7000 -DUNI_HAL_ZYNQ7000_BSP_DIR="$UNI_HAL_ZYNQ7000_BSP_DIR" -DUNI_HAL_TEST_ZYNQ_QEMU=ON
+        cmake --build build-zynq
+        ctest --test-dir build-zynq --output-on-failure --no-tests=error
 
   build-arm-clang:
     name: arm/clang (${{ matrix.mcu }}) on ubuntu-latest
