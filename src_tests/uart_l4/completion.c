@@ -9,11 +9,13 @@ static USART_TypeDef uart;
 #define LPUART1 (&uart)
 #define TEST_INSTANCE UNI_HAL_CORE_PERIPH_LPUART_1
 #define test_irq LPUART1_IRQHandler
+#define TEST_IRQn LPUART1_IRQn
 #else
 #undef USART1
 #define USART1 (&uart)
 #define TEST_INSTANCE UNI_HAL_CORE_PERIPH_UART_1
 #define test_irq USART1_IRQHandler
+#define TEST_IRQn USART1_IRQn
 #endif
 
 static void send_byte(USART_TypeDef *dev, uint8_t data) {
@@ -65,6 +67,66 @@ static void delayed_trigger(void *io, void *ctx) {
 
 #define CHECK(expr) do { if (!(expr)) return __LINE__; } while (0)
 
+static const uint8_t marker[] = {'A', 'B'};
+static volatile int clear_result;
+static volatile bool reader_matched;
+
+static bool clear_after_transmit(void *ctx, void *cookie, uni_hal_usart_callback_e type) {
+    (void)cookie;
+    if (type == UNI_HAL_USART_CALLBACK_TC && xPortIsInsideInterrupt()) {
+        clear_result = uni_hal_usart_receive_clear((uni_hal_usart_context_t *)ctx);
+    }
+    return false;
+}
+
+static void pend_uart_irq(void) {
+    NVIC_SetPendingIRQ(TEST_IRQn);
+    __DSB();
+    __ISB();
+}
+
+static int clear_from_callback(uni_hal_usart_context_t *ctx) {
+    uint8_t const byte = '!';
+    clear_result = -1;
+    if (uni_hal_usart_transmit_data(ctx, &byte, 1U) == 1U) {
+        uart.ISR |= USART_ISR_TXE;
+        pend_uart_irq();
+        uart.ISR |= USART_ISR_TXE | USART_ISR_TC;
+        pend_uart_irq();
+    }
+    return clear_result;
+}
+
+static void waiting_reader(void *io) {
+    reader_matched = uni_hal_io_receive_sync(io, marker, sizeof(marker), 1000U);
+    vTaskDelete(nullptr);
+}
+
+static unsigned check_clear(uni_hal_usart_context_t *ctx) {
+    uni_hal_io_context_t *io = ctx->io;
+    CHECK(uni_hal_usart_set_callback(ctx, clear_after_transmit, nullptr));
+    NVIC_SetPriority(TEST_IRQn, configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS));
+    NVIC_EnableIRQ(TEST_IRQn);
+
+    CHECK(xStreamBufferSend(io->buf_rx.handle, "A", 1, 0) == 1U);
+    CHECK(!uni_hal_io_receive_sync(io, marker, sizeof(marker), 0));
+    CHECK(xStreamBufferSend(io->buf_rx.handle, "X", 1, 0) == 1U);
+    CHECK(clear_from_callback(ctx) == 1);
+    CHECK(uni_hal_usart_receive_available(ctx) == 0U);
+    CHECK(xStreamBufferSend(io->buf_rx.handle, "B", 1, 0) == 1U);
+    CHECK(!uni_hal_io_receive_sync(io, marker, sizeof(marker), 0));
+
+    // A higher-priority reader gets as far as blocking on the missing second byte.
+    CHECK(xStreamBufferSend(io->buf_rx.handle, "A", 1, 0) == 1U);
+    CHECK(!uni_hal_io_receive_sync(io, marker, sizeof(marker), 0));
+    CHECK(xTaskCreate(waiting_reader, "reader", 384, io, 2, nullptr) == pdPASS);
+    CHECK(clear_from_callback(ctx) == 0 && io->buf_rx.sync_idx == 1U);
+    CHECK(xStreamBufferSend(io->buf_rx.handle, "B", 1, 0) == 1U);
+    CHECK(reader_matched);
+    NVIC_DisableIRQ(TEST_IRQn);
+    return 0;
+}
+
 static unsigned check(void) {
     UNI_HAL_IO_DEFINITION(io, 8, 8);
     uni_hal_gpio_pin_context_t pin = {};
@@ -108,14 +170,28 @@ static unsigned check(void) {
     test_irq();
     CHECK(ends == 2U && completions == 2U && !uni_hal_usart_transmit_busy(&ctx));
     CHECK(io_ctx.stats.tx_transmited == 3U);
+    unsigned const clear_error = check_clear(&ctx);
+    if (clear_error) return clear_error;
     uni_hal_io_deinit(&io_ctx);
     return 0;
 }
 
-int main(void) {
-    uint32_t result[] = {0x20026U, check()};
+[[noreturn]] static void finish(unsigned line) {
+    uint32_t result[] = {0x20026U, line};
     register uint32_t operation __asm__("r0") = 0x20U;
     register void *args __asm__("r1") = result;
     __asm__ volatile ("bkpt 0xab" : "+r"(operation), "+r"(args) :: "memory");
     for (;;) {}
+}
+
+static void run_in_task(void *unused) {
+    (void)unused;
+    finish(check());
+}
+
+int main(void) {
+    if (xTaskCreate(run_in_task, "uart", 512, nullptr, 1, nullptr) == pdPASS) {
+        vTaskStartScheduler();
+    }
+    finish(__LINE__);
 }

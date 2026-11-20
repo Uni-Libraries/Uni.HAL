@@ -168,7 +168,8 @@ size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
 bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
     bool result = false;
     if (ctx != NULL && ctx->buf_rx.handle != NULL) {
-        result = xStreamBufferReset(ctx->buf_rx.handle) == pdPASS;
+        StreamBufferHandle_t const rx = ctx->buf_rx.handle;
+        result = (reading_from_isr() ? xStreamBufferResetFromISR(rx) : xStreamBufferReset(rx)) == pdPASS;
         if (result) {
             uni_hal_io_receive_sync_reset(ctx);
         }

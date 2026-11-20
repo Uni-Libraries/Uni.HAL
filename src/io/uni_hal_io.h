@@ -271,7 +271,9 @@ size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx);
 
 
 /**
- * Clear RX buffer
+ * Discard queued RX bytes and partial synchronization from a task or a FreeRTOS-callable
+ * MCU interrupt. Serialize with active RX readers. If a task is blocked on the stream,
+ * return false and preserve its state.
  * @param ctx pointer to the interface context
  * @return true on success
  */
