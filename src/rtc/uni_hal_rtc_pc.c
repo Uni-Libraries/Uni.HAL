@@ -37,6 +37,7 @@ bool uni_hal_rtc_init(uni_hal_rtc_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
         ctx->inited = true;
+        ctx->calendar_valid = g_uni_hal_rtc_datetime.year != UNI_HAL_RTC_YEAR_BASE;
         result = true;
     }
     return result;

@@ -58,3 +58,22 @@ TEST_CASE("RTC rejects out-of-range fields and preserves the previous calendar",
     REQUIRE_FALSE(uni_hal_rtc_set(&ctx, nullptr));
     require_calendar(ctx, previous);
 }
+
+TEST_CASE("RTC initialization reports whether the retained calendar was set", "[rtc]") {
+    uni_hal_rtc_context_t writer{};
+    REQUIRE(uni_hal_rtc_init(&writer));
+    const uni_hal_rtc_datetime_t retained{2024, 2, 29, 4, 12, 34, 56, 0};
+    REQUIRE(uni_hal_rtc_set(&writer, &retained));
+
+    uni_hal_rtc_context_t observer{};
+    REQUIRE(uni_hal_rtc_init(&observer));
+    CHECK(observer.calendar_valid);
+    require_calendar(observer, retained);
+
+    const uni_hal_rtc_datetime_t base_year{2000, 2, 29, 2, 12, 34, 56, 0};
+    REQUIRE(uni_hal_rtc_set(&writer, &base_year));
+    REQUIRE(writer.calendar_valid);
+    REQUIRE(uni_hal_rtc_init(&writer));
+    CHECK_FALSE(writer.calendar_valid);
+    require_calendar(writer, base_year);
+}
