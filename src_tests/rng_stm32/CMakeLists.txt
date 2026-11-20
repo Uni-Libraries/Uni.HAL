@@ -1,10 +1,12 @@
+set(rng_scenarios clock_timeout word_timeout)
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     set(rng_machine mps2-an500)
+    list(APPEND rng_scenarios reinit)
 else()
     set(rng_machine mps2-an386)
 endif()
 
-foreach(scenario IN ITEMS clock_timeout word_timeout)
+foreach(scenario IN LISTS rng_scenarios)
     set(target rng_${scenario})
     add_executable(${target}_qemu ${scenario}.c)
     target_link_libraries(${target}_qemu PRIVATE uni.hal)

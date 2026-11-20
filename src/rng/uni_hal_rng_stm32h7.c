@@ -70,9 +70,9 @@ bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
                 // without a running kernel clock the generator never delivers
                 uint32_t probe = 0U;
                 result = uni_hal_rng_stm32_read_word(instance, &probe);
-                ctx->inited = result;
             }
         }
+        ctx->inited = result;
     }
 
     return result;
