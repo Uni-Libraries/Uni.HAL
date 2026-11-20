@@ -36,6 +36,8 @@
 // Globals
 //
 
+static const uint32_t eth1_clock_mask = LL_AHB1_GRP1_PERIPH_ETH1MAC | LL_AHB1_GRP1_PERIPH_ETH1RX | LL_AHB1_GRP1_PERIPH_ETH1TX;
+
 static uni_hal_rcc_stm32h7_config_t rcc_configs[2];
 static const uni_hal_rcc_stm32h7_config_t *volatile g_uni_hal_rcc_config;
 static volatile uni_hal_rcc_stm32h7_status_t g_uni_hal_rcc_status;
@@ -905,6 +907,9 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) { //-V2008
         case UNI_HAL_CORE_PERIPH_DMA_2:
             result = LL_AHB1_GRP1_IsEnabledClock(LL_AHB1_GRP1_PERIPH_DMA2);
             break;
+        case UNI_HAL_CORE_PERIPH_ETH_1:
+            result = LL_AHB1_GRP1_IsEnabledClock(eth1_clock_mask);
+            break;
         case UNI_HAL_CORE_PERIPH_GPIO_A:
             result = LL_AHB4_GRP1_IsEnabledClock(LL_AHB4_GRP1_PERIPH_GPIOA);
             break;
@@ -1049,6 +1054,16 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) { //-V2008
 bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) { //-V2008
     bool result = false;
 
+    // ETH can be partially clocked. A false readback still leaves gates to clear.
+    if (target == UNI_HAL_CORE_PERIPH_ETH_1) {
+        if (state) {
+            LL_AHB1_GRP1_EnableClock(eth1_clock_mask);
+        } else {
+            LL_AHB1_GRP1_DisableClock(eth1_clock_mask);
+        }
+        return true;
+    }
+
     result = true;
     if (state != uni_hal_rcc_clk_get(target)) {
         result = false;
@@ -1088,15 +1103,6 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) { //-V2008
             case UNI_HAL_CORE_PERIPH_DMA_2:
                 state ? LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_DMA2) : LL_AHB1_GRP1_DisableClock(
                         LL_AHB1_GRP1_PERIPH_DMA2);
-                result = true;
-                break;
-            case UNI_HAL_CORE_PERIPH_ETH_1:
-                state ? LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_ETH1MAC) : LL_AHB1_GRP1_DisableClock(
-                        LL_AHB1_GRP1_PERIPH_ETH1MAC);
-                state ? LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_ETH1RX) : LL_AHB1_GRP1_DisableClock(
-                        LL_AHB1_GRP1_PERIPH_ETH1RX);
-                state ? LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_ETH1TX) : LL_AHB1_GRP1_DisableClock(
-                        LL_AHB1_GRP1_PERIPH_ETH1TX);
                 result = true;
                 break;
             case UNI_HAL_CORE_PERIPH_GPIO_A:
