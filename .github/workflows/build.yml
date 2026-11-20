@@ -157,6 +157,10 @@ jobs:
         arm-none-eabi-readelf -h build/firmware.elf | grep -E 'Machine:[[:space:]]+ARM'
         test -s build/firmware.bin
 
+        echo 'uni_hal_generate_rcc_map(firmware main.c)' >> CMakeLists.txt
+        cmake --build build --config Release
+        test -s build/rcc_map/firmware/rcc_map.dot
+
     - name: Check Debug and Release firmware artifacts in one build tree
       if: matrix.mcu == 'STM32L496' && matrix.static_allocation == 'ON' && matrix.tick_hz == 1000
       shell: bash

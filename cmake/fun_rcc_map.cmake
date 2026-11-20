@@ -166,7 +166,7 @@ function(uni_hal_generate_rcc_map target_name)
             "--svg-file" "${_rcc_map_svg_file}"
             ${_rcc_define_args}
             ${_rcc_freq_args}
-        MAIN_DEPENDENCY "${_rcc_input_file}"
+        # A MAIN_DEPENDENCY would replace the compile rule for that source.
         DEPENDS ${_rcc_input_files} "${_rcc_map_script}"
         COMMENT "Generating RCC map for target ${target_name}"
         VERBATIM
