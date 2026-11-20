@@ -11,7 +11,9 @@ for other targets.
 
 - **STM32H743** provides blocking SPI and asynchronous SPI with DMA, classic CAN
   and optional CAN FD, sector and bank Flash operations, and the CM7 cache API.
-  I²C1–4 support 7-bit master and memory transfers by polling. The TIM driver
+  I²C1–4 support 7-bit master and memory transfers by polling. Concurrent calls
+  on one I²C instance each use a single timeout for waiting for the bus and
+  communicating with the device. Separate instances can run independently. The TIM driver
   implements base timers with update callbacks on TIM2 and TIM15–17.
   Applications can supply their own TIM2 interrupt handler. Other
   instances and configurations with nonzero `channel_count` fail initialization.

@@ -78,6 +78,19 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         -kernel $<TARGET_FILE:i2c_polling_qemu>)
     set_tests_properties(i2c_polling_cortex_m4 PROPERTIES TIMEOUT 15)
 
+    # Exercise H743 bus arbitration with the real Cortex-M scheduler and modeled I2C handles.
+    uni_hal_add_executable(i2c_h743_tasks_qemu)
+    target_sources(i2c_h743_tasks_qemu PRIVATE ../i2c_timeout/model.c ../i2c_timeout/tasks_qemu.c
+        ../../src/i2c/uni_hal_i2c_stm32h7.c)
+    target_include_directories(i2c_h743_tasks_qemu PRIVATE ../i2c_h7/fakes ../i2c)
+    target_compile_definitions(i2c_h743_tasks_qemu PRIVATE TEST_I2C_TASKS_QEMU)
+    target_link_options(i2c_h743_tasks_qemu PRIVATE "LINKER:--defsym,_estack=0x20020000"
+        "LINKER:--wrap=uni_hal_rcc_clk_set,--wrap=uni_hal_rcc_clksrc_set")
+    add_test(NAME i2c_h743_bus_ownership COMMAND "${QEMU_SYSTEM_ARM}" -M netduinoplus2
+        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+        -kernel $<TARGET_FILE:i2c_h743_tasks_qemu>)
+    set_tests_properties(i2c_h743_bus_ownership PROPERTIES TIMEOUT 10)
+
     add_subdirectory(../rtt rtt)
 
     uni_hal_add_executable(dma_l4_qemu)
