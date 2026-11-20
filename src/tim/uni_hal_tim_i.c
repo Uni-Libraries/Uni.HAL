@@ -14,7 +14,7 @@
 // IRQ Handlers
 //
 
-#if !defined(UNI_HAL_TARGET_MCU_STM32L496)
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
 void TIM15_IRQHandler(void){
     UNI_HAL_OS_ISR_EXIT(uni_hal_tim_period_elapsed(UNI_HAL_CORE_PERIPH_TIM_15));
 }
