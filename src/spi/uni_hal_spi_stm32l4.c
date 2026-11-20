@@ -217,9 +217,13 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
                 }
             }
 
-            uint32_t const start_ms = uni_hal_systick_get_ms();
-            while (!stalled && LL_SPI_IsActiveFlag_BSY(instance)) {
-                stalled = is_master && (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
+            // ES0335 2.22.2: BSY can stay set in slave mode. The final RXNE above
+            // already signals completion of the last byte in full-duplex mode.
+            if (is_master) {
+                uint32_t const start_ms = uni_hal_systick_get_ms();
+                while (!stalled && LL_SPI_IsActiveFlag_BSY(instance)) {
+                    stalled = (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
+                }
             }
 
             LL_SPI_Disable(instance);
