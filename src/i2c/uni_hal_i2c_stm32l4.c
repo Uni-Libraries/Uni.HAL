@@ -19,6 +19,7 @@
 
 // Uni.HAL
 #include "os/uni_hal_os.h"
+#include "os/uni_hal_os_irq_stm32.h"
 #include "i2c/uni_hal_i2c.h"
 #include "core/uni_hal_core.h"
 #include "gpio/uni_hal_gpio.h"
@@ -325,10 +326,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
     if (ctx && ctx->config.pin_sck && ctx->config.pin_sda && !uni_hal_i2c_is_inited(ctx))
     {
         // Both IRQs can give a FreeRTOS semaphore. CMSIS otherwise masks excess priority bits.
-        if (ctx->config.irq_enable &&
-            (ctx->config.irq_priority >= (1U << __NVIC_PRIO_BITS) ||
-             ctx->config.irq_priority < (configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS)) ||
-             NVIC_GetPriorityGrouping() > 7U - __NVIC_PRIO_BITS)) {
+        if (ctx->config.irq_enable && !uni_hal_os_irq_priority_valid(ctx->config.irq_priority)) {
             return false;
         }
         I2C_TypeDef *handle = _uni_hal_i2c_get_handle(ctx->config.instance);

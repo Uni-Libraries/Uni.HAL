@@ -84,6 +84,8 @@ typedef struct {
 
     /**
      * Interrupt priority in the target controller's logical units.
+     * On STM32, set a FreeRTOS syscall-safe NVIC priority (4..15 by default)
+     * and configure all implemented priority bits as pre-emption bits.
      * On Zynq, zero selects the driver default. An explicit priority must be in
      * configMAX_API_CALL_INTERRUPT_PRIORITY..portLOWEST_USABLE_INTERRUPT_PRIORITY.
      */

@@ -14,6 +14,7 @@
 #include "io/uni_hal_io_tunnel.h"
 #include "systick/uni_hal_systick.h"
 #include "os/uni_hal_os.h"
+#include "os/uni_hal_os_irq_stm32.h"
 #include "uart/uni_hal_uart.h"
 
 
@@ -411,7 +412,8 @@ void UART8_IRQHandler(void) {
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
     // the interrupt handler needs the IO context to store what it receives
-    if (ctx != nullptr && ctx->pin_rx != nullptr && ctx->pin_tx != nullptr && ctx->io != nullptr) {
+    if (ctx != nullptr && ctx->pin_rx != nullptr && ctx->pin_tx != nullptr && ctx->io != nullptr &&
+        uni_hal_os_irq_priority_valid(ctx->isr_priority)) {
         ctx->callback = nullptr;
         ctx->callback_cookie = nullptr;
         ctx->in_transmission = false;

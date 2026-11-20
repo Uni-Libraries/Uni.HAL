@@ -21,6 +21,7 @@
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
 #include "os/uni_hal_os.h"
+#include "os/uni_hal_os_irq_stm32.h"
 #include "uart/uni_hal_uart.h"
 
 
@@ -332,7 +333,8 @@ void UART5_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_un
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
     // the interrupt handler needs the IO context to store what it receives
-    if (ctx != NULL && ctx->pin_rx != NULL && ctx->pin_tx != NULL && ctx->io != NULL) {
+    if (ctx != NULL && ctx->pin_rx != NULL && ctx->pin_tx != NULL && ctx->io != NULL &&
+        uni_hal_os_irq_priority_valid(ctx->isr_priority)) {
         ctx->callback = NULL;
         ctx->callback_cookie = NULL;
 

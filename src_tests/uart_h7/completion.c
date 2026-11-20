@@ -47,6 +47,16 @@ static unsigned check(void) {
     uni_hal_gpio_pin_context_t pin = {};
     uni_hal_usart_context_t ctx = {.instance = UNI_HAL_CORE_PERIPH_UART_1, .io = &io,
                                    .pin_tx = &pin, .pin_rx = &pin, .baudrate = 115200U};
+    uint32_t const min_priority = configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS);
+    ctx.isr_priority = min_priority - 1U;
+    CHECK(!uni_hal_usart_init(&ctx));
+    ctx.isr_priority = 1U << __NVIC_PRIO_BITS;
+    CHECK(!uni_hal_usart_init(&ctx));
+    ctx.isr_priority = (1U << __NVIC_PRIO_BITS) - 1U;
+    NVIC_SetPriorityGrouping(4U);
+    CHECK(!uni_hal_usart_init(&ctx));
+    NVIC_SetPriorityGrouping(0U);
+    CHECK(!ctx.initialized && !uart.CR1 && !io.buf_rx.handle && !io.buf_tx.handle);
     CHECK(uni_hal_usart_init(&ctx));
     io.handlers.tx_start = start;
     io.handlers.tx_start_ctx = &ctx;

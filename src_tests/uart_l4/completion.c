@@ -115,8 +115,7 @@ static void waiting_reader(void *io) {
 static unsigned check_clear(uni_hal_usart_context_t *ctx) {
     uni_hal_io_context_t *io = ctx->io;
     CHECK(uni_hal_usart_set_callback(ctx, clear_after_transmit, nullptr));
-    NVIC_SetPriority(TEST_IRQn, configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS));
-    NVIC_EnableIRQ(TEST_IRQn);
+    CHECK(NVIC_GetEnableIRQ(TEST_IRQn) && NVIC_GetPriority(TEST_IRQn) == ctx->isr_priority);
 
     CHECK(xStreamBufferSend(io->buf_rx.handle, "A", 1, 0) == 1U);
     CHECK(!uni_hal_io_receive_sync(io, marker, sizeof(marker), 0));
@@ -142,6 +141,18 @@ static unsigned check(void) {
     uni_hal_gpio_pin_context_t pin = {};
     uni_hal_usart_context_t ctx = {.instance = TEST_INSTANCE, .io = &io_ctx,
                                    .pin_tx = &pin, .pin_rx = &pin, .baudrate = 115200U};
+    uint32_t const min_priority = configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS);
+    uart.ISR = USART_ISR_REACK | USART_ISR_TEACK;
+    CHECK(!uni_hal_usart_init(&ctx)); // Default-initialized priority zero cannot call FreeRTOS.
+    ctx.isr_priority = min_priority - 1U;
+    CHECK(!uni_hal_usart_init(&ctx));
+    ctx.isr_priority = 1U << __NVIC_PRIO_BITS;
+    CHECK(!uni_hal_usart_init(&ctx));
+    ctx.isr_priority = min_priority;
+    NVIC_SetPriorityGrouping(4U);
+    CHECK(!uni_hal_usart_init(&ctx));
+    NVIC_SetPriorityGrouping(0U);
+    CHECK(!NVIC_GetEnableIRQ(TEST_IRQn) && uart.CR1 == 0U && !io_ctx.buf_rx.handle);
     // First startup misses the receiver acknowledgement. Retry after the clock recovers.
     uart.ISR = USART_ISR_TEACK;
     CHECK(!uni_hal_usart_init(&ctx));
