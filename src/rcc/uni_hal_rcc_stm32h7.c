@@ -642,7 +642,15 @@ static bool _uni_hal_stm_rcc_sysclk(void) {
     prepared_sysclk = target_sysclk_hz;
 
     // Reconfigure sysclk
-    if (!_uni_hal_stm_rcc_switch_sysclk(clock_source, clock_source_status, g_uni_hal_rcc_config->timeout.pll)) {
+    uint32_t const timeout = g_uni_hal_rcc_config->timeout.pll;
+    if (!_uni_hal_stm_rcc_switch_sysclk(clock_source, clock_source_status, timeout)) {
+        // Cancel the pending SW selection before init recalculates SystemCoreClock and SysTick.
+        uint32_t const active = LL_RCC_GetSysClkSource();
+        if (!_uni_hal_stm_rcc_switch_sysclk(active >> RCC_CFGR_SWS_Pos, active, timeout)) {
+            // SWS moved between the snapshot and cancellation. Keep the confirmed source
+            // if the switch back also timed out or CSS interrupted the transition.
+            LL_RCC_SetSysClkSource(LL_RCC_GetSysClkSource() >> RCC_CFGR_SWS_Pos);
+        }
         g_uni_hal_rcc_status.sys_inited = false;
         return false;
     }

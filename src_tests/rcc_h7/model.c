@@ -27,7 +27,7 @@ bool model_pll_locks = true, model_pll_switches = true, model_inject_css;
 bool model_css_active, model_flash_allowed = true;
 bool model_css_on_claim, model_css_after_claim;
 unsigned model_clock_reads, model_flash_calls, model_pll_delay;
-bool model_have_dwt;
+bool model_have_dwt, model_late_pll_switch;
 uint32_t model_ms_step, model_dwt_step;
 
 static uint32_t model_hse_ready(void) {
@@ -44,13 +44,27 @@ static uint32_t model_pll_ready(void) {
     return LL_RCC_PLL1_IsReady();
 }
 
+void model_complete_clock_switch(void) {
+    uint32_t const source = RCC->CFGR & RCC_CFGR_SW;
+    MODIFY_REG(RCC->CFGR, RCC_CFGR_SWS, source << RCC_CFGR_SWS_Pos);
+}
+
 static void model_switch(uint32_t source) {
+    if (model_late_pll_switch && source != LL_RCC_SYS_CLKSOURCE_PLL1 &&
+        model_requested_clock() == LL_RCC_SYS_CLKSOURCE_PLL1) {
+        // Complete the original request just before software cancels it. Leave
+        // the switch back unacknowledged until SW is written again.
+        model_late_pll_switch = false;
+        model_complete_clock_switch();
+        LL_RCC_SetSysClkSource(source);
+        return;
+    }
     LL_RCC_SetSysClkSource(source);
     if (source == LL_RCC_SYS_CLKSOURCE_PLL1 && model_inject_css) {
         model_inject_css = false;
         model_css();
     } else if (source != LL_RCC_SYS_CLKSOURCE_PLL1 || model_pll_switches) {
-        MODIFY_REG(RCC->CFGR, RCC_CFGR_SWS, source << RCC_CFGR_SWS_Pos);
+        model_complete_clock_switch();
     }
 }
 
