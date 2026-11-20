@@ -57,7 +57,7 @@ typedef struct {
     uni_hal_rcc_clksrc_e clock_source;
 
     /**
-     * DMA context
+     * DMA context. On STM32L496, ADC1/2/3 use DMA1 channels 1/2/3 or DMA2 channels 3/4/5, respectively.
      */
     uni_hal_dma_context_t* dma;
 

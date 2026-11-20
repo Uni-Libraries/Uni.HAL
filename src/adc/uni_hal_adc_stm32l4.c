@@ -573,19 +573,21 @@ bool _uni_hal_adc_configure(uni_hal_adc_context_t *ctx) {
 }
 
 
+static bool _uni_hal_adc_dma_route_valid(const uni_hal_adc_config_t *config) {
+    if (config->dma == nullptr) {
+        return true;
+    }
+    // RM0351 tables 44 and 45: ADC1/2/3 feed DMA1 channels 1/2/3 and DMA2 channels 3/4/5.
+    const uni_hal_dma_config_t *dma = &config->dma->config;
+    unsigned const first_channel = dma->instance == UNI_HAL_CORE_PERIPH_DMA_1 ? UNI_HAL_DMA_CHANNEL_1 : UNI_HAL_DMA_CHANNEL_3;
+    return dma->channel == first_channel + (config->instance - UNI_HAL_CORE_PERIPH_ADC_1);
+}
+
 bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
     DMA_TypeDef* module = uni_hal_dma_stm32l4_get_module(ctx->config.dma->config.instance);
     uint32_t stream = uni_hal_dma_stm32l4_get_channel(ctx->config.dma->config.channel);
 
-    uint32_t request = 0;
-    switch(ctx->config.instance){
-        case UNI_HAL_CORE_PERIPH_ADC_3:
-            request = UNI_HAL_DMA_REQUEST_0;
-            break;
-        default:
-            break;
-    }
-    LL_DMA_SetPeriphRequest(module, stream, request);
+    LL_DMA_SetPeriphRequest(module, stream, LL_DMA_REQUEST_0);
     LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
 
     uni_hal_dma_set_priority(ctx->config.dma, UNI_HAL_DMA_PRIORITY_LOW);
@@ -691,7 +693,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     }
     const uni_hal_adc_config_t *config = &ctx->config;
     if (!uni_hal_adc_stm32_config_valid(config, UNI_HAL_ADC_STM32L4_CHANNEL_VBAT, UNI_HAL_DMA_CHANNEL_1) ||
-        _uni_hal_adc_get_clock(config) == UINT32_MAX ||
+        !_uni_hal_adc_dma_route_valid(config) || _uni_hal_adc_get_clock(config) == UINT32_MAX ||
         _uni_hal_adc_get_resolution(config->resolution_bits) == UINT32_MAX ||
         _uni_hal_adc_get_sampling(config->sampling_cycles) == UINT32_MAX) {
         return false;

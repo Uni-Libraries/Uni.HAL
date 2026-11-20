@@ -79,7 +79,7 @@ unsigned test_adc(void) {
     dma.config.channel = UNI_HAL_DMA_CHANNEL_0;
     CHECK(rejected(&ctx, 0));
 #endif
-    dma.config.channel = UNI_HAL_DMA_CHANNEL_7;
+    dma.config.channel = UNI_HAL_DMA_CHANNEL_3;
     CHECK(rejected(&ctx, 1)); // A valid DMA descriptor whose initialization fails.
     reset_adc_model();
     adc_dma_init_succeeds = true;
