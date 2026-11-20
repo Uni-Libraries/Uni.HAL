@@ -606,7 +606,8 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         bool const bit_rate_switch = ctx->config.fd && ctx->config.bitrate_data != 0U;
         uni_hal_can_timing_t timing_data = {0};
         if (bit_rate_switch) {
-            result = result && uni_hal_can_timing_calc_data(clock_hz, ctx->config.bitrate_data, &timing_data);
+            result = result && ctx->config.bitrate_data >= ctx->config.bitrate &&
+                     uni_hal_can_timing_calc_data(clock_hz, ctx->config.bitrate_data, &timing_data);
         }
 
         if (result) {

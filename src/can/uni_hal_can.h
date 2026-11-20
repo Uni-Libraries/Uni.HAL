@@ -157,8 +157,8 @@ typedef struct
     bool fd;
 
     /**
-     * Bit rate of the data phase of CAN FD frames in bit/s, for frames sent with `brs`. 0: no
-     * bit rate switching, the whole frame runs at `bitrate`. At a prescaler of 1 or 2 the
+     * Data-phase bit rate in bit/s for CAN FD frames sent with `brs`. A nonzero rate must be
+     * at least `bitrate`. Zero disables bit rate switching. At a prescaler of 1 or 2 the
      * transmitter delay compensation is switched on, which the higher rates need.
      */
     uint32_t bitrate_data;
@@ -401,8 +401,7 @@ uint8_t uni_hal_can_dlc_from_length(uint32_t length, bool fd);
 uint8_t uni_hal_can_dlc_to_length(uint32_t dlc, bool fd);
 
 /**
- * Compute a bit timing for the data phase of CAN FD frames, which is sent at its own, higher
- * bit rate when the frame asks for a bit rate switch
+ * Compute a bit timing for the data phase of CAN FD frames with bit rate switching
  * @param clock_hz frequency of the CAN clock
  * @param bitrate bit rate of the data phase in bit/s
  * @param timing receives the timing: prescaler 1..32, bs1 1..32, bs2 1..16, sjw 1..16

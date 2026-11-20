@@ -29,6 +29,8 @@ static unsigned check(void) {
     static uni_hal_can_context_t ctx = {
         .config = {.instance = UNI_HAL_CORE_PERIPH_CAN_1, .pin_rx = &rx, .pin_tx = &tx, .bitrate = 1'000'000U},
     };
+    // A classic frame ignores the optional data rate.
+    ctx.config.bitrate_data = 500'000U;
     kernel_clock_hz = 37'000'000U;
     uni_hal_can_timing_t bxcan;
     CHECK(!uni_hal_can_timing_calc(kernel_clock_hz, ctx.config.bitrate, &bxcan));
@@ -68,6 +70,19 @@ static unsigned check(void) {
     CHECK(controller.DBTP == (FDCAN_DBTP_TDC | (1U << FDCAN_DBTP_DTSEG1_Pos)));
     kernel_clock_hz = 15'000'000U;
     CHECK(!uni_hal_can_init(&ctx));
+
+    kernel_clock_hz = 32'000'000U;
+    ctx.config.bitrate_data = 500'000U;
+    uint32_t const previous_dbtp = controller.DBTP;
+    CHECK(!uni_hal_can_init(&ctx));
+    CHECK(controller.DBTP == previous_dbtp);
+
+    ctx.config.bitrate_data = ctx.config.bitrate;
+    CHECK(uni_hal_can_init(&ctx));
+    CHECK((controller.CCCR & FDCAN_CCCR_BRSE) != 0U);
+    ctx.config.bitrate_data = 0U;
+    CHECK(uni_hal_can_init(&ctx));
+    CHECK((controller.CCCR & (FDCAN_CCCR_FDOE | FDCAN_CCCR_BRSE)) == FDCAN_CCCR_FDOE);
 #endif
     return 0U;
 }
