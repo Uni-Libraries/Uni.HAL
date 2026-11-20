@@ -9,3 +9,6 @@ function(add_timer_h7_test name source)
 endfunction()
 
 add_timer_h7_test(tim_h743_channels channels.c)
+add_timer_h7_test(tim_h743_application_vector lifecycle.c)
+target_compile_definitions(tim_h743_application_vector_qemu PRIVATE TEST_TIM2_APPLICATION_VECTOR)
+add_timer_h7_test(tim_h743_base_lifecycle lifecycle.c)

@@ -9,256 +9,105 @@
 // ST
 #include <stm32h7xx_ll_tim.h>
 
-// Uni.HAL OS layer
-#include "os/uni_hal_os.h"
-
 // uni_hal
 #include "core/uni_hal_core.h"
 #include "rcc/uni_hal_rcc.h"
 #include "tim/uni_hal_tim.h"
 
-//
-// Defines
-//
+// Each supported base timer has a driver-owned update vector in uni_hal_tim_i.c.
+typedef struct {
+    uni_hal_core_periph_e instance;
+    TIM_TypeDef *handle;
+    uni_hal_core_irq_e irq;
+    uni_hal_tim_callback_fn callback;
+    uni_hal_tim_context_t *timer_ctx;
+    void *user_ctx;
+} timer_driver_t;
 
-#define uni_hal_TIM_MAXTIMERS (17U)
+static timer_driver_t timers[] = {
+    {.instance = UNI_HAL_CORE_PERIPH_TIM_2,  .handle = TIM2,  .irq = UNI_HAL_CORE_IRQ_TIM_2},
+    {.instance = UNI_HAL_CORE_PERIPH_TIM_15, .handle = TIM15, .irq = UNI_HAL_CORE_IRQ_TIM_15},
+    {.instance = UNI_HAL_CORE_PERIPH_TIM_16, .handle = TIM16, .irq = UNI_HAL_CORE_IRQ_TIM_16},
+    {.instance = UNI_HAL_CORE_PERIPH_TIM_17, .handle = TIM17, .irq = UNI_HAL_CORE_IRQ_TIM_17},
+};
 
-//
-// Globals
-//
-
-static uni_hal_tim_callback_fn _callback_fn[uni_hal_TIM_MAXTIMERS] = {0};
-static uni_hal_tim_context_t *_callback_timctx[uni_hal_TIM_MAXTIMERS] = {NULL};
-static void *_callback_userctx[uni_hal_TIM_MAXTIMERS] = {NULL};
-
-
-//
-// Private
-//
-
-static uint32_t _uni_hal_tim_get_number(TIM_TypeDef *instance) {
-    uint32_t result;
-    if (instance == TIM1) {
-        result = 1U;
-    } else if (instance == TIM2) {
-        result = 2U;
-    } else if (instance == TIM3) {
-        result = 3U;
-    } else if (instance == TIM4) {
-        result = 4U;
-    } else if (instance == TIM5) {
-        result = 5U;
-    } else if (instance == TIM6) {
-        result = 6U;
-    } else if (instance == TIM7) {
-        result = 7U;
-    } else if (instance == TIM8) {
-        result = 8U;
-    } else if (instance == TIM12) {
-        result = 12U;
-    } else if (instance == TIM13) {
-        result = 13U;
-    } else if (instance == TIM14) {
-        result = 14U;
-    } else if (instance == TIM15) {
-        result = 15U;
-    } else if (instance == TIM16) {
-        result = 16U;
-    } else if (instance == TIM17) {
-        result = 17U;
-    } else {
-        result = 0U;
+static timer_driver_t *find_timer(uni_hal_core_periph_e instance) {
+    for (size_t i = 0; i < sizeof timers / sizeof timers[0]; ++i) {
+        if (timers[i].instance == instance) {
+            return &timers[i];
+        }
     }
-
-    return result;
-}
-
-
-static TIM_TypeDef *_uni_hal_tim_get_handle(uni_hal_core_periph_e instance) {
-    TIM_TypeDef *result;
-    switch (instance) {
-        case UNI_HAL_CORE_PERIPH_TIM_1:
-            result = TIM1;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_2:
-            result = TIM2;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_3:
-            result = TIM3;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_4:
-            result = TIM4;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_5:
-            result = TIM5;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_6:
-            result = TIM6;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_7:
-            result = TIM7;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_8:
-            result = TIM8;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_12:
-            result = TIM12;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_13:
-            result = TIM13;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_14:
-            result = TIM14;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_15:
-            result = TIM15;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_16:
-            result = TIM16;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_17:
-            result = TIM17;
-            break;
-        default:
-            result = NULL;
-            break;
-    }
-
-    return result;
-}
-
-/**
- * Get the update interrupt of a timer.
- * Only the timers with an interrupt handler in tim/uni_hal_tim_i.c are known.
- * @param instance timer instance
- * @return interrupt, UNI_HAL_CORE_IRQ_UNKNOWN for a timer without a handler
- */
-static uni_hal_core_irq_e _uni_hal_tim_get_irq(uni_hal_core_periph_e instance) {
-    uni_hal_core_irq_e result;
-    switch (instance) {
-        case UNI_HAL_CORE_PERIPH_TIM_15:
-            result = UNI_HAL_CORE_IRQ_TIM_15;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_16:
-            result = UNI_HAL_CORE_IRQ_TIM_16;
-            break;
-        case UNI_HAL_CORE_PERIPH_TIM_17:
-            result = UNI_HAL_CORE_IRQ_TIM_17;
-            break;
-        default:
-            result = UNI_HAL_CORE_IRQ_UNKNOWN;
-            break;
-    }
-
-    return result;
+    return nullptr;
 }
 
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
-    BaseType_t higher_task_woken = false;
-
-    TIM_TypeDef *handle = _uni_hal_tim_get_handle(periph);
-    if (handle != NULL) {
-        if (LL_TIM_IsActiveFlag_UPDATE(handle)) {
-            LL_TIM_ClearFlag_UPDATE(handle);
-            uint32_t id = _uni_hal_tim_get_number(handle);
-            if (id > 0U) {
-                uni_hal_tim_callback_fn fn = _callback_fn[id - 1];
-                if (fn != NULL) {
-                    higher_task_woken = fn(_callback_timctx[id - 1], _callback_userctx[id - 1]);
-                }
-            }
-        }
+    timer_driver_t *timer = find_timer(periph);
+    if (timer == nullptr || !LL_TIM_IsActiveFlag_UPDATE(timer->handle)) {
+        return false;
     }
-
-    return higher_task_woken;
+    LL_TIM_ClearFlag_UPDATE(timer->handle);
+    return timer->callback != nullptr && timer->callback(timer->timer_ctx, timer->user_ctx);
 }
 
-//
-// Handlers
-//
-
-
-
-//
-// Functions
-//
-
 bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
-    bool result = false;
-    if (ctx != NULL) {
-        if (ctx->config.channel_count != 0U) {
-            ctx->status.inited = false;
-            return false;
-        }
-        result = uni_hal_rcc_clk_set(ctx->config.instance, true);
-
-        TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
-        if (handle != NULL) {
-            LL_TIM_InitTypeDef tim_init;
-            tim_init.Prescaler = ctx->config.prescaler;
-            tim_init.CounterMode = LL_TIM_COUNTERMODE_UP;
-            tim_init.Autoreload = ctx->config.reload_value;
-            tim_init.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
-            tim_init.RepetitionCounter = 0x00;
-            result = LL_TIM_Init(handle, &tim_init) == SUCCESS;
-        }
-
-        ctx->status.inited = result;
+    if (ctx == nullptr) {
+        return false;
     }
-
-    return result;
+    ctx->status.inited = false;
+    timer_driver_t *timer = find_timer(ctx->config.instance);
+    if (timer == nullptr || ctx->config.channel_count != 0U ||
+        !uni_hal_rcc_clk_set(ctx->config.instance, true)) {
+        return false;
+    }
+    LL_TIM_InitTypeDef config = {
+        .Prescaler = ctx->config.prescaler,
+        .CounterMode = LL_TIM_COUNTERMODE_UP,
+        .Autoreload = ctx->config.reload_value,
+        .ClockDivision = LL_TIM_CLOCKDIVISION_DIV1,
+        .RepetitionCounter = 0U,
+    };
+    ctx->status.inited = LL_TIM_Init(timer->handle, &config) == SUCCESS;
+    return ctx->status.inited;
 }
 
 bool uni_hal_tim_register_callback(uni_hal_tim_context_t *ctx, uni_hal_tim_callback_fn callback, void *callback_ctx) {
-    bool result = false;
-
-    if (uni_hal_tim_is_inited(ctx)) {
-        uint32_t id = _uni_hal_tim_get_number(_uni_hal_tim_get_handle(ctx->config.instance));
-        if (id > 0U) {
-            _callback_fn[id - 1] = callback;
-            _callback_timctx[id - 1] = ctx;
-            _callback_userctx[id - 1] = callback_ctx;
-
-            result = true;
-        }
+    if (!uni_hal_tim_is_inited(ctx)) {
+        return false;
     }
-
-    return result;
+    timer_driver_t *timer = find_timer(ctx->config.instance);
+    if (timer == nullptr) {
+        return false;
+    }
+    timer->callback = callback;
+    timer->timer_ctx = ctx;
+    timer->user_ctx = callback_ctx;
+    return true;
 }
 
 bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
-    bool result = false;
-
-    if (uni_hal_tim_is_inited(ctx)) {
-        TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
-        uni_hal_core_irq_e const irq = _uni_hal_tim_get_irq(ctx->config.instance);
-        if (handle != NULL && irq != UNI_HAL_CORE_IRQ_UNKNOWN) {
-            result = uni_hal_core_irq_enable(irq, 5, 0);
-            if (result) {
-                // LL_TIM_Init() latches the prescaler with an update event, which leaves UIF set
-                LL_TIM_ClearFlag_UPDATE(handle);
-                LL_TIM_EnableIT_UPDATE(handle);
-                LL_TIM_EnableCounter(handle);
-            }
-        }
+    if (!uni_hal_tim_is_inited(ctx)) {
+        return false;
     }
-
-    return result;
+    timer_driver_t *timer = find_timer(ctx->config.instance);
+    if (timer == nullptr || !uni_hal_core_irq_enable(timer->irq, 5, 0)) {
+        return false;
+    }
+    // LL_TIM_Init latches the prescaler with an update event, which leaves UIF set.
+    LL_TIM_ClearFlag_UPDATE(timer->handle);
+    LL_TIM_EnableIT_UPDATE(timer->handle);
+    LL_TIM_EnableCounter(timer->handle);
+    return true;
 }
-
 
 bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
-    bool result = false;
-
-    if (uni_hal_tim_is_inited(ctx)) {
-        TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
-        if (handle != NULL) {
-            LL_TIM_DisableCounter(handle);
-            LL_TIM_DisableIT_UPDATE(handle);
-            result = true;
-        }
+    if (!uni_hal_tim_is_inited(ctx)) {
+        return false;
     }
-
-    return result;
+    timer_driver_t *timer = find_timer(ctx->config.instance);
+    if (timer == nullptr) {
+        return false;
+    }
+    LL_TIM_DisableCounter(timer->handle);
+    LL_TIM_DisableIT_UPDATE(timer->handle);
+    return true;
 }
-
