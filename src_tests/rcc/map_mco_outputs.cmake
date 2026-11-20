@@ -11,15 +11,20 @@ void configure_outputs(void) {
 }
 ]=])
 
-foreach(family IN ITEMS STM32H7 STM32L4)
+function(check_map family hsi_mhz mco_mhz)
     execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../../cmake/fun_rcc_map.py"
-        --target-name mco --input-file "${dir}/clocks.c" --define "${family}"
+        --target-name mco --input-file "${dir}/clocks.c" --define "${family}" ${ARGN}
         --dot-file "${dir}/${family}.dot" --png-file "${dir}/${family}.png" --svg-file "${dir}/${family}.svg"
         COMMAND_ERROR_IS_FATAL ANY)
     file(READ "${dir}/${family}.dot" graph)
     string(FIND "${graph}" [["src_hsi" -> "mco1" [label="/4"]] hsi_mco1)
     if(hsi_mco1 EQUAL -1)
         message(FATAL_ERROR "${family} map is missing HSI/4 on MCO1")
+    endif()
+    string(FIND "${graph}" "\"src_hsi\" [label=\"HSI\\n${hsi_mhz} MHz\"" source_label)
+    string(FIND "${graph}" "\"mco1\" [label=\"MCO1\\n${mco_mhz} MHz\"" output_label)
+    if(source_label EQUAL -1 OR output_label EQUAL -1)
+        message(FATAL_ERROR "${family} map must show HSI ${hsi_mhz} MHz and MCO1 ${mco_mhz} MHz")
     endif()
     if(family STREQUAL STM32H7)
         string(FIND "${graph}" [["src_hse" -> "mco2" [label="/2"]] hse_mco2)
@@ -29,4 +34,9 @@ foreach(family IN ITEMS STM32H7 STM32L4)
     elseif(graph MATCHES [["mco2"]])
         message(FATAL_ERROR "STM32L4 map contains a second MCO output")
     endif()
-endforeach()
+endfunction()
+
+check_map(STM32H7 64 16)
+check_map(STM32L4 16 4)
+check_map(STM32L4 24 6 --define HSI_VALUE=24000000U)
+check_map(STM32L4 32 8 --define HSI_VALUE=24000000U --hsi-hz 32000000)

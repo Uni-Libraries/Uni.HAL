@@ -1014,7 +1014,8 @@ def main() -> int:
     if hse_hz is None:
         hse_hz = 25_000_000
 
-    hsi_hz = parse_int(args.hsi_hz) or numeric_defs.get("HSI_VALUE") or 64_000_000
+    default_hsi_hz = 16_000_000 if "STM32L4" in definitions else 64_000_000
+    hsi_hz = parse_int(args.hsi_hz) or numeric_defs.get("HSI_VALUE") or default_hsi_hz
     hsi48_hz = parse_int(args.hsi48_hz) or numeric_defs.get("HSI48_VALUE") or 48_000_000
     csi_hz = parse_int(args.csi_hz) or numeric_defs.get("CSI_VALUE") or 4_000_000
     lsi_hz = parse_int(args.lsi_hz) or numeric_defs.get("LSI_VALUE") or 32_000
