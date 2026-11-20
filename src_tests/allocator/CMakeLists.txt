@@ -34,7 +34,7 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         message(FATAL_ERROR "The allocator QEMU test uses STM32L496")
     endif()
     uni_hal_add_executable(allocator_qemu)
-    target_sources(allocator_qemu PRIVATE main.c qemu_main.c ../io/freertos_buffers.c io_definition.cpp)
+    target_sources(allocator_qemu PRIVATE main.c qemu_main.c freertos_buffers.c io_definition.cpp)
     target_compile_features(allocator_qemu PRIVATE cxx_std_20)
     # The C++ aggregate probe uses the same C runtime and startup as this firmware.
     set_target_properties(allocator_qemu PROPERTIES CXX_SCAN_FOR_MODULES OFF LINKER_LANGUAGE C)
