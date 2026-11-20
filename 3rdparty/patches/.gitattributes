@@ -1,0 +1,2 @@
+# A patch carries its own line endings, including those of its context lines.
+*.patch -text

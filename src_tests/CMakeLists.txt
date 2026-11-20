@@ -13,6 +13,8 @@ if(UNI_HAL_PWSH)
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/archive.ps1")
     add_test(NAME vendor_update_transaction COMMAND "${UNI_HAL_PWSH}" -NoProfile -File
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/transaction.ps1")
+    add_test(NAME vendor_patch_checkout COMMAND "${UNI_HAL_PWSH}" -NoProfile -File
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/patch_checkout.ps1")
 endif()
 
 function(uni_hal_add_test test_path)
