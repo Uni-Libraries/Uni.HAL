@@ -19,3 +19,4 @@ endfunction()
 
 add_capture_irq_test(tim_l496_capture_wrap capture_wrap.c)
 add_capture_irq_test(tim_l496_capture_irq_sources capture_irq_sources.c)
+add_capture_irq_test(tim_l496_capture_config capture_config.c)

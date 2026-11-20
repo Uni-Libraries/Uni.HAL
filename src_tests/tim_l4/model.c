@@ -18,8 +18,10 @@ static uint32_t sample_counter(const TIM_TypeDef *timer) {
     return count;
 }
 
+unsigned clock_calls;
 static bool model_clock(uni_hal_core_periph_e periph, bool enabled) {
-    return periph == UNI_HAL_CORE_PERIPH_TIM_1 && enabled;
+    ++clock_calls;
+    return (periph == UNI_HAL_CORE_PERIPH_TIM_1 || periph == UNI_HAL_CORE_PERIPH_TIM_16) && enabled;
 }
 
 #define LL_TIM_GetCounter sample_counter

@@ -418,6 +418,25 @@ static bool _uni_hal_tim_get_capture_delta(TIM_TypeDef *handle, const _uni_hal_t
 }
 
 
+static bool _uni_hal_tim_channels_valid(const uni_hal_tim_config_t *config)
+{
+    if (config->channel_count > 0U && config->channel == NULL) {
+        return false;
+    }
+    for (size_t i = 0; i < config->channel_count; ++i) {
+        const uni_hal_tim_channel_t *channel = config->channel[i];
+        if (channel == NULL) {
+            return false;
+        }
+        // Only TIM1_CC_IRQHandler dispatches captured edges.
+        if (channel->type == UNI_HAL_TIM_TYPE_INPUTCAPTURE &&
+            (config->instance != UNI_HAL_CORE_PERIPH_TIM_1 || (unsigned)channel->channel_number > UNI_HAL_TIM_CHANNEL_4)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool _uni_hal_tim_init_channel(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_t* channel)
 {
     bool result = false;
@@ -705,7 +724,8 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
     if (ctx != NULL){
         ctx->status.inited = false;
         if(_uni_hal_tim_prescaler_valid(ctx->config.prescaler)
-            && _uni_hal_tim_reloadvalue_valid(ctx->config.instance, ctx->config.reload_value))
+            && _uni_hal_tim_reloadvalue_valid(ctx->config.instance, ctx->config.reload_value)
+            && _uni_hal_tim_channels_valid(&ctx->config))
         {
             TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
             if (handle != NULL)
@@ -720,12 +740,9 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
                 tim_init.RepetitionCounter = 0x00;
                 result = result && (LL_TIM_Init(handle, &tim_init) == SUCCESS);
 
-                if (ctx->config.channel_count > 0 && ctx->config.channel != NULL)
+                for (size_t i = 0; result && i < ctx->config.channel_count; ++i)
                 {
-                    for (size_t i = 0; i < ctx->config.channel_count; i++)
-                    {
-                        result = result && _uni_hal_tim_init_channel(ctx, ctx->config.channel[i]);
-                    }
+                    result = _uni_hal_tim_init_channel(ctx, ctx->config.channel[i]);
                 }
 
                 uint32_t id = _uni_hal_tim_get_number(ctx->config.instance);

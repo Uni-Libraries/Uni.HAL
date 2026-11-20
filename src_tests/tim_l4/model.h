@@ -5,5 +5,6 @@
 
 extern TIM_TypeDef model_tim1;
 extern bool wrap_on_counter_read;
+extern unsigned clock_calls;
 void TIM1_CC_IRQHandler(void);
 void TIM1_UP_TIM16_IRQHandler(void);

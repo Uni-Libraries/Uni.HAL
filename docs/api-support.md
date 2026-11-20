@@ -21,6 +21,7 @@ for other targets.
   use the L496 driver.
 - **STM32L496** provides blocking SPI, classic CAN, DMA channel configuration,
   TIM1 input capture (CH1–4) and update callbacks on TIM1, TIM2 and TIM15–17.
+  Initialization rejects input capture outside TIM1 CH1–4.
   The extended capture timestamp requires servicing capture and update events
   within one timer period, since UIF can record only one pending overflow.
   I²C1–4 use polling for master transfers and probing. Memory transfers also
