@@ -357,7 +357,9 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
         I2C_HandleTypeDef *handle_hal = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
         i2c_bus_t *bus = get_bus(ctx->config.instance);
         if (handle && handle_hal && try_claim(bus)) {
-            if (bus->owner && bus->owner != ctx) {
+            if ((bus->owner && bus->owner != ctx) ||
+                (ctx->config.clock_source != UNI_HAL_RCC_CLKSRC_UNKNOWN &&
+                 !uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source))) {
                 release_bus(bus);
                 return false;
             }

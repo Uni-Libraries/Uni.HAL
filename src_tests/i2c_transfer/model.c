@@ -90,6 +90,9 @@ bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *pin) {
     return true;
 }
 bool uni_hal_gpio_pin_is_inited(const uni_hal_gpio_pin_context_t *pin) { return pin && pin->inited; }
+bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e instance, uni_hal_rcc_clksrc_e source) {
+    (void)instance; (void)source; return false;
+}
 bool uni_hal_rcc_clk_set(uni_hal_core_periph_e instance, bool enable) { (void)instance; return enable; }
 uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e instance) { (void)instance; return 0; }
 uint32_t uni_hal_i2c_timing_calc(uint32_t hz, uni_hal_i2c_speed_e speed) { (void)hz; (void)speed; return 0; }

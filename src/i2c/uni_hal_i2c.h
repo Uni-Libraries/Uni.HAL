@@ -77,7 +77,8 @@ typedef struct uni_hal_i2c_config_t {
     uni_hal_core_periph_e instance;
 
     /**
-     * I2C Clock Source
+     * I2C kernel clock source. On STM32L496, select PCLK1, SYSCLK or HSI.
+     * UNKNOWN preserves the existing selection (PCLK1 after L496 RCC initialization).
      */
     uni_hal_rcc_clksrc_e clock_source;
 

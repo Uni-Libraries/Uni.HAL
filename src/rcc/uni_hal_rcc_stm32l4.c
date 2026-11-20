@@ -1224,6 +1224,31 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
 
     if (uni_hal_rcc_is_inited()) {
         switch (target) {
+            case UNI_HAL_CORE_PERIPH_I2C_1:
+            case UNI_HAL_CORE_PERIPH_I2C_2:
+            case UNI_HAL_CORE_PERIPH_I2C_3:
+            case UNI_HAL_CORE_PERIPH_I2C_4: {
+                static const uint32_t pclk1[] = {LL_RCC_I2C1_CLKSOURCE_PCLK1, LL_RCC_I2C2_CLKSOURCE_PCLK1,
+                                                LL_RCC_I2C3_CLKSOURCE_PCLK1, LL_RCC_I2C4_CLKSOURCE_PCLK1};
+                static const uint32_t sysclk[] = {LL_RCC_I2C1_CLKSOURCE_SYSCLK, LL_RCC_I2C2_CLKSOURCE_SYSCLK,
+                                                 LL_RCC_I2C3_CLKSOURCE_SYSCLK, LL_RCC_I2C4_CLKSOURCE_SYSCLK};
+                static const uint32_t hsi[] = {LL_RCC_I2C1_CLKSOURCE_HSI, LL_RCC_I2C2_CLKSOURCE_HSI,
+                                              LL_RCC_I2C3_CLKSOURCE_HSI, LL_RCC_I2C4_CLKSOURCE_HSI};
+                const unsigned index = target - UNI_HAL_CORE_PERIPH_I2C_1;
+                uint32_t mux;
+                switch (source) {
+                    case UNI_HAL_RCC_CLKSRC_PCLK1:  mux = pclk1[index]; break;
+                    case UNI_HAL_RCC_CLKSRC_SYSCLK: mux = sysclk[index]; break;
+                    case UNI_HAL_RCC_CLKSRC_HSI:    mux = hsi[index]; break;
+                    default: return false;
+                }
+                // I2C1..3 share CCIPR. Keep their read-modify-write operations indivisible.
+                uint32_t const mask = uni_hal_core_irq_pause();
+                LL_RCC_SetI2CClockSource(mux);
+                uni_hal_core_irq_resume(mask);
+                result = true;
+                break;
+            }
             case UNI_HAL_CORE_PERIPH_LPUART_1: {
                     uint32_t src = LL_RCC_LPUART1_CLKSOURCE_SYSCLK;
                     if (source == UNI_HAL_RCC_CLKSRC_PCLK1) {
