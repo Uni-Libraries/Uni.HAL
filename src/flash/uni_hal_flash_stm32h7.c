@@ -17,6 +17,7 @@
 #include <task.h>
 
 // Uni.HAL
+#include "core/uni_hal_core.h"
 #include "dwt/uni_hal_dwt.h"
 #include "flash/uni_hal_flash.h"
 #include "os/uni_hal_os.h"
@@ -27,7 +28,7 @@
 // Globals
 //
 
-static SemaphoreHandle_t xFlashDoneSem;
+static volatile SemaphoreHandle_t xFlashDoneSem;
 static volatile bool flash_op_failed = false;
 BaseType_t flash_wake_up = pdFALSE;
 
@@ -367,9 +368,26 @@ static bool _uni_hal_flash_apply_latency(uint32_t latency, uint32_t wrhighfreq) 
 
 void uni_hal_flash_init()
 {
-    xFlashDoneSem = xSemaphoreCreateBinary();
-    HAL_NVIC_SetPriority(FLASH_IRQn, 5, 0);
-    HAL_NVIC_EnableIRQ(FLASH_IRQn);
+    if (xFlashDoneSem != nullptr) {
+        return;
+    }
+    SemaphoreHandle_t candidate = xSemaphoreCreateBinary();
+    if (candidate == nullptr) {
+        return;
+    }
+
+    // Allocation can yield. Publish one handle before enabling its interrupt.
+    uint32_t const mask = uni_hal_core_irq_pause();
+    if (xFlashDoneSem == nullptr) {
+        xFlashDoneSem = candidate;
+        candidate = nullptr;
+        HAL_NVIC_SetPriority(FLASH_IRQn, 5, 0);
+        HAL_NVIC_EnableIRQ(FLASH_IRQn);
+    }
+    uni_hal_core_irq_resume(mask);
+    if (candidate != nullptr) {
+        vSemaphoreDelete(candidate);
+    }
 }
 
 
