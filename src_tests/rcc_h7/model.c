@@ -2,7 +2,7 @@
 #include <stm32h7xx.h>
 #include <stdbool.h>
 
-static RCC_TypeDef rcc;
+RCC_TypeDef model_rcc;
 static FLASH_TypeDef flash;
 static PWR_TypeDef pwr;
 static DBGMCU_TypeDef debug;
@@ -11,7 +11,7 @@ static DBGMCU_TypeDef debug;
 #undef RCC
 #undef FLASH
 #undef PWR
-#define RCC (&rcc)
+#define RCC (&model_rcc)
 #define FLASH (&flash)
 #define PWR (&pwr)
 

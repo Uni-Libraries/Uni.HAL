@@ -1016,6 +1016,15 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) { //-V2008
         case UNI_HAL_CORE_PERIPH_UART_5:
             result = LL_APB1_GRP1_IsEnabledClock(LL_APB1_GRP1_PERIPH_UART5);
             break;
+        case UNI_HAL_CORE_PERIPH_UART_6:
+            result = LL_APB2_GRP1_IsEnabledClock(LL_APB2_GRP1_PERIPH_USART6);
+            break;
+        case UNI_HAL_CORE_PERIPH_UART_7:
+            result = LL_APB1_GRP1_IsEnabledClock(LL_APB1_GRP1_PERIPH_UART7);
+            break;
+        case UNI_HAL_CORE_PERIPH_UART_8:
+            result = LL_APB1_GRP1_IsEnabledClock(LL_APB1_GRP1_PERIPH_UART8);
+            break;
         case UNI_HAL_CORE_PERIPH_PWR:
             result = true;
             break;
