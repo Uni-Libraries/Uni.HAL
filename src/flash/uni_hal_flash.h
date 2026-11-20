@@ -38,6 +38,10 @@ typedef enum {
 // Functions
 //
 
+/** Initialize the STM32H743 sector-erase IRQ. Repeated calls are safe.
+ * Before FreeRTOS starts, initialization and erase polling use no kernel objects.
+ * Task-mode erases allocate their completion semaphore on first use if necessary.
+ */
 void uni_hal_flash_init(void);
 
 bool uni_hal_flash_configure_latency_auto(uint32_t axi_clock_hz);
@@ -46,12 +50,23 @@ size_t uni_hal_flash_get_size(void);
 
 size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst);
 
+/**
+ * On STM32H743, call mutation APIs from thread mode with interrupts enabled.
+ * A competing write, erase or bank swap fails immediately (zero bytes or false).
+ */
 size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *dst);
 
 bool uni_hal_flash_erase(size_t addr, size_t size);
 
+/** On H743 the whole bank is reserved until completion or the first failing sector. */
 bool uni_hal_flash_erase_bank(uni_hal_flash_bank_e);
 
+/**
+ * On H743 initialize Flash before erasing a sector or bank. Keep the Flash IRQ
+ * and millisecond tick running. A sector time-out returns false. The controller
+ * may still be erasing: other mutations are rejected until its final IRQ, which
+ * also invalidates the affected cache entries. No other call is needed for cleanup.
+ */
 bool uni_hal_flash_erase_sector(uni_hal_flash_bank_e bank, uni_hal_flash_sector_e sector);
 
 bool uni_hal_flash_swap_banks(void);

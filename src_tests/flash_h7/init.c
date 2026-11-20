@@ -23,6 +23,7 @@ static SemaphoreHandle_t create(void) {
 #define vSemaphoreDelete(handle) do { (void)(handle); ++releases; } while (0)
 #define HAL_NVIC_SetPriority(irq, priority, group) ((void)0)
 #define HAL_NVIC_EnableIRQ(irq) (++irq_enables)
+#define xTaskGetSchedulerState() taskSCHEDULER_RUNNING
 #include "flash/uni_hal_flash_stm32h7.c"
 
 static unsigned check(void) {

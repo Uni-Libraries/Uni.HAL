@@ -8,7 +8,8 @@ void run_tests(void);
 __attribute__((used, section(".test_vectors")))
 const uintptr_t vectors[] = {(uintptr_t)&_stack_top, (uintptr_t)run_tests};
 void run_tests(void) {
-    uint32_t result[] = {0x20026U, check()};
+    unsigned const line = check();
+    uint32_t result[] = {0x20026U, line == 0U ? 0U : 1U + (line - 1U) % UINT8_MAX};
     register uint32_t operation __asm__("r0") = 0x20U;
     register void *args __asm__("r1") = result;
     __asm__ volatile ("bkpt 0xab" : "+r"(operation), "+r"(args) :: "memory");
