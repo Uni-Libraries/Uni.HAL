@@ -40,7 +40,7 @@ typedef struct {
     uint16_t year;
     /** 1..12 */
     uint8_t month;
-    /** 1..31 */
+    /** 1 through the last day of the given month and year */
     uint8_t day;
     /** 1 (Monday)..7 (Sunday) */
     uint8_t weekday;

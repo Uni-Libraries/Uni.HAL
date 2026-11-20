@@ -66,6 +66,15 @@ static unsigned check(void) {
     CHECK(restarts == 1U && ctx.calendar_valid && rtc.WPR == RTC_WRITE_PROTECTION_DISABLE);
 
     uint32_t const old_time = rtc.TR, old_date = rtc.DR;
+    uni_hal_rtc_datetime_t invalid = next;
+    invalid.month = 4U;
+    invalid.day = 31U;
+    CHECK(!uni_hal_rtc_set(&ctx, &invalid));
+    invalid.year = 2025U;
+    invalid.month = 2U;
+    invalid.day = 29U;
+    CHECK(!uni_hal_rtc_set(&ctx, &invalid));
+    CHECK(rtc.TR == old_time && rtc.DR == old_date && ctx.calendar_valid && restarts == 1U);
     ctx.calendar_valid = false;
     grant_init = false;
     CHECK(!uni_hal_rtc_set(&ctx, &next));
@@ -80,5 +89,12 @@ static unsigned check(void) {
     sync_reads = 0U;
     CHECK(uni_hal_rtc_set(&ctx, &next) && ctx.calendar_valid);
     CHECK(sync_reads >= 2U && rtc.WPR == RTC_WRITE_PROTECTION_DISABLE);
+    sync_reads = 0U;
+    uni_hal_rtc_datetime_t leap_day = next;
+    leap_day.year = 2024U;
+    leap_day.month = 2U;
+    leap_day.day = 29U;
+    CHECK(uni_hal_rtc_set(&ctx, &leap_day) && uni_hal_rtc_get(&ctx, &readback));
+    CHECK(readback.year == 2024U && readback.month == 2U && readback.day == 29U);
     return 0;
 }

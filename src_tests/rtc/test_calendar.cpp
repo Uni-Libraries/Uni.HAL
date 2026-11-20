@@ -59,6 +59,30 @@ TEST_CASE("RTC rejects out-of-range fields and preserves the previous calendar",
     require_calendar(ctx, previous);
 }
 
+TEST_CASE("RTC enforces the last day of each month", "[rtc]") {
+    uni_hal_rtc_context_t ctx{};
+    REQUIRE(uni_hal_rtc_init(&ctx));
+    const uint8_t last_day[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const uint16_t years[] = {2000, 2024, 2025, 2099};
+    for (uint16_t year : years) {
+        uni_hal_rtc_datetime_t date{};
+        date.year = year;
+        date.weekday = 1U;
+        for (uint8_t month = 1; month <= 12; ++month) {
+            date.month = month;
+            date.day = last_day[month - 1];
+            if (month == 2 && (year == 2000 || year == 2024)) {
+                ++date.day;
+            }
+            REQUIRE(uni_hal_rtc_set(&ctx, &date));
+            auto invalid = date;
+            ++invalid.day;
+            CHECK_FALSE(uni_hal_rtc_set(&ctx, &invalid));
+            require_calendar(ctx, date);
+        }
+    }
+}
+
 TEST_CASE("RTC initialization reports whether the retained calendar was set", "[rtc]") {
     uni_hal_rtc_context_t writer{};
     REQUIRE(uni_hal_rtc_init(&writer));
