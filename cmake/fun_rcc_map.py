@@ -780,19 +780,6 @@ def write_text(path: pathlib.Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def find_project_file_near_inputs(input_paths: list[pathlib.Path], relative_path: str) -> pathlib.Path | None:
-    seen: set[pathlib.Path] = set()
-    for input_path in input_paths:
-        for parent in input_path.parents:
-            candidate = (parent / relative_path).resolve()
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            if candidate.exists():
-                return candidate
-    return None
-
-
 def detect_divider(text: str, patterns: list[str]) -> int | None:
     for pattern in patterns:
         value = pick_first_number(collect_group1(pattern, text))
@@ -807,6 +794,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         epilog="Conditions use --define and macros declared in each input file. Headers are not expanded. "
                "Supported #if expressions use integer constants, defined, !, comparisons, &&, || and parentheses.",
     )
+    parser.add_argument("--hal-root", type=pathlib.Path, default=pathlib.Path(__file__).resolve().parents[1])
     parser.add_argument("--target-name", required=True)
     parser.add_argument("--primary-input", default="")
     parser.add_argument("--input-file", action="append", default=[])
@@ -851,18 +839,9 @@ def main() -> int:
 
     input_text = "\n".join(active_source(path) for path in input_paths)
 
-    extra_clock_text_parts: list[str] = []
-    i2c_header_text = ""
-    i2c_driver_text = ""
-
-    i2c_header_path = find_project_file_near_inputs(input_paths, "src_unihal/src/i2c/uni_hal_i2c.h")
-    if i2c_header_path is not None:
-        i2c_header_text = active_source(i2c_header_path)
-
-    if "STM32H7" in definitions:
-        i2c_driver_path = find_project_file_near_inputs(input_paths, "src_unihal/src/i2c/uni_hal_i2c_stm32h7.c")
-        if i2c_driver_path is not None:
-            i2c_driver_text = active_source(i2c_driver_path)
+    hal_src = args.hal_root / "src"
+    i2c_header_text = active_source(hal_src / "i2c/uni_hal_i2c.h")
+    i2c_driver_text = active_source(hal_src / "i2c/uni_hal_i2c_stm32h7.c") if "STM32H7" in definitions else ""
 
     i2c_speed_map = parse_i2c_speed_map(i2c_header_text)
     i2c_default_speed_hz: int | None = None
@@ -872,14 +851,11 @@ def main() -> int:
 
     i2c_default_clksrc_token = detect_i2c_default_clksrc_token(i2c_driver_text)
 
+    extra_clock_text_parts = []
     if "STM32H7" in definitions:
-        h7_rcc_path = find_project_file_near_inputs(input_paths, "src_unihal/src/rcc/uni_hal_rcc_stm32h7.c")
-        if h7_rcc_path is not None:
-            extra_clock_text_parts.append(active_source(h7_rcc_path))
+        extra_clock_text_parts.append(active_source(hal_src / "rcc/uni_hal_rcc_stm32h7.c"))
     if "STM32L4" in definitions:
-        l4_rcc_path = find_project_file_near_inputs(input_paths, "src_unihal/src/rcc/uni_hal_rcc_stm32l4.c")
-        if l4_rcc_path is not None:
-            extra_clock_text_parts.append(active_source(l4_rcc_path))
+        extra_clock_text_parts.append(active_source(hal_src / "rcc/uni_hal_rcc_stm32l4.c"))
 
     divider_scan_text = "\n".join([input_text, *extra_clock_text_parts])
 

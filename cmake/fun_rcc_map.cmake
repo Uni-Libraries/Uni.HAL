@@ -49,6 +49,13 @@ function(uni_hal_generate_rcc_map target_name)
     set(_rcc_map_svg_file "${_rcc_map_out_dir}/rcc_map.svg")
     set(_rcc_map_script   "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/fun_rcc_map.py")
 
+    get_filename_component(_rcc_hal_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
+    set(_rcc_hal_inputs
+        "${_rcc_hal_root}/src/i2c/uni_hal_i2c.h"
+        "${_rcc_hal_root}/src/i2c/uni_hal_i2c_stm32h7.c"
+        "${_rcc_hal_root}/src/rcc/uni_hal_rcc_stm32h7.c"
+        "${_rcc_hal_root}/src/rcc/uni_hal_rcc_stm32l4.c")
+
     if(NOT EXISTS "${_rcc_map_script}")
         message(FATAL_ERROR "uni_hal_generate_rcc_map: generator script was not found: ${_rcc_map_script}")
     endif()
@@ -137,6 +144,7 @@ function(uni_hal_generate_rcc_map target_name)
         BYPRODUCTS "${_rcc_map_png_file}" "${_rcc_map_svg_file}"
         COMMAND "${Python_EXECUTABLE}" "${_rcc_map_script}"
             "--target-name" "${target_name}"
+            "--hal-root" "${_rcc_hal_root}"
             "--primary-input" "${_rcc_input_file}"
             ${_rcc_input_args}
             "--dot-file" "${_rcc_map_dot_file}"
@@ -145,7 +153,7 @@ function(uni_hal_generate_rcc_map target_name)
             "@${_rcc_definitions_file}"
             ${_rcc_freq_args}
         # A MAIN_DEPENDENCY would replace the compile rule for that source.
-        DEPENDS ${_rcc_input_files} "${_rcc_map_script}" "${_rcc_definitions_file}"
+        DEPENDS ${_rcc_input_files} ${_rcc_hal_inputs} "${_rcc_map_script}" "${_rcc_definitions_file}"
         COMMENT "Generating RCC map for target ${target_name}"
         VERBATIM
     )
