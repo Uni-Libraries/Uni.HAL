@@ -42,7 +42,8 @@ typedef struct {
     uint32_t buffer_index_down;
 
     /**
-     * Segger Up Buffer Index
+     * SEGGER up-buffer index. The polling interrupt drops bytes when the
+     * channel is full and records them in io->stats.tx_dropped.
      */
     uint32_t buffer_index_up;
 
@@ -60,7 +61,9 @@ typedef struct {
 
 /**
  * Bind the IO streams to a dedicated timer and start polling RTT. The context,
- * IO and timer must remain alive while the timer runs. Existing IO streams
+ * IO and timer must remain alive while the timer runs. Index 0 uses the SEGGER
+ * terminal buffers. Configure other RTT buffers before binding them and keep
+ * the indices, buffers and their storage valid while active. Existing IO streams
  * are reused. Failure releases streams created by this call and permits retry.
  */
 bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t* ctx);

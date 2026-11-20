@@ -79,12 +79,24 @@ bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t *ctx) {
         return false;
     }
 
+    if (ctx->buffer_index_up >= SEGGER_RTT_MAX_NUM_UP_BUFFERS ||
+        ctx->buffer_index_down >= SEGGER_RTT_MAX_NUM_DOWN_BUFFERS) {
+        return false;
+    }
+    uni_hal_segger_rtt_init();
+    // Use the same uncached control-block alias as SEGGER's read and write functions.
+    const volatile SEGGER_RTT_CB *rtt = (const volatile SEGGER_RTT_CB *)((uintptr_t)&_SEGGER_RTT + SEGGER_RTT_UNCACHED_OFF);
+    const volatile SEGGER_RTT_BUFFER_UP *up = &rtt->aUp[ctx->buffer_index_up];
+    const volatile SEGGER_RTT_BUFFER_DOWN *down = &rtt->aDown[ctx->buffer_index_down];
+    if (!up->pBuffer || up->SizeOfBuffer < 2U || !down->pBuffer || down->SizeOfBuffer < 2U) {
+        return false;
+    }
+
     bool const existing_io = ctx->io->buf_rx.handle && ctx->io->buf_tx.handle;
     if (!existing_io && !uni_hal_io_init(ctx->io)) {
         return false;
     }
 
-    uni_hal_segger_rtt_init();
     if (uni_hal_tim_init(ctx->timer) &&
         uni_hal_tim_register_callback(ctx->timer, _uni_hal_segger_rtt_stdio_timer, ctx)) {
         if (uni_hal_tim_start(ctx->timer)) {
