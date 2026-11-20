@@ -18,11 +18,6 @@
 #include "io/uni_hal_io.h"
 #include "io/uni_hal_io_stdio.h"
 
-// newlib
-#if defined(_NEWLIB_VERSION) && !defined(__clang__)
-#include <reent.h>
-#endif
-
 
 
 //
@@ -31,7 +26,7 @@
 
 extern uni_hal_stdio_context_t g_uni_hal_io_stdio_ctx;
 
-#if defined(_NEWLIB_VERSION) && defined(__clang__)
+#if defined(PICOLIBC_STDIO_GLOBALS)
 FILE* const stdout = NULL;
 #endif
 
@@ -42,17 +37,6 @@ FILE* const stdout = NULL;
 //
 
 #if !defined(UNI_HAL_TARGET_MCU_PC)
-
-int *__errno(void) {
-#if defined(__clang__)
-    // errno is written through this pointer, also by the stubs below
-    static int errno_value = 0;
-    return &errno_value;
-#else
-    return &_REENT->_errno;
-#endif
-}
-
 
 int _close(int) {
     errno = ENOSYS;

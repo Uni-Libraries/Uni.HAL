@@ -66,6 +66,8 @@ if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC")
         target_link_options(freertos_kernel INTERFACE
             "LINKER:--wrap=__retarget_lock_acquire_recursive"
             "LINKER:--wrap=__retarget_lock_release_recursive")
+    else()
+        check_symbol_exists(__NEWLIB__ "stdlib.h" UNI_HAL_HAS_NEWLIB)
     endif()
 
     if(UNI_HAL_TARGET_MCU MATCHES "^STM32")
@@ -189,6 +191,10 @@ if(UNI_HAL_HAS_PICOLIBC AND UNI_HAL_TARGET_MCU MATCHES "^STM32")
         "#if defined(PICOLIBC_TLS)\n"
         "#define configUSE_PICOLIBC_TLS 1\n"
         "#endif\n"
+    )
+elseif(UNI_HAL_HAS_NEWLIB)
+    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
+        "#define configUSE_NEWLIB_REENTRANT 1\n"
     )
 endif()
 

@@ -56,6 +56,14 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         set_tests_properties(oom_${policy} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    uni_hal_add_executable(task_libc_qemu)
+    target_sources(task_libc_qemu PRIVATE task_errno.c)
+    target_link_options(task_libc_qemu PRIVATE "LINKER:--defsym,_estack=0x20020000")
+    add_test(NAME task_libc_cortex_m4 COMMAND "${QEMU_SYSTEM_ARM}" -M netduinoplus2
+        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+        -kernel $<TARGET_FILE:task_libc_qemu>)
+    set_tests_properties(task_libc_cortex_m4 PROPERTIES TIMEOUT 15)
+
     uni_hal_add_executable(i2c_polling_qemu)
     target_sources(i2c_polling_qemu PRIVATE ../i2c_timeout/vendor_qemu.c)
     target_link_options(i2c_polling_qemu PRIVATE

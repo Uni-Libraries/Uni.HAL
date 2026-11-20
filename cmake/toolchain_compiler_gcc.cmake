@@ -77,6 +77,8 @@ set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -Wl,-print-memor
 # ZYNQ7000: the C library glue comes from the Xilinx BSP (Xilinx.spec, libxil), see 3rdparty/xilinx_zynq7000
 if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC" AND NOT UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
     if(CMAKE_C_COMPILER MATCHES "gcc")
+        # The nano headers select the same struct _reent layout as libc_nano.a.
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-specs=nano.specs>")
         set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -specs=nano.specs")         #use newlib-nano
         set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -specs=nosys.specs")        #use nosys
     endif()

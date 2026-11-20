@@ -72,6 +72,16 @@ uses ordinary RAM on L496 and section `.RAM_D1` on H743. An application supplyin
 its own `_sbrk` (or picolibc `sbrk`) controls its own pool. On Zynq, the BSP uses
 the linker script's `_HEAP_SIZE` (64 KiB by default).
 
+**Task-local libc state.** MCU builds using newlib enable FreeRTOS's
+`configUSE_NEWLIB_REENTRANT`. Each task gets its own `errno` and newlib state,
+including its `strtok` cursor. FreeRTOS reclaims that state on task deletion.
+Budget for the larger task control block even for tasks that never call libc.
+With the default project configuration, `sizeof(StaticTask_t)` grows from 104 to
+180 bytes on STM32 with Arm GCC 14.2 and newlib-nano, and from 104 to 392 bytes on
+Zynq with the Vitis GCC 13.4 standalone BSP. Individual libc calls can also
+allocate from the C heap. The STM32 GCC toolchain selects the nano headers for
+C and C++ sources so their structure layout matches the linked library.
+
 With `configSUPPORT_STATIC_ALLOCATION=0`, the RX and TX stream buffers created by
 `uni_hal_io_init()` use the FreeRTOS heap. Each configured size includes one reserved
 byte. Stop tasks and interrupt handlers that use the context before calling
