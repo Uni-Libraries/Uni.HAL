@@ -8,6 +8,8 @@ add_test(NAME pc_consumer_without_tests COMMAND "${CMAKE_COMMAND}"
     "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}" "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
     "-DCPM_SOURCE_CACHE=${CPM_SOURCE_CACHE}" "-DCPM_uni.common_SOURCE=${uni.common_SOURCE_DIR}"
     "-DCPM_nanoprintf_SOURCE=${nanoprintf_SOURCE_DIR}" -DUNI_HAL_TARGET_MCU=PC -DBUILD_TESTING=OFF)
+add_test(NAME toolchain_target_selection COMMAND "${CMAKE_COMMAND}"
+    "-DGENERATOR=${CMAKE_GENERATOR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/toolchain/target_selection.cmake")
 add_test(NAME toolchain_msvc_compiler_paths
     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/toolchain/msvc_compiler_paths.cmake")
 add_test(NAME rcc_map_mco_outputs
