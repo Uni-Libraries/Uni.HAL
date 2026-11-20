@@ -542,19 +542,19 @@ static void _uni_hal_tim_irq_cc(TIM_TypeDef* handle)
     if (tim_number > 0U && tim_number <= UNI_HAL_TIM_MAXTIMERS) {
         uni_hal_tim_context_t* ctx = g_uni_hal_tim_ctx[tim_number - 1U];
         if (ctx != NULL) {
-            if (LL_TIM_IsActiveFlag_CC1(handle)) {
+            if (LL_TIM_IsEnabledIT_CC1(handle) && LL_TIM_IsActiveFlag_CC1(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_1);
             }
 
-            if (LL_TIM_IsActiveFlag_CC2(handle)) {
+            if (LL_TIM_IsEnabledIT_CC2(handle) && LL_TIM_IsActiveFlag_CC2(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_2);
             }
 
-            if (LL_TIM_IsActiveFlag_CC3(handle)) {
+            if (LL_TIM_IsEnabledIT_CC3(handle) && LL_TIM_IsActiveFlag_CC3(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_3);
             }
 
-            if (LL_TIM_IsActiveFlag_CC4(handle)) {
+            if (LL_TIM_IsEnabledIT_CC4(handle) && LL_TIM_IsActiveFlag_CC4(handle)) {
                 _uni_hal_tim_irq_cc_chan(ctx, handle, UNI_HAL_TIM_CHANNEL_4);
             }
 
