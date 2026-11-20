@@ -41,7 +41,36 @@ typedef enum {
     UNI_HAL_I2C_SPEED_1MHZ,
 } uni_hal_i2c_speed_e;
 
+#if defined(UNI_HAL_TARGET_MCU_PC)
+typedef enum {
+    UNI_HAL_I2C_PC_PROBE,
+    UNI_HAL_I2C_PC_MASTER_RECEIVE,
+    UNI_HAL_I2C_PC_MASTER_TRANSMIT,
+    UNI_HAL_I2C_PC_MEM_READ,
+    UNI_HAL_I2C_PC_MEM_WRITE,
+} uni_hal_i2c_pc_operation_e;
+
 typedef struct {
+    uni_hal_i2c_pc_operation_e operation;
+    uint16_t dev_addr; /**< Normalized 7-bit device address. */
+    uint16_t mem_addr;
+    uni_hal_i2c_memadd_size_e mem_addr_size;
+    uint8_t *buf; /**< Fill on reads, inspect on writes. */
+    uint16_t buf_len;
+    uint32_t timeout; /**< Total budget in milliseconds. */
+    uint32_t trials;  /**< Probe attempt budget, zero for data transfers. */
+} uni_hal_i2c_pc_request_t;
+
+/**
+ * Synchronous model of one bus. Return the byte count transferred, zero for an
+ * acknowledged probe, or a negative value on failure. Fill every counted byte
+ * on a read and return within the requested timeout. The request and buffer
+ * may only be used during the call.
+ */
+typedef int32_t (*uni_hal_i2c_pc_exchange_fn)(void *user, const uni_hal_i2c_pc_request_t *request);
+#endif
+
+typedef struct uni_hal_i2c_config_t {
     /**
      * Instance
      */
@@ -82,6 +111,17 @@ typedef struct {
      * IRQ priority
      */
     uint32_t irq_priority;
+
+#if defined(UNI_HAL_TARGET_MCU_PC)
+    /** Optional bus model. An empty bus acknowledges no device. */
+#ifdef __cplusplus
+    uni_hal_i2c_pc_exchange_fn pc_exchange = nullptr;
+    void *pc_user = nullptr;
+#else
+    uni_hal_i2c_pc_exchange_fn pc_exchange;
+    void *pc_user;
+#endif
+#endif
 } uni_hal_i2c_config_t;
 
 

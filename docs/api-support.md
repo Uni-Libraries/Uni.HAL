@@ -37,8 +37,16 @@ for other targets.
   polynomial at widths 7, 8, 16 and 32. It processes bytes most-significant bit
   first without reflection or a final XOR. RNG reads the operating system's
   random source. Discard the buffer after a failed read because it may be
-  partially filled. Flash reports zero capacity, SPI transfers return failure,
-  and I²C is a stand-in.
+  partially filled. Flash reports zero capacity and SPI transfers return failure.
+
+  A zero-initialized PC I²C configuration represents an empty bus. To attach a
+  device model, set `config.pc_exchange` and `config.pc_user` on the bus before
+  initialization. The callback receives normalized 7-bit device addresses. It
+  returns zero for an acknowledged probe, the transferred byte count for data,
+  or a negative value for failure. A successful read fills the requested buffer.
+  The callback runs synchronously and must return within the supplied timeout.
+  When several tasks share a model, the model owns synchronization of its device
+  state. Reset preserves the model.
 
 ## Link contract
 
