@@ -810,14 +810,10 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) {
 
 
 bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) {
-    if (target == UNI_HAL_CORE_PERIPH_RTC) {
-        return set_rtc_clock_enabled(state);
-    }
-
     bool result = false;
-
-    if (state != uni_hal_rcc_clk_get(target)) {
-        result = false;
+    if (target == UNI_HAL_CORE_PERIPH_RTC) {
+        result = set_rtc_clock_enabled(state);
+    } else {
         switch (target) {
             case UNI_HAL_CORE_PERIPH_ADC_1:
             case UNI_HAL_CORE_PERIPH_ADC_2:

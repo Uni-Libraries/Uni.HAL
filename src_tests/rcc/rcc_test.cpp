@@ -365,3 +365,34 @@ TEST_CASE("L496 reports SYSCLK upstream of the AHB divider") {
     CHECK(uni_hal_rcc_clk_get_freq(UNI_HAL_CORE_PERIPH_CAN_1) == 20'000'000U);
     CHECK(uni_hal_rcc_clk_get_freq(UNI_HAL_CORE_PERIPH_SYSCLK) == 80'000'000U);
 }
+
+TEST_CASE("L496 clock requests succeed when a supported gate already has the requested state") {
+    rcc_test_reset();
+
+    SECTION("all three converters share the ADC gate") {
+        REQUIRE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_ADC_1, true));
+        CHECK(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_ADC_2, true));
+        CHECK(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_ADC_3, true));
+        CHECK(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_ADC_3));
+        REQUIRE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_ADC_2, false));
+        CHECK_FALSE(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_ADC_1));
+        CHECK(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_ADC_3, false));
+    }
+
+    SECTION("CAN2 enable also restores its CAN1 dependency") {
+        REQUIRE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_CAN_2, true));
+        REQUIRE(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_CAN_1));
+        REQUIRE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_CAN_1, false));
+        REQUIRE(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_CAN_2));
+        CHECK(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_CAN_2, true));
+        CHECK(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_CAN_1));
+        CHECK(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_CAN_2, false));
+        CHECK(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_CAN_2, false));
+        CHECK(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_CAN_1));
+    }
+
+    SECTION("unsupported peripherals have no settable gate") {
+        CHECK_FALSE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_UNKNOWN, false));
+        CHECK_FALSE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_UNKNOWN, true));
+    }
+}
