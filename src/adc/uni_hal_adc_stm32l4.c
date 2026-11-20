@@ -571,30 +571,43 @@ static bool _uni_hal_adc_dma_route_valid(const uni_hal_adc_config_t *config) {
     return dma->channel == first_channel + (config->instance - UNI_HAL_CORE_PERIPH_ADC_1);
 }
 
-bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
-    DMA_TypeDef* module = uni_hal_dma_stm32l4_get_module(ctx->config.dma->config.instance);
-    uint32_t stream = uni_hal_dma_stm32l4_get_channel(ctx->config.dma->config.channel);
+// An initializer may yield during calibration. Reserve this converter until its
+// configuration is complete, including for scans without DMA.
+static bool initializing_adc[3];
 
-    LL_DMA_SetPeriphRequest(module, stream, LL_DMA_REQUEST_0);
-    LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+static bool prepare_dma_channel(uni_hal_dma_context_t *dma) {
+    if (!uni_hal_dma_init(dma)) {
+        return false;
+    }
+    DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(dma->config.instance);
+    uint32_t const channel = uni_hal_dma_stm32l4_get_channel(dma->config.channel);
+    return !LL_DMA_IsEnabledChannel(module, channel);
+}
 
-    uni_hal_dma_set_priority(ctx->config.dma, UNI_HAL_DMA_PRIORITY_LOW);
-    uni_hal_dma_set_mode(ctx->config.dma, UNI_HAL_DMA_MODE_CIRCULAR);
-
-    LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
-    LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
-    LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_HALFWORD);
-    LL_DMA_SetMemorySize(module, stream, LL_DMA_MDATAALIGN_HALFWORD);
-
-    uni_hal_dma_set_fifo_mode(ctx->config.dma, false);
-
-    LL_DMA_ConfigAddresses(module, stream, LL_ADC_DMA_GetRegAddr(_uni_hal_adc_get_instance(ctx->config.instance), LL_ADC_DMA_REG_REGULAR_DATA),
-                           (uint32_t) ctx->config.data, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
-    LL_DMA_SetDataLength(module, stream, ctx->config.channels_count);
-
-    LL_DMA_EnableIT_TE(module, stream);
-
-    return true;
+static bool start_dma(uni_hal_adc_context_t *ctx) {
+    DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.dma->config.instance);
+    uint32_t const channel = uni_hal_dma_stm32l4_get_channel(ctx->config.dma->config.channel);
+    uint32_t const mask = uni_hal_core_irq_pause();
+    // Another DMA client could have started the channel during ADC calibration.
+    if (LL_DMA_IsEnabledChannel(module, channel)) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    LL_DMA_SetPeriphRequest(module, channel, LL_DMA_REQUEST_0);
+    LL_DMA_SetDataTransferDirection(module, channel, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+    LL_DMA_SetChannelPriorityLevel(module, channel, LL_DMA_PRIORITY_LOW);
+    LL_DMA_SetMode(module, channel, LL_DMA_MODE_CIRCULAR);
+    LL_DMA_SetPeriphIncMode(module, channel, LL_DMA_PERIPH_NOINCREMENT);
+    LL_DMA_SetMemoryIncMode(module, channel, LL_DMA_MEMORY_INCREMENT);
+    LL_DMA_SetPeriphSize(module, channel, LL_DMA_PDATAALIGN_HALFWORD);
+    LL_DMA_SetMemorySize(module, channel, LL_DMA_MDATAALIGN_HALFWORD);
+    LL_DMA_ConfigAddresses(module, channel, LL_ADC_DMA_GetRegAddr(_uni_hal_adc_get_instance(ctx->config.instance), LL_ADC_DMA_REG_REGULAR_DATA),
+                           (uint32_t)ctx->config.data, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+    LL_DMA_SetDataLength(module, channel, ctx->config.channels_count);
+    LL_DMA_EnableIT_TE(module, channel);
+    bool const started = uni_hal_dma_enable(ctx->config.dma, true);
+    uni_hal_core_irq_resume(mask);
+    return started;
 }
 
 bool _uni_hal_adc_powerup(uni_hal_adc_context_t *ctx) {
@@ -653,31 +666,8 @@ static bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
 // Functions
 //
 
-bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
-    if (ctx == nullptr) {
-        return false;
-    }
+static bool initialize_converter(uni_hal_adc_context_t *ctx, uni_hal_rcc_clksrc_e clock_source) {
     const uni_hal_adc_config_t *config = &ctx->config;
-    if (!uni_hal_adc_stm32_config_valid(config, UNI_HAL_DMA_CHANNEL_1) ||
-        !_uni_hal_adc_dma_route_valid(config) || _uni_hal_adc_get_clock(config) == UINT32_MAX ||
-        _uni_hal_adc_get_resolution(config->resolution_bits) == UINT32_MAX ||
-        _uni_hal_adc_get_sampling(config->sampling_cycles) == UINT32_MAX) {
-        return false;
-    }
-    uni_hal_rcc_clksrc_e clock_source = config->clock_source;
-    if (clock_source == UNI_HAL_RCC_CLKSRC_UNKNOWN) {
-        clock_source = UNI_HAL_RCC_CLKSRC_SYSCLK;
-    }
-    if (clock_source != UNI_HAL_RCC_CLKSRC_SYSCLK && clock_source != UNI_HAL_RCC_CLKSRC_NONE) {
-        return false;
-    }
-    if (ctx->state.initialized) {
-        return uni_hal_adc_is_inited(ctx);
-    }
-    if (config->dma != nullptr && !uni_hal_dma_init(config->dma)) {
-        return false;
-    }
-
     for (uint32_t rank = 0; rank < config->channels_count; ++rank) {
         uni_hal_gpio_pin_context_t *pin = config->pins[rank];
         if (pin != nullptr && !uni_hal_gpio_pin_is_inited(pin)) {
@@ -698,12 +688,59 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         !_uni_hal_adc_powerup(ctx) || !_uni_hal_adc_enable(ctx)) {
         return false;
     }
-    if (config->dma != nullptr && (!_uni_hal_adc_configure_dma(ctx) || !uni_hal_dma_enable(config->dma, true))) {
+    if (config->dma != nullptr && !start_dma(ctx)) {
+        // No conversion has been started. Return the ADC to a configurable state for a retry.
+        ADC_TypeDef *adc = _uni_hal_adc_get_instance(config->instance);
+        LL_ADC_Disable(adc);
+        if (uni_hal_adc_wait_startup_flag(&adc->CR, ADC_CR_ADEN | ADC_CR_ADDIS, false, config->timeout)) {
+            LL_ADC_ClearFlag_ADRDY(adc);
+        }
         return false;
     }
+    uint32_t const mask = uni_hal_core_irq_pause();
     ctx->state.initialized = true;
     _uni_hal_adc_trigger(ctx);
+    uni_hal_core_irq_resume(mask);
     return true;
+}
+
+bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
+    if (ctx == nullptr) {
+        return false;
+    }
+    const uni_hal_adc_config_t *config = &ctx->config;
+    if (!uni_hal_adc_stm32_config_valid(config, UNI_HAL_DMA_CHANNEL_1) ||
+        !_uni_hal_adc_dma_route_valid(config) || _uni_hal_adc_get_clock(config) == UINT32_MAX ||
+        _uni_hal_adc_get_resolution(config->resolution_bits) == UINT32_MAX ||
+        _uni_hal_adc_get_sampling(config->sampling_cycles) == UINT32_MAX) {
+        return false;
+    }
+    uni_hal_rcc_clksrc_e clock_source = config->clock_source;
+    if (clock_source == UNI_HAL_RCC_CLKSRC_UNKNOWN) {
+        clock_source = UNI_HAL_RCC_CLKSRC_SYSCLK;
+    }
+    if (clock_source != UNI_HAL_RCC_CLKSRC_SYSCLK && clock_source != UNI_HAL_RCC_CLKSRC_NONE) {
+        return false;
+    }
+    unsigned const adc = config->instance - UNI_HAL_CORE_PERIPH_ADC_1;
+    uint32_t mask = uni_hal_core_irq_pause();
+    if (ctx->state.initialized || initializing_adc[adc]) {
+        bool const ready = uni_hal_adc_is_inited(ctx);
+        uni_hal_core_irq_resume(mask);
+        return ready;
+    }
+    if (config->dma && !prepare_dma_channel(config->dma)) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    initializing_adc[adc] = true;
+    uni_hal_core_irq_resume(mask);
+
+    bool const ready = initialize_converter(ctx, clock_source);
+    mask = uni_hal_core_irq_pause();
+    initializing_adc[adc] = false;
+    uni_hal_core_irq_resume(mask);
+    return ready;
 }
 
 

@@ -68,6 +68,8 @@ static void model_start_conversion(ADC_TypeDef *adc) {
     adc->CR |= enabled;
 }
 #define LL_ADC_REG_StartConversion model_start_conversion
+
+#define LL_ADC_ClearFlag_ADRDY(adc) ((adc)->ISR &= ~ADC_ISR_ADRDY) // W1C
 #endif
 
 static bool model_dma_init(uni_hal_dma_context_t *dma);
@@ -80,6 +82,11 @@ static bool model_dma_init(uni_hal_dma_context_t *dma);
 #undef uni_hal_dma_init
 
 #include "model.h"
+
+#if defined(UNI_HAL_TARGET_MCU_STM32L496)
+void (*adc_delay_hook)(void);
+const DMA_TypeDef *adc_model_dma1(void) { return DMA1; }
+#endif
 
 bool adc_dma_init_succeeds;
 
@@ -180,10 +187,22 @@ static bool model_dma_init(uni_hal_dma_context_t *dma) {
 
 void model_delay(uint32_t ms) {
     (void)ms;
+#if defined(UNI_HAL_TARGET_MCU_STM32L496)
+    if (adc_delay_hook) {
+        void (*hook)(void) = adc_delay_hook;
+        adc_delay_hook = nullptr;
+        hook();
+    }
+#endif
 }
 
 uint32_t model_tick(void) {
     for (unsigned i = 0; i < 3; ++i) {
+#if defined(UNI_HAL_TARGET_MCU_STM32L496)
+        if (adcs[i].CR & ADC_CR_ADDIS) {
+            adcs[i].CR &= ~(ADC_CR_ADEN | ADC_CR_ADDIS);
+        }
+#endif
         if (adcs[i].CR & ADC_CR_ADCAL) {
             if (adc_calibration_delay) {
                 --adc_calibration_delay;

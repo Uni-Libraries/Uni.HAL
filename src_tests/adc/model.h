@@ -11,6 +11,9 @@ ADC_Common_TypeDef *adc_model_common_registers(void);
 bool adc_model_capturing(const volatile uint16_t *data, uint32_t count);
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
 bool adc_model_dma_fault(bool direct_mode);
+#else
+extern void (*adc_delay_hook)(void);
+const DMA_TypeDef *adc_model_dma1(void);
 #endif
 extern bool adc_dma_init_succeeds;
 extern unsigned dma_init_calls;
