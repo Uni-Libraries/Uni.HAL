@@ -22,25 +22,28 @@ the separate private tick timer.
 
 ## Using it from CMake
 
-```cmake
-set(UNI_HAL_TARGET_MCU "STM32H743")
-set(UNI_HAL_HSE_VALUE  8000000)        # HSE frequency of the board, in Hz
-add_subdirectory(Uni.HAL)
+Place `Uni.HAL/` next to the application's top-level `CMakeLists.txt` and `main.c`,
+as in the [minimal firmware project](src_tests/cmake_consumer/CMakeLists.txt).
+Select the MCU when configuring so the toolchain can choose a compiler before
+`project()` enables C, C++ and ASM. For an STM32H743 board with an 8 MHz HSE,
+run these commands from the application directory with Arm GCC on the path.
 
-include(Uni.HAL/uni.hal.cmake)
-uni_hal_add_executable(firmware)
-target_sources(firmware PRIVATE main.c)
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=Uni.HAL/cmake/toolchain.cmake \
+  -DUNI_HAL_TARGET_MCU=STM32H743 -DUNI_HAL_HSE_VALUE=8000000
+cmake --build build --config Release
 ```
 
-Configure with `-DCMAKE_TOOLCHAIN_FILE=Uni.HAL/cmake/toolchain.cmake`. The dependencies
-Uni.Common and nanoprintf are downloaded by CPM during the configuration.
+The build produces `firmware.elf` and `firmware.bin`. The dependencies Uni.Common
+and nanoprintf are downloaded by CPM during the configuration.
 All MCU targets and the PC target use the bundled FreeRTOS kernel.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `UNI_HAL_TARGET_MCU` | none | target, required |
 | `UNI_HAL_ZYNQ7000_BSP_DIR` | none | ZYNQ7000: `<platform>/export/<platform>/sw/<domain>` of a Vitis platform (`include/`, `lib/`, `Xilinx.spec`); build with the Xilinx `arm-none-eabi-gcc` |
-| `UNI_HAL_HSE_VALUE` | none | HSE frequency in Hz, required for the MCU targets |
+| `UNI_HAL_HSE_VALUE` | none | HSE frequency of the board in Hz, required for the STM32 targets |
 | `UNI_HAL_CAN_USE_FD` | `OFF` | CAN messages hold up to 64 data bytes, for CAN FD on the STM32H7 |
 | `UNI_HAL_IO_PRINTF_LARGE_FORMAT` | `OFF` | `uni_hal_io_stdio_*printf` understand `ll`, `j`, `z`, `t` (`%llu`, `%zu`) |
 | `UNI_HAL_RTOS_HEAP_SIZE` | `100*1024` | `configTOTAL_HEAP_SIZE` |

@@ -142,6 +142,21 @@ jobs:
     - name: Run the STM32 firmware regressions in QEMU
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
+    - name: Build the documented STM32H743 application
+      if: matrix.mcu == 'STM32H743' && matrix.can_fd == 'OFF'
+      shell: bash
+      run: |
+        app="$RUNNER_TEMP/h743-application"
+        cp -R src_tests/cmake_consumer "$app"
+        ln -s "$PWD" "$app/Uni.HAL"
+        cd "$app"
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_TOOLCHAIN_FILE=Uni.HAL/cmake/toolchain.cmake \
+          -DUNI_HAL_TARGET_MCU=STM32H743 -DUNI_HAL_HSE_VALUE=8000000
+        cmake --build build --config Release
+        arm-none-eabi-readelf -h build/firmware.elf | grep -E 'Machine:[[:space:]]+ARM'
+        test -s build/firmware.bin
+
     - name: Check Debug and Release firmware artifacts in one build tree
       if: matrix.mcu == 'STM32L496' && matrix.static_allocation == 'ON' && matrix.tick_hz == 1000
       shell: bash
