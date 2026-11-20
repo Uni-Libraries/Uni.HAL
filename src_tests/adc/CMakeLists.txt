@@ -15,6 +15,7 @@ function(add_adc_model_test name source)
 endfunction()
 
 add_adc_model_test(adc_configuration bounds.c)
+add_adc_model_test(adc_startup_timeout startup_timeout.c)
 add_adc_model_test(adc_internal_input_routing internal_routing.c)
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     add_adc_model_test(adc_channel_preselection preselection.c)

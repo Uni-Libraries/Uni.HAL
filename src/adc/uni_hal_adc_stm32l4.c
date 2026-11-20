@@ -22,20 +22,13 @@
 #include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
-#include "systick/uni_hal_systick.h"
+#include "adc/uni_hal_adc_stm32_startup.h"
 
 
 
 //
 // Defines
 //
-
-/**
- * Longest wait for the calibration and for the ADC to become ready, unless the configuration
- * names another one.
- * The linearity calibration of the STM32H7 alone takes about 165000 ADC clock cycles.
- */
-#define UNI_HAL_ADC_STARTUP_TIMEOUT_MS (500U)
 
 #define UNI_HAL_ADC_VBAT_DIV (3.0f)
 
@@ -604,16 +597,6 @@ bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
     return true;
 }
 
-/**
- * Get the longest wait for the calibration and for the ADC to become ready
- * @param ctx pointer to the ADC context
- * @return timeout in ms
- */
-static uint32_t _uni_hal_adc_startup_timeout(const uni_hal_adc_context_t *ctx) {
-    return (ctx->config.timeout != 0U) ? ctx->config.timeout : UNI_HAL_ADC_STARTUP_TIMEOUT_MS;
-}
-
-
 bool _uni_hal_adc_powerup(uni_hal_adc_context_t *ctx) {
     bool result = false;
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
@@ -630,13 +613,8 @@ bool _uni_hal_adc_powerup(uni_hal_adc_context_t *ctx) {
         // Start calibration
         LL_ADC_StartCalibration(instance, true);
 
-        // Wait for calibration completion
-        // the calibration and the ready flag below need the ADC kernel clock; without it they never finish
-        uint32_t const start_ms = uni_hal_systick_get_ms();
-        while (LL_ADC_IsCalibrationOnGoing(instance)) {
-            if ((uni_hal_systick_get_ms() - start_ms) > _uni_hal_adc_startup_timeout(ctx)) {
-                return false;
-            }
+        if (!uni_hal_adc_wait_startup_flag(&instance->CR, ADC_CR_ADCAL, false, ctx->config.timeout)) {
+            return false;
         }
         uni_hal_dwt_delay_ms(1U);
 
@@ -651,14 +629,7 @@ bool _uni_hal_adc_enable(uni_hal_adc_context_t *ctx) {
     ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
     LL_ADC_Enable(instance);
 
-    uint32_t const start_ms = uni_hal_systick_get_ms();
-    while (!LL_ADC_IsActiveFlag_ADRDY(instance)) {
-        if ((uni_hal_systick_get_ms() - start_ms) > _uni_hal_adc_startup_timeout(ctx)) {
-            return false;
-        }
-    }
-
-    return true;
+    return uni_hal_adc_wait_startup_flag(&instance->ISR, ADC_ISR_ADRDY, true, ctx->config.timeout);
 }
 
 

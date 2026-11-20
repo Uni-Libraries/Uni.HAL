@@ -84,7 +84,9 @@ static bool model_dma_init(uni_hal_dma_context_t *dma);
 bool adc_dma_init_succeeds;
 
 unsigned dma_init_calls;
-static unsigned tick;
+static uint32_t tick;
+unsigned adc_calibration_delay, adc_ready_delay;
+uint32_t adc_tick_step;
 
 void reset_adc_model(void) {
     memset(adcs, 0, sizeof adcs);
@@ -94,6 +96,8 @@ void reset_adc_model(void) {
     adc_peripheral_calls = 0;
     dma_init_calls = 0;
     tick = 0;
+    adc_tick_step = 1U;
+    adc_calibration_delay = adc_ready_delay = 0U;
 }
 
 bool adc_model_untouched(void) {
@@ -180,12 +184,23 @@ void model_delay(uint32_t ms) {
 
 uint32_t model_tick(void) {
     for (unsigned i = 0; i < 3; ++i) {
-        adcs[i].CR &= ~ADC_CR_ADCAL;
+        if (adcs[i].CR & ADC_CR_ADCAL) {
+            if (adc_calibration_delay) {
+                --adc_calibration_delay;
+            } else {
+                adcs[i].CR &= ~ADC_CR_ADCAL;
+            }
+        }
         if (adcs[i].CR & ADC_CR_ADEN) {
-            adcs[i].ISR |= ADC_ISR_ADRDY;
+            if (adc_ready_delay) {
+                --adc_ready_delay;
+            } else {
+                adcs[i].ISR |= ADC_ISR_ADRDY;
+            }
         }
     }
-    return ++tick;
+    tick += adc_tick_step;
+    return tick;
 }
 
 // Minimal vector table for this RAM model. QEMU zeroes RAM and loads the ELF.
