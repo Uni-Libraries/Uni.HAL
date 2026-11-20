@@ -14,13 +14,14 @@ static struct {
     bool shifting, rx_ready;
 } ports[2];
 static XUartPs_Config cfgs[] = {{XPS_UART0_BASEADDR}, {XPS_UART1_BASEADDR}};
-static struct { Xil_InterruptHandler handler; void *ctx; } vectors[96];
+static struct { Xil_InterruptHandler handler; void *ctx; unsigned priority; } vectors[96];
 static bool in_isr, event;
 static uint64_t clock_count, comparator;
 bool uart_model_ppi_available = true;
 unsigned uart_model_fail_irq;
 XScuGic g_uni_hal_core_zynq7000_gic;
 bool uart_model_irq_connected(unsigned id) { return vectors[id].handler != NULL; }
+unsigned uart_model_irq_priority(unsigned id) { return vectors[id].priority; }
 void XScuGic_Disconnect(XScuGic *gic, uint32_t id) {
     (void)gic;
     vectors[id].handler = NULL;
@@ -83,10 +84,11 @@ void uart_model_rx(unsigned p, uint8_t byte) {
 }
 bool uni_hal_core_zynq7000_irq_connect(uint32_t id, Xil_InterruptHandler handler, void *ctx,
                                        uint32_t priority, bool edge) {
-    (void)priority; (void)edge;
+    (void)edge;
     if (id == uart_model_fail_irq) return false;
     vectors[id].handler = handler;
     vectors[id].ctx = ctx;
+    vectors[id].priority = priority;
     return true;
 }
 bool uni_hal_core_zynq7000_global_timer_irq_available(void) { return uart_model_ppi_available; }

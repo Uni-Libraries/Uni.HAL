@@ -83,7 +83,9 @@ typedef struct {
     uni_hal_io_context_t *io;
 
     /**
-     * ISR Priority
+     * Interrupt priority in the target controller's logical units.
+     * On Zynq, zero selects the driver default. An explicit priority must be in
+     * configMAX_API_CALL_INTERRUPT_PRIORITY..portLOWEST_USABLE_INTERRUPT_PRIORITY.
      */
     uint32_t isr_priority;
 

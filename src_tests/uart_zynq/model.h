@@ -21,3 +21,4 @@ extern uint32_t uart_model_timer_control;
 extern bool uart_model_ppi_available;
 extern unsigned uart_model_fail_irq;
 bool uart_model_irq_connected(unsigned id);
+unsigned uart_model_irq_priority(unsigned id);

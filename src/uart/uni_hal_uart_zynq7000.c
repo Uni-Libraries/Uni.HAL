@@ -301,6 +301,13 @@ static void _uni_hal_uart_zynq7000_irq_handler(void *arg) {
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
     if (ctx != NULL && ctx->io != NULL) {
+        // Both the UART vector and the shared TX alarm call FreeRTOS FromISR functions.
+        uint32_t const default_prio = UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT < configMAX_API_CALL_INTERRUPT_PRIORITY
+            ? configMAX_API_CALL_INTERRUPT_PRIORITY : UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT;
+        uint32_t const prio = ctx->isr_priority ? ctx->isr_priority : default_prio;
+        if (prio < configMAX_API_CALL_INTERRUPT_PRIORITY || prio > portLOWEST_USABLE_INTERRUPT_PRIORITY) {
+            return false;
+        }
         int32_t idx = _uni_hal_uart_zynq7000_index(ctx->instance);
         if (idx >= 0 && (alarm_connected || alarm_available())) {
             XUartPs *dev = &_uni_hal_uart_zynq7000_dev[idx];
@@ -325,12 +332,11 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 result = uni_hal_io_init(ctx->io);
             }
             if (result) {
-                uint32_t const prio = ctx->isr_priority != 0U ? ctx->isr_priority : UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT;
                 uint32_t const mask = uni_hal_core_irq_pause();
                 bool const had_alarm = alarm_connected;
                 if (!had_alarm) {
                     alarm_connected = alarm_available() && uni_hal_core_zynq7000_irq_connect(
-                        XPS_GLOBAL_TMR_INT_ID, check_shift_registers, NULL, UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT, true);
+                        XPS_GLOBAL_TMR_INT_ID, check_shift_registers, NULL, default_prio, true);
                 }
                 // Publish the caller's pointer to the UART vector only when everything else is ready.
                 result = alarm_connected && uni_hal_core_zynq7000_irq_connect(

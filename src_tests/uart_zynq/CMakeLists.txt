@@ -8,3 +8,6 @@ endfunction()
 
 add_uart_zynq_test(uart_zynq_completion completion.c)
 add_uart_zynq_test(uart_zynq_tunnel tunnel_io.c test_tunnel.c)
+add_uart_zynq_test(uart_zynq_priorities priorities.c)
+add_uart_zynq_test(uart_zynq_priorities_custom priorities.c)
+target_compile_definitions(uart_zynq_priorities_custom PRIVATE configMAX_API_CALL_INTERRUPT_PRIORITY=22U)

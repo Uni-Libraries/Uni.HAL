@@ -95,9 +95,12 @@ Keep the hook allocation-free. Applications can also disable the hook by setting
 the default. In either returning configuration, a failed dynamic `uni_hal_io_init()`
 releases a partially created buffer pair and can be retried once memory is available.
 
-**Interrupt priorities.** A handler that uses a FreeRTOS `...FromISR()` function must not have
-a priority above `configMAX_SYSCALL_INTERRUPT_PRIORITY`, which is 4 here. Where a driver takes
-the priority from its context (`isr_priority`, `irq_priority`), set it to 4 or a larger number.
+**Interrupt priorities.** On STM32, pass an unshifted NVIC priority to `isr_priority` or
+`irq_priority`. The default FreeRTOS configuration permits levels 4 through 15 for
+handlers calling `...FromISR()`. On Zynq the GIC uses a different scale. The PS UART
+accepts levels `configMAX_API_CALL_INTERRUPT_PRIORITY` through `portLOWEST_USABLE_INTERRUPT_PRIORITY`
+(18 through 30 by default). Zero selects the default UART priority of 20, raised to the
+configured FreeRTOS threshold if necessary. The shared TX alarm uses the same default.
 
 **Timeouts.** Blocking functions return `false` when their timeout runs out instead of waiting
 for ever. Take that as a failed transfer: the peripheral may need
