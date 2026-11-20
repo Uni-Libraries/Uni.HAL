@@ -280,6 +280,7 @@ static bool _uni_hal_stm_rcc_lsi() {
 // Convert the board's HSE-based PLL configuration to legal factors for the selected source.
 static bool _uni_hal_rcc_pll_factors(uni_hal_rcc_stm32l4_config_pll_t *pll, uint32_t source) {
     if (pll->m < 1 || pll->m > 8 || pll->n < 8 || pll->n > 86 ||
+        pll->p == 1 || pll->p > 31 || pll->q > 8 || pll->q % 2 != 0 ||
         pll->r < 2 || pll->r > 8 || pll->r % 2 != 0) {
         return false;
     }
@@ -288,10 +289,12 @@ static bool _uni_hal_rcc_pll_factors(uni_hal_rcc_stm32l4_config_pll_t *pll, uint
     uint64_t vco = (uint64_t)HSE_VALUE * pll->n;  // VCO frequency times M
     bool range1 = LL_PWR_GetRegulVoltageScaling() == LL_PWR_REGU_VOLTAGE_SCALE1;
     uint32_t max_vco = range1 ? 344'000'000U : 128'000'000U;
-    uint32_t max_sys = range1 ? 80'000'000U : 26'000'000U;
+    uint32_t max_output = range1 ? 80'000'000U : 26'000'000U;
     if (HSE_VALUE < 4'000'000U * pll->m || HSE_VALUE > 16'000'000U * pll->m ||
         vco < 64'000'000U * pll->m || vco > (uint64_t)max_vco * pll->m ||
-        vco > (uint64_t)max_sys * pll->m * pll->r) {
+        (pll->p && vco > (uint64_t)max_output * pll->m * pll->p) ||
+        (pll->q && vco > (uint64_t)max_output * pll->m * pll->q) ||
+        vco > (uint64_t)max_output * pll->m * pll->r) {
         return false;
     }
     if (source == LL_RCC_PLLSOURCE_HSE) {
@@ -319,6 +322,12 @@ static bool _uni_hal_rcc_pll_factors(uni_hal_rcc_stm32l4_config_pll_t *pll, uint
     return false;
 }
 
+// PLLPDIV=0 selects the fixed divider in PLLP. A bootloader may use either encoding.
+static uint32_t _uni_hal_rcc_pll_p_divisor(void) {
+    uint32_t divisor = LL_RCC_PLL_GetP() >> RCC_PLLCFGR_PLLPDIV_Pos;
+    return divisor ? divisor : ((RCC->PLLCFGR & RCC_PLLCFGR_PLLP) ? 17U : 7U);
+}
+
 static bool _uni_hal_stm_rcc_pll(bool recovery) {
     g_uni_hal_rcc_status.pll_inited = false;
     uint32_t source = g_uni_hal_rcc_status.hse_inited ? LL_RCC_PLLSOURCE_HSE : LL_RCC_PLLSOURCE_HSI;
@@ -328,12 +337,15 @@ static bool _uni_hal_stm_rcc_pll(bool recovery) {
         return false;
     }
     uint32_t divider = (pll.m - 1U) << RCC_PLLCFGR_PLLM_Pos;
+    uint32_t q_bits = pll.q ? (pll.q / 2U - 1U) << RCC_PLLCFGR_PLLQ_Pos : 0U;
     uint32_t output = (pll.r / 2U - 1U) << RCC_PLLCFGR_PLLR_Pos;
     uint32_t timeout = g_uni_hal_rcc_config->timeout.pll;
     if (LL_RCC_GetSysClkSource() == LL_RCC_SYS_CLKSOURCE_STATUS_PLL) {
         // A running system PLL cannot be disabled or rewritten.
         g_uni_hal_rcc_status.pll_inited = LL_RCC_PLL_IsReady() && LL_RCC_PLL_GetMainSource() == source &&
-            LL_RCC_PLL_GetDivider() == divider && LL_RCC_PLL_GetN() == pll.n && LL_RCC_PLL_GetR() == output;
+            LL_RCC_PLL_GetDivider() == divider && LL_RCC_PLL_GetN() == pll.n && LL_RCC_PLL_GetR() == output &&
+            (!pll.p || (LL_RCC_PLL_IsEnabledDomain_SAI() && _uni_hal_rcc_pll_p_divisor() == pll.p)) &&
+            (!pll.q || (LL_RCC_PLL_IsEnabledDomain_48M() && LL_RCC_PLL_GetQ() == q_bits));
         return g_uni_hal_rcc_status.pll_inited;
     }
     LL_RCC_PLL_Disable();
@@ -346,6 +358,9 @@ static bool _uni_hal_stm_rcc_pll(bool recovery) {
         return false;
     }
     LL_RCC_PLL_ConfigDomain_SYS(source, divider, pll.n, output);
+    MODIFY_REG(RCC->PLLCFGR, RCC_PLLCFGR_PLLPDIV | RCC_PLLCFGR_PLLPEN | RCC_PLLCFGR_PLLQ | RCC_PLLCFGR_PLLQEN,
+        (pll.p << RCC_PLLCFGR_PLLPDIV_Pos) | (pll.p ? RCC_PLLCFGR_PLLPEN : 0U) |
+        q_bits | (pll.q ? RCC_PLLCFGR_PLLQEN : 0U));
     LL_RCC_PLL_EnableDomain_SYS();
     LL_RCC_PLL_Enable();
     g_uni_hal_rcc_status.pll_inited = _uni_hal_rcc_wait(LL_RCC_PLL_IsReady, 1U, timeout, recovery);

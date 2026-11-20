@@ -14,17 +14,22 @@ void rcc_test_hsi_not_ready(void);
 void rcc_test_voltage_range2(void);
 uint32_t rcc_test_m(void);
 uint32_t rcc_test_n(void);
+uint32_t rcc_test_p(void);
+uint32_t rcc_test_q(void);
+void rcc_test_use_fixed_p(bool div17);
 bool rcc_test_css_acknowledged(void);
 bool rcc_test_requested_pll(void);
 }
 
-static void configure(uint32_t m = 3, uint32_t n = 40) {
+static void configure(uint32_t m = 3, uint32_t n = 40, uint32_t p = 0, uint32_t q = 0, uint32_t r = 2) {
     uni_hal_rcc_stm32l4_config_t config{};
     config.hse_enable = true;
     config.hse_css = true;
     config.pll[0].m = m;
     config.pll[0].n = n;
-    config.pll[0].r = 2;
+    config.pll[0].p = p;
+    config.pll[0].q = q;
+    config.pll[0].r = r;
     config.timeout.hsi = 2;
     config.timeout.pll = 2;
     REQUIRE(uni_hal_rcc_stm32l4_config_set(&config));
@@ -205,5 +210,49 @@ TEST_CASE("L496 clock initialization reports failures and handles an interrupted
         REQUIRE(status.sys_inited);
         REQUIRE(rcc_test_m() == 4);
         REQUIRE(SystemCoreClock == 80'000'000);
+    }
+}
+
+TEST_CASE("L496 programs and validates the requested main PLL outputs") {
+    rcc_test_reset();
+    SECTION("P and Q keep their dividers after CSS switches to HSI") {
+        configure(2, 24, 3, 6);
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE(rcc_test_p() == 3);
+        REQUIRE(rcc_test_q() == 6);
+        rcc_test_fail_hse();
+        REQUIRE(uni_hal_rcc_stm32l4_status_get().pll_inited);
+        REQUIRE(SystemCoreClock == 72'000'000);
+        REQUIRE(rcc_test_p() == 3);
+        REQUIRE(rcc_test_q() == 6);
+    }
+    SECTION("zero leaves optional outputs disabled on startup") {
+        configure();
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE(rcc_test_p() == 0);
+        REQUIRE(rcc_test_q() == 0);
+    }
+    SECTION("a running PLL is adopted only if its requested outputs match") {
+        configure(2, 24, 17, 4);
+        REQUIRE(uni_hal_rcc_init());
+        rcc_test_use_fixed_p(true); // PLLPDIV=0 selects the fixed 7/17 encoding.
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE(uni_hal_rcc_stm32l4_status_get().pll_inited);
+        configure(2, 24, 17, 8);
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE_FALSE(uni_hal_rcc_stm32l4_status_get().pll_inited);
+        REQUIRE(rcc_test_p() == 17);
+        REQUIRE(rcc_test_q() == 4);
+    }
+    SECTION("invalid P and Q requests leave SYSCLK on the oscillator") {
+        struct { uint32_t p, q; } requests[] = {{1, 0}, {32, 0}, {0, 3}, {0, 10}, {2, 0}, {0, 2}};
+        for (auto request : requests) {
+            CAPTURE(request.p, request.q);
+            rcc_test_reset();
+            configure(2, 32, request.p, request.q, 4); // 192 MHz VCO, 48 MHz SYSCLK
+            REQUIRE(uni_hal_rcc_init());
+            REQUIRE_FALSE(uni_hal_rcc_stm32l4_status_get().pll_inited);
+            REQUIRE(SystemCoreClock == 12'000'000);
+        }
     }
 }

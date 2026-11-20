@@ -131,6 +131,23 @@ uint32_t rcc_test_n(void) {
     return LL_RCC_PLL_GetN();
 }
 
+uint32_t rcc_test_p(void) {
+    if ((rcc.PLLCFGR & RCC_PLLCFGR_PLLPEN) == 0) {
+        return 0;
+    }
+    uint32_t divider = (rcc.PLLCFGR & RCC_PLLCFGR_PLLPDIV) >> RCC_PLLCFGR_PLLPDIV_Pos;
+    return divider ? divider : (rcc.PLLCFGR & RCC_PLLCFGR_PLLP ? 17U : 7U);
+}
+
+uint32_t rcc_test_q(void) {
+    return (rcc.PLLCFGR & RCC_PLLCFGR_PLLQEN) ?
+        2U * (1U + ((rcc.PLLCFGR & RCC_PLLCFGR_PLLQ) >> RCC_PLLCFGR_PLLQ_Pos)) : 0U;
+}
+
+void rcc_test_use_fixed_p(bool div17) {
+    MODIFY_REG(rcc.PLLCFGR, RCC_PLLCFGR_PLLPDIV | RCC_PLLCFGR_PLLP, div17 ? RCC_PLLCFGR_PLLP : 0U);
+}
+
 bool rcc_test_css_acknowledged(void) {
     return (rcc.CICR & RCC_CICR_CSSC) != 0;
 }

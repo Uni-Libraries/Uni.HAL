@@ -27,12 +27,12 @@ typedef struct {
     uint32_t n;
 
     /**
-     * PLL post-divider (output P)
+     * PLL output P divider (2 to 31). Zero leaves P unrequested.
      */
     uint32_t p;
 
     /**
-     * PLL post-divider (output Q)
+     * PLL output Q divider (2, 4, 6 or 8). Zero leaves Q unrequested.
      */
     uint32_t q;
 
