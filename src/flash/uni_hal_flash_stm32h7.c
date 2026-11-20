@@ -96,7 +96,7 @@ static bool lock_options(void) {
     return !relock_options;
 }
 
-static void invalidate_erased_flash(uintptr_t address, uint32_t size) {
+static void invalidate_flash_caches(uintptr_t address, uint32_t size) {
     if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) {
         SCB_InvalidateDCache_by_Addr((void *)address, size);
     }
@@ -109,7 +109,7 @@ static bool finish_erase(void) {
     volatile uint32_t *cr = sector_erase.bank == UNI_HAL_FLASH_BANK_1 ? &FLASH->CR1 : &FLASH->CR2;
     CLEAR_BIT(*cr, FLASH_CR_SER | FLASH_CR_SNB);
     bool const locked = lock_flash();
-    invalidate_erased_flash(sector_erase.address, FLASH_SECTOR_SIZE);
+    invalidate_flash_caches(sector_erase.address, FLASH_SECTOR_SIZE);
     return locked;
 }
 
@@ -471,6 +471,7 @@ size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *src)
 {
     uint32_t flash_word[FLASH_NB_32BITWORD_IN_FLASHWORD];
     size_t bytes_written = 0;
+    size_t bytes_attempted = 0;
 
     if (src == nullptr || size == 0 || size % sizeof(flash_word) != 0 || addr < FLASH_BASE || addr >= FLASH_END) {
         return 0;
@@ -487,14 +488,19 @@ size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *src)
             for (size_t i = 0; i < sizeof(flash_word); ++i) {
                 ((uint8_t *)flash_word)[i] = source[i];
             }
+            bytes_attempted = bytes_written + sizeof(flash_word);
             if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_FLASHWORD, addr + bytes_written, (uint32_t)flash_word) != HAL_OK) {
                 break;
             }
-            bytes_written += sizeof(flash_word);
+            bytes_written = bytes_attempted;
         }
     }
     // Unlock can leave the first bank open when the second bank rejects its key.
     (void)lock_flash();
+    if (bytes_attempted != 0U) {
+        // HAL can return an error after issuing the stores for the last Flash word.
+        invalidate_flash_caches(addr, bytes_attempted);
+    }
     flash_owned = false;
     return bytes_written;
 }
@@ -635,7 +641,7 @@ bool uni_hal_flash_erase(size_t addr, size_t size)
     status = HAL_FLASHEx_Erase(&eraseInitStruct, &sectorError);
     bool const locked = lock_flash();
     // A failed multi-sector erase may already have modified part of the range.
-    invalidate_erased_flash(bank_base + start_sector * FLASH_SECTOR_SIZE, nb_sector * FLASH_SECTOR_SIZE);
+    invalidate_flash_caches(bank_base + start_sector * FLASH_SECTOR_SIZE, nb_sector * FLASH_SECTOR_SIZE);
     flash_owned = false;
     return locked && status == HAL_OK && sectorError == UINT32_MAX;
 }
