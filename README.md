@@ -77,6 +77,14 @@ With `configSUPPORT_STATIC_ALLOCATION=0`, the RX and TX stream buffers created b
 byte. Stop tasks and interrupt handlers that use the context before calling
 `uni_hal_io_deinit()` to release both buffers.
 
+The default FreeRTOS malloc-failure hook traps when `heap_4` cannot satisfy a request.
+To handle exhaustion in the application, define `void vApplicationMallocFailedHook(void)`
+in an application source file. A returning hook lets `pvPortMalloc` return `NULL`.
+Keep the hook allocation-free. Applications can also disable the hook by setting
+`configUSE_MALLOC_FAILED_HOOK` to 0 in `UNI_HAL_RTOS_CONFIG_EXTRA` after undefining
+the default. In either returning configuration, a failed dynamic `uni_hal_io_init()`
+releases a partially created buffer pair and can be retried once memory is available.
+
 **Interrupt priorities.** A handler that uses a FreeRTOS `...FromISR()` function must not have
 a priority above `configMAX_SYSCALL_INTERRUPT_PRIORITY`, which is 4 here. Where a driver takes
 the priority from its context (`isr_priority`, `irq_priority`), set it to 4 or a larger number.

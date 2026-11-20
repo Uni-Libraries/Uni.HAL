@@ -42,6 +42,20 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         -kernel $<TARGET_FILE:allocator_qemu>)
     set_tests_properties(allocator_cortex_m4 PROPERTIES TIMEOUT 15)
 
+    foreach(policy IN ITEMS default application)
+        set(target oom_${policy}_qemu)
+        uni_hal_add_executable(${target})
+        target_sources(${target} PRIVATE oom.c)
+        if(policy STREQUAL "application")
+            target_compile_definitions(${target} PRIVATE TEST_APPLICATION_OOM_HOOK)
+        endif()
+        target_link_options(${target} PRIVATE "LINKER:--defsym,_estack=0x20020000")
+        add_test(NAME oom_${policy} COMMAND "${QEMU_SYSTEM_ARM}" -M netduinoplus2
+            -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+            -kernel $<TARGET_FILE:${target}>)
+        set_tests_properties(oom_${policy} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     uni_hal_add_executable(i2c_polling_qemu)
     target_sources(i2c_polling_qemu PRIVATE ../i2c_timeout/vendor_qemu.c)
     target_link_options(i2c_polling_qemu PRIVATE

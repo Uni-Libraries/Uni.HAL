@@ -46,16 +46,14 @@ target_sources(freertos_kernel PRIVATE
     "src/timers.c"
 
 
+    # A firmware can supply its own malloc-failure hook in an application object.
+    "src_hooks/freertos_alloc.c"
     "src_hooks/freertos_assert.c"
     "src_hooks/freertos_idle.c"
     "src_hooks/freertos_printf.c"
     "src_hooks/freertos_stack.c"
 
     "src_memmng/heap_4.c"
-)
-
-target_sources(freertos_kernel INTERFACE
-    "src_hooks/freertos_alloc.c"
 )
 
 if(NOT UNI_HAL_TARGET_MCU STREQUAL "PC")
