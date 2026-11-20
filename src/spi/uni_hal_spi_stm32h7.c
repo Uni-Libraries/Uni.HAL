@@ -864,21 +864,29 @@ static bool blocking_transfer(uni_hal_spi_context_t *ctx, const uint8_t *tx_data
     }
 
 
-    // every byte sent clocks one byte in: keep reading until the last one has arrived,
-    // it shows up only after the last byte has been written to the TX FIFO
     size_t idx_tx = 0U;
     size_t idx_rx = 0U;
     bool const is_master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
-    bool stalled = false;
+    bool complete = false;
     uint32_t activity_ms = uni_hal_systick_get_ms();
-    while (!stalled && (idx_tx < len || idx_rx < len)) {
+    for (;;) {
+        uint32_t const status = instance->SR;
+        if (status & (SPI_SR_OVR | SPI_SR_UDR | SPI_SR_CRCE | SPI_SR_TIFRE | SPI_SR_MODF)) {
+            break;
+        }
+        // EOT may be set while the final received bytes are still in the FIFO.
+        if (idx_tx == len && idx_rx == len && (status & SPI_SR_EOT)) {
+            complete = true;
+            break;
+        }
+
         bool progress = false;
-        if (idx_tx < len && LL_SPI_IsActiveFlag_TXP(instance) != 0U) {
+        if (idx_tx < len && (status & SPI_SR_TXP)) {
             LL_SPI_TransmitData8(instance, (tx_data != NULL) ? tx_data[idx_tx] : (uint8_t) 0U);
             idx_tx++;
             progress = true;
         }
-        if (idx_rx < len && (LL_SPI_IsActiveFlag_RXP(instance) != 0U)) {
+        if (idx_rx < len && (status & SPI_SR_RXP)) {
             data_rx = LL_SPI_ReceiveData8(instance);
             if (rx_data != NULL) {
                 rx_data[idx_rx] = data_rx;
@@ -889,15 +897,8 @@ static bool blocking_transfer(uni_hal_spi_context_t *ctx, const uint8_t *tx_data
 
         if (progress) {
             activity_ms = uni_hal_systick_get_ms();
-        }
-        else if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
-            stalled = true;
-        }
-    }
-
-    while (!stalled && LL_SPI_IsActiveFlag_EOT(instance) == 0U) {
-        if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
-            stalled = true;
+        } else if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+            break;
         }
     }
     LL_SPI_Disable(instance);
@@ -907,7 +908,7 @@ static bool blocking_transfer(uni_hal_spi_context_t *ctx, const uint8_t *tx_data
         uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
     }
     ctx->status.in_process = false;
-    return !stalled;
+    return complete;
 }
 
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len) {

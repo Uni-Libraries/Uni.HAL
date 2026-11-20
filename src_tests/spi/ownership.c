@@ -93,8 +93,19 @@ bool model_clock(uni_hal_core_periph_e instance, bool enable) {
     }
     return enable && !(instance == UNI_HAL_CORE_PERIPH_ADC_1 && fail_adc_clock);
 }
+// The CPU can enqueue and drain a byte before its final CRC or error status arrives.
+static uint32_t frame_status[] = {SPI_SR_TXP, SPI_SR_RXP, 0U};
+static size_t frame_step = 3U;
+static void frame_ending_with(uint32_t status) {
+    frame_status[2] = status;
+    frame_step = 0U;
+}
+
 uint32_t model_tick(void) {
     static uint32_t tick;
+    if (frame_step < 3U) {
+        spi.SR = frame_status[frame_step++];
+    }
     ADC1->CR &= ~ADC_CR_ADCAL;
     if (ADC1->CR & ADC_CR_ADEN) {
         ADC1->ISR |= ADC_ISR_ADRDY;
@@ -311,12 +322,28 @@ __attribute__((noinline)) static unsigned check_spi(void) {
     CHECK(uni_hal_dma_enable(&tx_dma, false));
 
     other.config.mode = UNI_HAL_SPI_MODE_SLAVE;
+    other.config.crc_type = UNI_HAL_SPI_CRC_16BIT;
+    other.config.crc_polynomial = 0x1021U;
     CHECK(uni_hal_spi_init(&other) && !uni_hal_spi_is_inited(&ctx));
     CHECK(!uni_hal_spi_transceive_async(&ctx, nullptr, tx, 1));
     CHECK(uni_hal_spi_transceive_async(&other, nullptr, tx, 1));
     CHECK(LL_SPI_GetTransferDirection(SPI1) == LL_SPI_SIMPLEX_TX && !(spi.CR1 & SPI_CR1_CSTART));
     CHECK(LL_SPI_GetInternalSSLevel(SPI1) == LL_SPI_SS_LEVEL_LOW);
     CHECK(uni_hal_spi_abort(&other));
+
+    // A completed wire transfer with an invalid CRC is a failed blocking call.
+    frame_ending_with(SPI_SR_EOT | SPI_SR_CRCE);
+    CHECK(!uni_hal_spi_transmitreceive(&other, tx, rx, 1U));
+    CHECK(!uni_hal_spi_is_busy(&other) && !LL_SPI_IsEnabled(SPI1) && !(spi.SR & SPI_SR_CRCE));
+
+    // After a slave loses a byte, no further clock or RTOS timeout is needed to release it.
+    frame_ending_with(SPI_SR_OVR);
+    CHECK(!uni_hal_spi_transmit(&other, tx, sizeof tx));
+    CHECK(!uni_hal_spi_is_busy(&other) && nss && !LL_SPI_IsEnabled(SPI1) && !(spi.SR & SPI_SR_OVR));
+
+    frame_ending_with(SPI_SR_EOT);
+    CHECK(uni_hal_spi_transmit(&other, tx, 1U));
+    CHECK(nss && !uni_hal_spi_is_busy(&other));
     return 0;
 }
 
