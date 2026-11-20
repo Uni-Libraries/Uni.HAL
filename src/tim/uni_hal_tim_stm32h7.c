@@ -42,7 +42,7 @@ static timer_driver_t *find_timer(uni_hal_core_periph_e instance) {
 
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
     timer_driver_t *timer = find_timer(periph);
-    if (timer == nullptr || !LL_TIM_IsActiveFlag_UPDATE(timer->handle)) {
+    if (timer == nullptr || !LL_TIM_IsEnabledIT_UPDATE(timer->handle) || !LL_TIM_IsActiveFlag_UPDATE(timer->handle)) {
         return false;
     }
     LL_TIM_ClearFlag_UPDATE(timer->handle);
