@@ -1,6 +1,7 @@
 #!/usr/bin/env pwsh
 
 # Run without arguments to update all components, or pass one or more component names.
+# The next run restores any interrupted publication before downloading new archives.
 param([Parameter(Position=0, ValueFromRemainingArguments)][string[]]$Components)
 $ErrorActionPreference = 'Stop'
 $pins = Import-PowerShellDataFile "$PSScriptRoot/upstream.psd1"
@@ -16,7 +17,6 @@ function Get-Snapshot([string]$Repository) {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash -ne $pin.SHA256) {
         throw "SHA256 mismatch for $Repository at $($pin.Revision)"
     }
-    # Extract the GitHub archive directly; Expand-Archive on Unix drops hidden files.
     [IO.Compression.ZipFile]::ExtractToDirectory($zip, $downloads)
     return "$downloads/$name-$($pin.Revision)"
 }
@@ -87,6 +87,11 @@ function Copy-Component([string]$Component, [string]$Destination) {
 function Add-LocalPatches([string]$Component, [string]$Tree) {
     $patchDir = "$PSScriptRoot/patches/$Component"
     if (Test-Path -LiteralPath $patchDir) {
+        # Patch paths start with 3rdparty/. Isolate them from the containing checkout.
+        if (!(Test-Path "$Tree/.git")) {
+            git -C $Tree init --quiet
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot initialize the patch staging tree' }
+        }
         foreach ($patch in Get-ChildItem -File -LiteralPath $patchDir -Filter '*.patch' | Sort-Object Name) {
             git -C $Tree apply -- $patch.FullName
             if ($LASTEXITCODE -ne 0) { throw "Cannot apply $($patch.Name) to $Component" }
@@ -108,10 +113,53 @@ foreach ($component in $Components) {
     if (!$directories.Contains($component)) { throw "Unknown component '$component'" }
 }
 
-$downloads = "$PSScriptRoot/~temp/downloads"
-if (Test-Path -LiteralPath $downloads) { Remove-Item -LiteralPath $downloads -Recurse -Force }
-$null = New-Item -ItemType Directory -Force $downloads
-foreach ($component in $Components) {
-    Copy-Component $component "$PSScriptRoot/$($directories[$component])"
-    Add-LocalPatches $component (Split-Path $PSScriptRoot)
+# All renames stay on the same filesystem. While "active" exists, every directory in "old"
+# must be restored. Renaming "active" to "finished" commits the complete set in one step.
+function Restore-InterruptedUpdate {
+    if (!(Test-Path -LiteralPath $active)) { return }
+    if (Test-Path "$active/old") {
+        $null = [IO.Directory]::CreateDirectory("$active/discard")
+        foreach ($backup in Get-ChildItem -LiteralPath "$active/old" -Directory) {
+            $live = "$PSScriptRoot/$($backup.Name)"
+            if ([IO.Directory]::Exists($live)) {
+                [IO.Directory]::Move($live, "$active/discard/$($backup.Name)")
+            }
+            [IO.Directory]::Move($backup.FullName, $live)
+        }
+    }
+    Remove-Item -LiteralPath $active -Recurse -Force
+}
+
+$transactionRoot = "$PSScriptRoot/~temp/vendor-update"
+$active = "$transactionRoot/active"
+$finished = "$transactionRoot/finished"
+$downloads = "$active/downloads"
+$staging = "$active/new"
+$null = [IO.Directory]::CreateDirectory($transactionRoot)
+$lock = [IO.File]::Open("$transactionRoot/update.lock", 'OpenOrCreate', 'ReadWrite', 'None')
+try {
+    Restore-InterruptedUpdate
+    if (Test-Path -LiteralPath $finished) { Remove-Item -LiteralPath $finished -Recurse -Force }
+    $null = [IO.Directory]::CreateDirectory($downloads)
+    $null = [IO.Directory]::CreateDirectory("$active/old")
+    $null = [IO.Directory]::CreateDirectory("$staging/3rdparty")
+
+    foreach ($component in $Components) {
+        $name = $directories[$component]
+        $destination = "$staging/3rdparty/$name"
+        # Preserve component-local build recipes, hooks, linker scripts and other project files.
+        Copy-Item -LiteralPath "$PSScriptRoot/$name" -Destination $destination -Recurse -Force
+        Copy-Component $component $destination
+        Add-LocalPatches $component $staging
+    }
+
+    foreach ($component in $Components) {
+        $name = $directories[$component]
+        [IO.Directory]::Move("$PSScriptRoot/$name", "$active/old/$name")
+        [IO.Directory]::Move("$staging/3rdparty/$name", "$PSScriptRoot/$name")
+    }
+    [IO.Directory]::Move($active, $finished)
+    Remove-Item -LiteralPath $finished -Recurse -Force
+} finally {
+    try { Restore-InterruptedUpdate } finally { $lock.Dispose() }
 }

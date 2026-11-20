@@ -11,6 +11,8 @@ find_program(UNI_HAL_PWSH pwsh)
 if(UNI_HAL_PWSH)
     add_test(NAME vendor_archive_integrity COMMAND "${UNI_HAL_PWSH}" -NoProfile -File
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/archive.ps1")
+    add_test(NAME vendor_update_transaction COMMAND "${UNI_HAL_PWSH}" -NoProfile -File
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/transaction.ps1")
 endif()
 
 function(uni_hal_add_test test_path)
