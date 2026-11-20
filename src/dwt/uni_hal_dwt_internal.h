@@ -53,20 +53,3 @@ static inline uint32_t uni_hal_dwt_internal_timeout_ms_to_tick(uint32_t timeout_
 
     return uni_hal_dwt_internal_clamp_u64_to_u32(timeout_ticks);
 }
-
-static inline uint32_t uni_hal_dwt_internal_delay_us_to_tick_ceil(uint32_t us, uint32_t clock_hz)
-{
-    if (clock_hz == 0U) {
-        return 0U;
-    }
-
-    const uint64_t numerator = ((uint64_t)us * (uint64_t)clock_hz) + ((uint64_t)UNI_HAL_DWT_UNITS_PER_SECOND_US - 1ULL);
-    const uint64_t ticks = numerator / (uint64_t)UNI_HAL_DWT_UNITS_PER_SECOND_US;
-    return uni_hal_dwt_internal_clamp_u64_to_u32(ticks);
-}
-
-static inline uint32_t uni_hal_dwt_internal_ms_to_us_clamped(uint32_t ms)
-{
-    const uint64_t us = (uint64_t)ms * (uint64_t)UNI_HAL_DWT_UNITS_PER_MILLISECOND;
-    return uni_hal_dwt_internal_clamp_u64_to_u32(us);
-}

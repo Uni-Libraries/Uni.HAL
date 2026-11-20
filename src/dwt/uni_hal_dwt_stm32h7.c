@@ -5,7 +5,6 @@
 #include <stm32h7xx.h>
 
 // uni_hal
-#include "uni_common.h"
 #include "dwt/uni_hal_dwt.h"
 #include "dwt/uni_hal_dwt_internal.h"
 
@@ -63,25 +62,4 @@ uint32_t uni_hal_dwt_timeout_ms_to_tick(uint32_t timeout_ms) {
     }
 
     return uni_hal_dwt_internal_timeout_ms_to_tick(timeout_ms, freq_hz);
-}
-//
-// Delay
-//
-
-UNI_COMMON_COMPILER_OPTIMIZATION("O0")
-void uni_hal_dwt_delay_us(uint32_t us)
-{
-    const uint32_t start_tick = uni_hal_dwt_get_tick();
-
-    const uint32_t core_clock_hz = SystemCoreClock;
-    if (core_clock_hz == 0U) {
-        return;
-    }
-
-    // Convert requested microseconds to CPU cycles with clamping.
-    // Round up so we never delay *less* than requested due to integer truncation.
-    const uint32_t delay_ticks = uni_hal_dwt_internal_delay_us_to_tick_ceil(us, core_clock_hz);
-
-    while (uni_hal_dwt_compare(start_tick, uni_hal_dwt_get_tick()) < delay_ticks) {
-    }
 }

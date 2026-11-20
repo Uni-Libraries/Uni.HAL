@@ -31,6 +31,10 @@ uint32_t uni_hal_dwt_compare(uint32_t timestamp_1, uint32_t timestamp_2)
 
 void uni_hal_dwt_delay_ms(uint32_t ms)
 {
-    const uint32_t us = uni_hal_dwt_internal_ms_to_us_clamped(ms);
-    uni_hal_dwt_delay_us(us);
+    const uint32_t max_ms = UINT32_MAX / UNI_HAL_DWT_UNITS_PER_MILLISECOND;
+    while (ms > max_ms) {
+        uni_hal_dwt_delay_us(max_ms * UNI_HAL_DWT_UNITS_PER_MILLISECOND);
+        ms -= max_ms;
+    }
+    uni_hal_dwt_delay_us(ms * UNI_HAL_DWT_UNITS_PER_MILLISECOND);
 }
