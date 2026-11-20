@@ -33,10 +33,7 @@ bool _uni_hal_segger_rtt_stdio_timer(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_ti
         uni_hal_io_context_t *ctx_io = ctx_fn->io;
         if (ctx_io != NULL) {
             // RX
-            while (SEGGER_RTT_HasData(ctx_fn->buffer_index_down)) {
-                // receive data
-                SEGGER_RTT_Read(ctx_fn->buffer_index_down, &data, sizeof(data));
-
+            while (SEGGER_RTT_Read(ctx_fn->buffer_index_down, &data, sizeof(data))) {
                 // try to tunnel data
                 uni_hal_io_tunnel_transmit_result_t tunnel_result =
                         uni_hal_io_tunnel_transmit(ctx_io->handlers.tunnel_ctx, ctx_io, &data, sizeof(data));
