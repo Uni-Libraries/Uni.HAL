@@ -8,22 +8,27 @@
 #include <stm32l4xx.h>
 
 static RCC_TypeDef rcc;
+static RNG_TypeDef rng;
 static PWR_TypeDef pwr;
 static FLASH_TypeDef flash;
 rcc_test_systick_t rcc_test_systick;
 #undef RCC
+#undef RNG
 #undef PWR
 #undef FLASH
 #define RCC (&rcc)
+#define RNG (&rng)
 #define PWR (&pwr)
 #define FLASH (&flash)
 
 #include <stm32l4xx_ll_pwr.h>
 #include <stm32l4xx_ll_rcc.h>
+#include <stm32l4xx_ll_rng.h>
 #include <stm32l4xx_ll_system.h>
 #include "../../3rdparty/st_stm32l4/src_hal/stm32l4xx_ll_rcc.c"
 
 bool rcc_test_pll_locks;
+bool rcc_test_hsi48_locks;
 bool rcc_test_can_switch;
 bool rcc_test_fault_on_switch;
 void rcc_test_fail_hse(void);
@@ -59,6 +64,14 @@ static void write_flash_latency(uint32_t latency) {
     }
 }
 
+static void start_hsi48(void) {
+    LL_RCC_HSI48_Enable();
+    if (rcc_test_hsi48_locks) {
+        rcc.CRRCR |= RCC_CRRCR_HSI48RDY;
+    }
+}
+
+#define LL_RCC_HSI48_Enable start_hsi48
 #define LL_RCC_PLL_IsReady pll_ready
 #define LL_RCC_SetSysClkSource switch_clock
 #define LL_FLASH_SetLatency write_flash_latency
@@ -66,6 +79,35 @@ static void write_flash_latency(uint32_t latency) {
 #define LL_RCC_SetI2CClockSource(source) ((void)(source))
 #include "systick/uni_hal_systick_reclock_stm32.c"
 #include "rcc/uni_hal_rcc_stm32l4.c"
+
+static uint32_t rng_word_ready(RNG_TypeDef *instance) {
+    uint32_t frequency = LL_RCC_GetRNGClockFreq(LL_RCC_RNG_CLKSOURCE);
+    return LL_RNG_IsEnabled(instance) && uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_RNG) &&
+        frequency != 0U && frequency >= SystemCoreClock / 16U;
+}
+
+static uint32_t rng_test_ms(void) {
+    static uint32_t tick;
+    return tick++;
+}
+
+#define LL_RNG_IsActiveFlag_DRDY rng_word_ready
+#define uni_hal_systick_get_ms rng_test_ms
+#include "rng/uni_hal_rng_stm32l4.c"
+#undef uni_hal_systick_get_ms
+
+bool rcc_test_hsi48_enabled(void) {
+    return (rcc.CRRCR & RCC_CRRCR_HSI48ON) != 0U;
+}
+
+void rcc_test_select_msi24(void) {
+    LL_RCC_MSI_SetRange(LL_RCC_MSIRANGE_9);
+    LL_RCC_SetRNGClockSource(LL_RCC_RNG_CLKSOURCE_MSI);
+}
+
+bool rcc_test_msi_selected(void) {
+    return LL_RCC_GetRNGClockSource(LL_RCC_RNG_CLKSOURCE) == LL_RCC_RNG_CLKSOURCE_MSI;
+}
 
 bool uni_hal_systick_init(void) {
     ++rcc_test_tick_inits;
@@ -97,6 +139,8 @@ void uni_hal_pwr_stm_set_backup_access(bool enable) {
 
 void rcc_test_reset(void) {
     rcc = (RCC_TypeDef){0};
+    rng = (RNG_TypeDef){.DR = 0x6429DC01U};
+    rcc_test_hsi48_locks = true;
     pwr.CR1 = LL_PWR_REGU_VOLTAGE_SCALE1;
     flash.ACR = 0;
     SysTick->CTRL = 0;

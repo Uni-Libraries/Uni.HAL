@@ -3,8 +3,13 @@
 #include "core_cm4.h"
 #include "rcc/uni_hal_rcc.h"
 #include "rcc/uni_hal_rcc_stm32l4.h"
+#include "rng/uni_hal_rng.h"
 
 extern "C" {
+extern bool rcc_test_hsi48_locks;
+bool rcc_test_hsi48_enabled(void);
+void rcc_test_select_msi24(void);
+bool rcc_test_msi_selected(void);
 extern bool rcc_test_pll_locks, rcc_test_can_switch, rcc_test_fault_on_switch;
 extern bool rcc_test_flash_accepts, rcc_test_flash_can_lower;
 extern uint32_t rcc_test_tick_reads, rcc_test_tick_inits, SystemCoreClock;
@@ -255,4 +260,75 @@ TEST_CASE("L496 programs and validates the requested main PLL outputs") {
             REQUIRE(SystemCoreClock == 12'000'000);
         }
     }
+}
+
+TEST_CASE("L496 RCC supplies a working shared kernel clock to the default RNG") {
+    rcc_test_reset();
+    uni_hal_rng_context_t rng{};
+    rng.instance = UNI_HAL_CORE_PERIPH_RNG;
+
+    SECTION("running system PLL without Q") {
+        configure();
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE_FALSE(rcc_test_hsi48_enabled());
+        REQUIRE(uni_hal_rng_init(&rng));
+        REQUIRE(rcc_test_hsi48_enabled());
+    }
+    SECTION("SYSCLK runs directly from HSE") {
+        configure(0, 0);
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE_FALSE(rcc_test_hsi48_enabled());
+        REQUIRE(uni_hal_rng_init(&rng));
+        REQUIRE(rcc_test_hsi48_enabled());
+    }
+    SECTION("an enabled 24 MHz Q output is unsuitable for CLK48") {
+        configure(2, 24, 0, 6);
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE(uni_hal_rng_init(&rng));
+        REQUIRE(rcc_test_hsi48_enabled());
+    }
+    SECTION("48 MHz PLLQ stays selected across successful CSS recovery") {
+        configure(2, 32, 0, 4, 4);
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE(uni_hal_rng_init(&rng));
+        rcc_test_fail_hse();
+        REQUIRE_FALSE(rcc_test_hsi48_enabled());
+    }
+    SECTION("an explicit HSI48 request starts it even when PLLQ is available") {
+        configure(2, 32, 0, 4, 4);
+        REQUIRE(uni_hal_rcc_init());
+        rng.clock_source = UNI_HAL_RCC_CLKSRC_HSI48;
+        REQUIRE(uni_hal_rng_init(&rng));
+        REQUIRE(rcc_test_hsi48_enabled());
+    }
+    SECTION("an active generator survives failure to relock PLLQ during CSS recovery") {
+        configure(2, 32, 0, 4, 4);
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE(uni_hal_rng_init(&rng));
+        REQUIRE_FALSE(rcc_test_hsi48_enabled());
+        rcc_test_pll_locks = false;
+        auto reads = rcc_test_tick_reads;
+        rcc_test_fail_hse();
+        REQUIRE(rcc_test_tick_reads == reads);
+        REQUIRE(rcc_test_hsi48_enabled());
+    }
+    SECTION("RCC and RNG retain the board's running 24 MHz MSI selection") {
+        configure(2, 32, 0, 4, 4);
+        rcc_test_select_msi24();
+        REQUIRE(uni_hal_rcc_init());
+        REQUIRE(uni_hal_rng_init(&rng));
+        REQUIRE(rcc_test_msi_selected());
+        REQUIRE_FALSE(rcc_test_hsi48_enabled());
+    }
+    SECTION("a failed attempt to start HSI48 clears initialization state") {
+        configure();
+        REQUIRE(uni_hal_rcc_init());
+        rng.inited = true;
+        rcc_test_hsi48_locks = false;
+        REQUIRE_FALSE(uni_hal_rng_init(&rng));
+        REQUIRE_FALSE(uni_hal_rng_is_inited(&rng));
+        return;
+    }
+    REQUIRE(uni_hal_rng_is_inited(&rng));
+    REQUIRE(uni_hal_rng_get_32u(&rng) == 0x6429DC01U);
 }

@@ -113,7 +113,10 @@ bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
             result = true;
             switch (ctx->clock_source) {
             case UNI_HAL_RCC_CLKSRC_UNKNOWN:
-                // keep what the RCC driver selected
+                // Retain the shared CLK48 mux, starting its reset source on demand.
+                if (LL_RCC_GetRNGClockSource(LL_RCC_RNG_CLKSOURCE) == LL_RCC_RNG_CLKSOURCE_HSI48) {
+                    result = _uni_hal_rng_hsi48_start();
+                }
                 break;
             case UNI_HAL_RCC_CLKSRC_HSI48:
                 result = _uni_hal_rng_hsi48_start();
@@ -133,9 +136,9 @@ bool uni_hal_rng_init(uni_hal_rng_context_t *ctx) {
                 // without a running kernel clock the generator never delivers
                 uint32_t probe = 0U;
                 result = _uni_hal_rng_read_32u(instance, &probe);
-                ctx->inited = result;
             }
         }
+        ctx->inited = result;
     }
 
     return result;

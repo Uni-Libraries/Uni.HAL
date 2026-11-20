@@ -33,9 +33,9 @@ typedef struct {
 
     /**
      * Kernel clock of the generator.
-     * UNI_HAL_RCC_CLKSRC_UNKNOWN (0) keeps the former behaviour: PLL1Q on the STM32H7, the source
-     * selected by the RCC driver on the STM32L4. UNI_HAL_RCC_CLKSRC_HSI48 also starts the HSI48
-     * oscillator, so the generator does not depend on the PLL configuration.
+     * UNI_HAL_RCC_CLKSRC_UNKNOWN (0) uses PLL1Q on STM32H7. On STM32L4 it retains the shared
+     * CLK48 source and starts HSI48 if selected. UNI_HAL_RCC_CLKSRC_HSI48 explicitly starts
+     * and selects the HSI48 oscillator.
      */
     uni_hal_rcc_clksrc_e clock_source;
 

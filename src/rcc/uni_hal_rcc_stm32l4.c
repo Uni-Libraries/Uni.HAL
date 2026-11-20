@@ -413,17 +413,62 @@ static bool _uni_hal_stm_rcc_sysclk(bool recovery) {
     return g_uni_hal_rcc_status.sys_inited;
 }
 
+static bool _uni_hal_rcc_pllq_is_48mhz(void) {
+    if (!LL_RCC_PLL_IsReady() || !LL_RCC_PLL_IsEnabledDomain_48M()) {
+        return false;
+    }
+    uint32_t input;
+    switch (LL_RCC_PLL_GetMainSource()) {
+    case LL_RCC_PLLSOURCE_HSE:
+        input = HSE_VALUE;
+        break;
+    case LL_RCC_PLLSOURCE_HSI:
+        input = HSI_VALUE;
+        break;
+    case LL_RCC_PLLSOURCE_MSI: {
+        uint32_t range_select = LL_RCC_MSI_IsEnabledRangeSelect();
+        uint32_t range = range_select ? LL_RCC_MSI_GetRange() : LL_RCC_MSI_GetRangeAfterStandby();
+        input = __LL_RCC_CALC_MSI_FREQ(range_select, range);
+        break;
+    }
+    default:
+        return false;
+    }
+    uint32_t m = 1U + (LL_RCC_PLL_GetDivider() >> RCC_PLLCFGR_PLLM_Pos);
+    uint32_t q = 2U * (1U + (LL_RCC_PLL_GetQ() >> RCC_PLLCFGR_PLLQ_Pos));
+    return (uint64_t)input * LL_RCC_PLL_GetN() == (uint64_t)HSI48_VALUE * m * q;
+}
+
+static void _uni_hal_rcc_select_clk48(void) {
+    uint32_t current = LL_RCC_GetRNGClockSource(LL_RCC_RNG_CLKSOURCE);
+    // USB and SDMMC share this mux. Preserve a running oscillator or PLLSAI1 set up by the board.
+    if (current != LL_RCC_RNG_CLKSOURCE_PLL && LL_RCC_GetRNGClockFreq(LL_RCC_RNG_CLKSOURCE) != 0U) {
+        return;
+    }
+    uint32_t source = _uni_hal_rcc_pllq_is_48mhz() ? LL_RCC_RNG_CLKSOURCE_PLL : LL_RCC_RNG_CLKSOURCE_HSI48;
+    if (source != current) {
+        if (source == LL_RCC_RNG_CLKSOURCE_HSI48) {
+            // A previously selected clock was lost. Resume its consumers without waiting in NMI.
+            LL_RCC_HSI48_Enable();
+        }
+        LL_RCC_SetRNGClockSource(source);
+    }
+}
+
 static bool _uni_hal_rcc_recover(void) {
     g_uni_hal_rcc_status.hse_inited = false;
     g_uni_hal_rcc_status.pll_inited = false;
     g_uni_hal_rcc_status.sys_inited = false;
     _uni_hal_stm_rcc_hsi(true);
-    if (!_uni_hal_stm_rcc_flash(LL_FLASH_LATENCY_4)) {
+    bool recovered = false;
+    if (_uni_hal_stm_rcc_flash(LL_FLASH_LATENCY_4)) {
+        _uni_hal_stm_rcc_pll(true);
+        recovered = _uni_hal_stm_rcc_sysclk(true);
+    } else {
         _uni_hal_rcc_update_timebase();
-        return false;
     }
-    _uni_hal_stm_rcc_pll(true);
-    return _uni_hal_stm_rcc_sysclk(true);
+    _uni_hal_rcc_select_clk48();
+    return recovered;
 }
 
 /**
@@ -438,11 +483,7 @@ static void _uni_hal_stm_rcc_peripherials() {
     LL_RCC_SetI2CClockSource(LL_RCC_I2C3_CLKSOURCE_PCLK1);
     LL_RCC_SetI2CClockSource(LL_RCC_I2C4_CLKSOURCE_PCLK1);
 
-    if (g_uni_hal_rcc_status.pll_inited) {
-        LL_RCC_SetRNGClockSource(LL_RCC_RNG_CLKSOURCE_PLL);
-    } else {
-        LL_RCC_SetRNGClockSource(LL_RCC_RNG_CLKSOURCE_HSI48);
-    }
+    _uni_hal_rcc_select_clk48();
 
     LL_RCC_SetUARTClockSource(LL_RCC_UART4_CLKSOURCE_PCLK1);
 
