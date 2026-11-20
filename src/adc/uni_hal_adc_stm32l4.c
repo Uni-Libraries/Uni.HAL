@@ -687,7 +687,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         return false;
     }
     const uni_hal_adc_config_t *config = &ctx->config;
-    if (!uni_hal_adc_stm32_config_valid(config, UNI_HAL_ADC_STM32L4_CHANNEL_VBAT, UNI_HAL_DMA_CHANNEL_1) ||
+    if (!uni_hal_adc_stm32_config_valid(config, UNI_HAL_DMA_CHANNEL_1) ||
         !_uni_hal_adc_dma_route_valid(config) || _uni_hal_adc_get_clock(config) == UINT32_MAX ||
         _uni_hal_adc_get_resolution(config->resolution_bits) == UINT32_MAX ||
         _uni_hal_adc_get_sampling(config->sampling_cycles) == UINT32_MAX) {

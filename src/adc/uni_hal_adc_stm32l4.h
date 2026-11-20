@@ -20,7 +20,8 @@ extern "C" {
 // Defines
 //
 
-// Numbers of the internal channels in the `channels` array of the configuration
+// Internal input IDs for the channels array on STM32L496.
+// VREFINT is routed to ADC1. The temperature sensor and VBAT are routed to ADC1 and ADC3.
 #define UNI_HAL_ADC_STM32L4_CHANNEL_REFINT (19U)
 #define UNI_HAL_ADC_STM32L4_CHANNEL_TEMPSENSOR (20U)
 #define UNI_HAL_ADC_STM32L4_CHANNEL_VBAT (21U)

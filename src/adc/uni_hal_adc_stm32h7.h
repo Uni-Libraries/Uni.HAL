@@ -17,6 +17,7 @@ extern "C" {
 // Defines
 //
 
+// All three internal inputs are routed to ADC3 on STM32H743.
 #define UNI_HAL_ADC_STM32H7_CHANNEL_REFINT (20U)
 #define UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR (21U)
 #define UNI_HAL_ADC_STM32H7_CHANNEL_VBAT (22U)
