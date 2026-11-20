@@ -765,14 +765,20 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
                 uint32_t id = _uni_hal_tim_get_number(ctx->config.instance);
                 if ((id > 0U) && (id <= UNI_HAL_TIM_MAXTIMERS))
                 {
+                    uint32_t mask = uni_hal_core_irq_pause();
                     if (result)
                     {
                         g_uni_hal_tim_ctx[id - 1U] = ctx;
+                        _callback_fn[id - 1U] = ctx->config.callback;
+                        _callback_userctx[id - 1U] = nullptr;
                     }
                     else if (g_uni_hal_tim_ctx[id - 1U] == ctx)
                     {
                         g_uni_hal_tim_ctx[id - 1U] = nullptr;
+                        _callback_fn[id - 1U] = nullptr;
+                        _callback_userctx[id - 1U] = nullptr;
                     }
+                    uni_hal_core_irq_resume(mask);
                 }
                 else
                 {
@@ -791,12 +797,14 @@ bool uni_hal_tim_register_callback(uni_hal_tim_context_t *ctx, uni_hal_tim_callb
     if (uni_hal_tim_is_inited(ctx)) {
         uint32_t id = _uni_hal_tim_get_number(ctx->config.instance);
         if (id > 0U) {
+            uint32_t mask = uni_hal_core_irq_pause();
             if (g_uni_hal_tim_ctx[id-1] == ctx)
             {
                 _callback_fn[id - 1] = callback;
                 _callback_userctx[id - 1] = callback_ctx;
                 result = true;
             }
+            uni_hal_core_irq_resume(mask);
         }
     }
 

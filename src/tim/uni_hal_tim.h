@@ -124,7 +124,7 @@ typedef struct {
     uni_hal_core_periph_e instance;
 
     /**
-     * TIM callback
+     * Update callback installed by each successful init, with a null user context.
      */
     uni_hal_tim_callback_fn callback;
 
@@ -204,7 +204,8 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx);
 bool uni_hal_tim_is_inited(const uni_hal_tim_context_t *ctx);
 
 /**
- * Register a timer update callback.
+ * Replace the timer update callback until the next initialization.
+ * Passing a null callback disables delivery.
  *
  * @param ctx Timer context.
  * @param callback Callback invoked from the timer interrupt path.

@@ -14,3 +14,4 @@ target_compile_definitions(tim_h743_application_vector_qemu PRIVATE TEST_TIM2_AP
 add_timer_h7_test(tim_h743_base_lifecycle lifecycle.c)
 add_timer_h7_test(tim_h743_pending_update pending_update.c)
 add_timer_h7_test(tim_h743_register_width register_width.c)
+add_timer_h7_test(tim_h743_config_callback ../tim/config_callback.c)

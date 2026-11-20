@@ -40,6 +40,15 @@ static timer_driver_t *find_timer(uni_hal_core_periph_e instance) {
     return nullptr;
 }
 
+static void set_callback(timer_driver_t *timer, uni_hal_tim_context_t *ctx,
+                         uni_hal_tim_callback_fn callback, void *user_ctx) {
+    uint32_t mask = uni_hal_core_irq_pause();
+    timer->callback = callback;
+    timer->timer_ctx = ctx;
+    timer->user_ctx = user_ctx;
+    uni_hal_core_irq_resume(mask);
+}
+
 bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
     timer_driver_t *timer = find_timer(periph);
     if (timer == nullptr || !LL_TIM_IsEnabledIT_UPDATE(timer->handle) || !LL_TIM_IsActiveFlag_UPDATE(timer->handle)) {
@@ -68,6 +77,9 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
         .RepetitionCounter = 0U,
     };
     ctx->status.inited = LL_TIM_Init(timer->handle, &config) == SUCCESS;
+    if (ctx->status.inited) {
+        set_callback(timer, ctx, ctx->config.callback, nullptr);
+    }
     return ctx->status.inited;
 }
 
@@ -79,9 +91,7 @@ bool uni_hal_tim_register_callback(uni_hal_tim_context_t *ctx, uni_hal_tim_callb
     if (timer == nullptr) {
         return false;
     }
-    timer->callback = callback;
-    timer->timer_ctx = ctx;
-    timer->user_ctx = callback_ctx;
+    set_callback(timer, ctx, callback, callback_ctx);
     return true;
 }
 
