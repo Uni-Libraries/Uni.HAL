@@ -18,6 +18,13 @@
 // Private
 //
 
+// The OS bit starts a single conversion on write and reports idle on read.
+#define UNI_HAL_ADS1015_CONFIG_OS (1U << 15)
+
+static uint16_t _uni_hal_ads1015_config_word(const uni_hal_ads1015_config_t *config) {
+    return (uint16_t)config->mux | (uint16_t)config->pga | (uint16_t)config->mode | (uint16_t)config->rate;
+}
+
 static bool _uni_hal_ads1015_read(uni_hal_ads1015_context_t *ctx, uint8_t reg, uint16_t *value, uint32_t timeout) {
     uint8_t bytes[2];
     if (!uni_hal_i2c_mem_read(ctx->config.i2c, ctx->config.address, reg, UNI_HAL_I2C_MEMADD_SIZE_8BIT,
@@ -39,7 +46,7 @@ static uni_hal_ads1015_answer_e _uni_hal_ads1015_ready(uni_hal_ads1015_context_t
     if (!_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONFIG, &config, timeout)) {
         return UNI_HAL_ADS1015_ANSWER_FAILED;
     }
-    return (config & (1U << 15)) ? UNI_HAL_ADS1015_ANSWER_OK : UNI_HAL_ADS1015_ANSWER_NOTREADY;
+    return (config & UNI_HAL_ADS1015_CONFIG_OS) ? UNI_HAL_ADS1015_ANSWER_OK : UNI_HAL_ADS1015_ANSWER_NOTREADY;
 }
 
 static uint32_t _uni_hal_ads1015_remaining_ms(uint32_t start, uint32_t timeout) {
@@ -78,7 +85,7 @@ bool uni_hal_ads1015_configure(uni_hal_ads1015_context_t* ctx)
     bool result = false;
     if (uni_hal_ads1015_is_inited(ctx))
     {
-        uint16_t config = UNI_HAL_ADS1015_STATUS_NOEFF | ctx->config.mux | ctx->config.pga | ctx->config.mode | ctx->config.rate;
+        uint16_t const config = _uni_hal_ads1015_config_word(&ctx->config);
         result = _uni_hal_ads1015_write(ctx, UNI_HAL_ADS1015_REG_CONFIG, config, ctx->config.timeout);
     }
 
@@ -95,7 +102,7 @@ int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx)
     uint32_t const timeout = ctx->config.timeout;
     uint32_t const start = uni_hal_systick_get_ms();
     if (ctx->config.mode == UNI_HAL_ADS1015_MODE_SINGLE) {
-        uint16_t const config = ctx->config.mux | ctx->config.pga | ctx->config.mode | ctx->config.rate | (1U << 15);
+        uint16_t const config = _uni_hal_ads1015_config_word(&ctx->config) | UNI_HAL_ADS1015_CONFIG_OS;
         if (!_uni_hal_ads1015_write(ctx, UNI_HAL_ADS1015_REG_CONFIG, config, timeout)) {
             return INT16_MAX;
         }

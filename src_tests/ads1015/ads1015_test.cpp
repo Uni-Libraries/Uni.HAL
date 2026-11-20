@@ -6,7 +6,7 @@
 #include "systick/uni_hal_systick.h"
 
 namespace {
-enum class Operation { start, status, sample };
+enum class Operation { write_config, status, sample };
 
 struct Exchange {
     Operation operation;
@@ -65,7 +65,7 @@ extern "C" bool uni_hal_i2c_mem_write(uni_hal_i2c_context_t *ctx, uint16_t addre
     REQUIRE(reg == UNI_HAL_ADS1015_REG_CONFIG);
     REQUIRE(reg_size == UNI_HAL_I2C_MEMADD_SIZE_8BIT);
     REQUIRE(len == 2U);
-    Exchange step = next_exchange(Operation::start, timeout);
+    Exchange step = next_exchange(Operation::write_config, timeout);
     REQUIRE(((data[0] << 8) | data[1]) == step.value);
     return step.success;
 }
@@ -86,27 +86,48 @@ extern "C" bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t addres
     return step.success;
 }
 
+TEST_CASE("ADS1015 preserves the configured fields when starting a single conversion", "[ads1015]") {
+    uni_hal_ads1015_context_t sensor{};
+    sensor.config.i2c = &bus;
+    sensor.config.address = 0x48U;
+    sensor.config.mode = UNI_HAL_ADS1015_MODE_SINGLE;
+    sensor.config.mux = UNI_HAL_ADS1015_MUX_IN1_GND;
+    sensor.config.pga = UNI_HAL_ADS1015_CONFIG_PGA_0256;
+    sensor.config.rate = UNI_HAL_ADS1015_RATE_2400HZ;
+    sensor.config.timeout = 10U;
+
+    const Exchange script[] = {
+        {Operation::write_config, 10, 0, 0x5BA0}, {Operation::write_config, 10, 1, 0xDBA0},
+        {Operation::status, 9, 1, 0x8000}, {Operation::sample, 8, 0, 0x1230}
+    };
+    now = 0U;
+    pending = script;
+    REQUIRE(uni_hal_ads1015_init(&sensor));
+    REQUIRE(uni_hal_ads1015_get_raw(&sensor) == 0x123);
+    REQUIRE(pending.empty());
+}
+
 TEST_CASE("ADS1015 stops on a failed start, status or sample read", "[ads1015]") {
-    check_sample(UNI_HAL_ADS1015_MODE_SINGLE, 10, {{Operation::start, 10, 1, 0x8100, false}}, INT16_MAX);
+    check_sample(UNI_HAL_ADS1015_MODE_SINGLE, 10, {{Operation::write_config, 10, 1, 0x8100, false}}, INT16_MAX);
     check_sample(UNI_HAL_ADS1015_MODE_SINGLE, 10, {
-        {Operation::start, 10, 1, 0x8100}, {Operation::status, 9, 1, 0, false}
+        {Operation::write_config, 10, 1, 0x8100}, {Operation::status, 9, 1, 0, false}
     }, INT16_MAX);
     check_sample(UNI_HAL_ADS1015_MODE_CONT, 10, {{Operation::sample, 10, 1, 0, false}}, INT16_MAX);
 }
 
 TEST_CASE("ADS1015 shares one deadline across single-shot conversion and readout", "[ads1015]") {
     check_sample(UNI_HAL_ADS1015_MODE_SINGLE, 5, {
-        {Operation::start, 5, 1, 0x8100}, {Operation::status, 4, 2, 0}, {Operation::status, 2, 2, 0}
+        {Operation::write_config, 5, 1, 0x8100}, {Operation::status, 4, 2, 0}, {Operation::status, 2, 2, 0}
     }, INT16_MAX);
     check_sample(UNI_HAL_ADS1015_MODE_SINGLE, 3, {
-        {Operation::start, 3, 1, 0x8100}, {Operation::status, 2, 2, 0x8000}
+        {Operation::write_config, 3, 1, 0x8100}, {Operation::status, 2, 2, 0x8000}
     }, INT16_MAX);
     check_sample(UNI_HAL_ADS1015_MODE_SINGLE, 0, {}, INT16_MAX);
 }
 
 TEST_CASE("ADS1015 reads signed samples at the deadline and across clock wrap", "[ads1015]") {
     check_sample(UNI_HAL_ADS1015_MODE_SINGLE, 8, {
-        {Operation::start, 8, 2, 0x8100}, {Operation::status, 6, 2, 0},
+        {Operation::write_config, 8, 2, 0x8100}, {Operation::status, 6, 2, 0},
         {Operation::status, 4, 2, 0x8000}, {Operation::sample, 2, 2, 0xfff0}
     }, -1, UINT32_MAX - 2U);
     check_sample(UNI_HAL_ADS1015_MODE_CONT, 5, {{Operation::sample, 5, 5, 0x1230}}, 291);
