@@ -9,6 +9,7 @@
 I2C_TypeDef model_instances[4];
 uint32_t __get_IPSR(void) { return 0U; }
 uint32_t __get_PRIMASK(void) { return 0U; }
+uint32_t __get_FAULTMASK(void) { return 0U; }
 uint32_t __get_BASEPRI(void) { return 0U; }
 uint32_t NVIC_GetPriority(int irq) { (void)irq; return 0U; }
 

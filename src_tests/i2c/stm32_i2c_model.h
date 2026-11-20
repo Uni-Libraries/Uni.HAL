@@ -29,6 +29,7 @@ typedef struct I2C_HandleTypeDef {
 
 uint32_t __get_IPSR(void);
 uint32_t __get_PRIMASK(void);
+uint32_t __get_FAULTMASK(void);
 uint32_t __get_BASEPRI(void);
 #define __NVIC_PRIO_BITS 4U
 enum { SysTick_IRQn = -1 };

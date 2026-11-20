@@ -84,6 +84,7 @@ uint32_t uni_hal_core_irq_pause(void) {
 }
 void uni_hal_core_irq_resume(uint32_t mask) { irq_mask = mask; }
 uint32_t __get_PRIMASK(void) { return irq_mask; }
+uint32_t __get_FAULTMASK(void) { return 0U; }
 uint32_t __get_BASEPRI(void) { return 0; }
 uint32_t NVIC_GetPriorityGrouping(void) { return 3U; }
 uint32_t NVIC_GetPriority(int irq) { assert(irq == SysTick_IRQn); return 15U; }

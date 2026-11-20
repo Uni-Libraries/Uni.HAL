@@ -2,6 +2,7 @@
 #include <stm32l4xx_hal.h>
 
 static I2C_TypeDef regs;
+static unsigned starts;
 #undef I2C1
 #define I2C1 (&regs)
 
@@ -19,6 +20,11 @@ static HAL_StatusTypeDef start_read(I2C_HandleTypeDef *h, uint16_t addr, uint16_
     (void)reg;
     (void)size;
     (void)len;
+    ++starts;
+    if (__get_FAULTMASK()) {
+        // Avoid starting an IRQ that cannot run on a broken driver.
+        return HAL_ERROR;
+    }
     h->pBuffPtr = buf;
     h->XferISR = byte_received;
     NVIC_SetPendingIRQ(I2C1_EV_IRQn);
@@ -39,6 +45,11 @@ static uni_hal_i2c_context_t ctx = {
 static void read_byte(void *arg) {
     (void)arg;
     uint8_t byte = 0U;
+    __set_FAULTMASK(1U);
+    bool const started = uni_hal_i2c_mem_read(&ctx, 0x48U, 0U, UNI_HAL_I2C_MEMADD_SIZE_8BIT, &byte, 1U, 100U);
+    uint32_t const mask = __get_FAULTMASK();
+    __set_FAULTMASK(0U);
+    CHECK(!started && starts == 0U && byte == 0U && mask == 1U);
     CHECK(uni_hal_i2c_mem_read(&ctx, 0x48U, 0U, UNI_HAL_I2C_MEMADD_SIZE_8BIT, &byte, 1U, 100U));
     CHECK(byte == 0x5a);
     finish(0U);

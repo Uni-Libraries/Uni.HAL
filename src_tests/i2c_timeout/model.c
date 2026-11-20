@@ -30,9 +30,10 @@ enum { task_timeout_ms = 100U, owner_elapsed_ms = 3U };
 static bool test_ownership, in_owner_hal, advance_clock;
 static bool transfer(uni_hal_i2c_context_t *ctx, uint32_t timeout);
 I2C_TypeDef model_instances[4];
-static uint32_t ipsr, primask, basepri, systick_priority;
+static uint32_t ipsr, primask, faultmask, basepri, systick_priority;
 uint32_t __get_IPSR(void) { return ipsr; }
 uint32_t __get_PRIMASK(void) { return primask; }
+uint32_t __get_FAULTMASK(void) { return faultmask; }
 uint32_t __get_BASEPRI(void) { return basepri; }
 uint32_t NVIC_GetPriority(int irq) { assert(irq == SysTick_IRQn); return systick_priority; }
 
@@ -235,6 +236,9 @@ int main(int argc, char **argv)
         primask = 1U;
         assert(!transfer(&primary, 1U) && calls == 0U);
         primask = 0U;
+        faultmask = 1U;
+        assert(!transfer(&primary, 1U) && calls == 0U);
+        faultmask = 0U;
         ipsr = 1U;
         assert(!transfer(&primary, 1U) && calls == 0U);
         ipsr = 0U;

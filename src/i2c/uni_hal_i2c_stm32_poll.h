@@ -22,7 +22,7 @@ static inline uint32_t hal_timeout(uint32_t remaining)
 static inline bool polling_allowed(void)
 {
     uint32_t basepri = __get_BASEPRI();
-    return !__get_IPSR() && !__get_PRIMASK() &&
+    return !__get_IPSR() && !__get_PRIMASK() && !__get_FAULTMASK() &&
            (!basepri || (NVIC_GetPriority(SysTick_IRQn) << (8U - __NVIC_PRIO_BITS)) < basepri);
 }
 
