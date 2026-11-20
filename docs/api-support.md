@@ -20,8 +20,14 @@ for other targets.
 - **STM32L496** provides blocking SPI, classic CAN, DMA channel configuration,
   TIM1 input capture (CH1–4) and update callbacks on TIM1, TIM2 and TIM15–17.
   I²C1–4 use polling for master transfers and probing. Memory transfers also
-  support interrupts. The SPI abort entry point returns false because there is
-  no asynchronous transfer. The Flash driver is absent.
+  support interrupts. SPI1–3 support 8-bit full-duplex master and slave modes.
+  SPI1 uses PCLK2 and SPI2/3 use PCLK1. Leave `clock_source` at zero to use the
+  instance clock. The master prescaler supports divisors 2 through 256. Supply
+  SCK, MISO and MOSI GPIO configurations, plus an alternate-function NSS pin
+  for hardware chip select. With software NSS, the application controls external
+  chip select. A supplied NSS GPIO is initialized using its configuration.
+  SPI initialization rejects CRC and DMA requests. The SPI abort entry point
+  returns false because transfers are blocking. The Flash driver is absent.
 - **Zynq-7000** provides CPU0/GIC startup, the system time base, PS UART, PS
   reset and basic SEGGER RTT. Generic timing calculators, context queries and
   I/O buffer helpers can be used independently. They do not provide a Zynq

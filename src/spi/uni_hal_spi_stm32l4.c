@@ -10,7 +10,6 @@
 #include <stm32l4xx_ll_spi.h>
 
 // Uni.HAL
-#include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
@@ -60,85 +59,26 @@ bool _uni_hal_spi_clear_flags(uni_hal_core_periph_e instance) {
     return result;
 }
 
-/**
- * Convert SPI polarity to vendor speicific
- * @param polarity polarity enum value
- * @return converted value
- */
-uint32_t _uni_hal_spi_phase(uni_hal_spi_cpha_e phase){
-    uint32_t result = 0;
-    switch(phase){
-    case UNI_HAL_SPI_CPHA_0:
-        result = LL_SPI_PHASE_1EDGE;
-        break;
-    case UNI_HAL_SPI_CPHA_1:
-        result = LL_SPI_PHASE_2EDGE;
-        break;
-    default:
-        break;
-    }
-    return result;
-}
+static const uint32_t prescalers[] = {
+    [UNI_HAL_SPI_PRESCALER_2]   = LL_SPI_BAUDRATEPRESCALER_DIV2,
+    [UNI_HAL_SPI_PRESCALER_4]   = LL_SPI_BAUDRATEPRESCALER_DIV4,
+    [UNI_HAL_SPI_PRESCALER_8]   = LL_SPI_BAUDRATEPRESCALER_DIV8,
+    [UNI_HAL_SPI_PRESCALER_16]  = LL_SPI_BAUDRATEPRESCALER_DIV16,
+    [UNI_HAL_SPI_PRESCALER_32]  = LL_SPI_BAUDRATEPRESCALER_DIV32,
+    [UNI_HAL_SPI_PRESCALER_64]  = LL_SPI_BAUDRATEPRESCALER_DIV64,
+    [UNI_HAL_SPI_PRESCALER_128] = LL_SPI_BAUDRATEPRESCALER_DIV128,
+    [UNI_HAL_SPI_PRESCALER_256] = LL_SPI_BAUDRATEPRESCALER_DIV256,
+};
 
-
-/**
- * Convert SPI polarity to vendor speicific
- * @param polarity polarity enum value
- * @return converted value
- */
-uint32_t _uni_hal_spi_polarity(uni_hal_spi_cpol_e polarity){
-    uint32_t result = 0;
-    switch(polarity){
-    case UNI_HAL_SPI_CPOL_0:
-        result = LL_SPI_POLARITY_LOW;
-        break;
-    case UNI_HAL_SPI_CPOL_1:
-        result = LL_SPI_POLARITY_HIGH;
-        break;
-    default:
-        break;
-    }
-    return result;
-}
-
-
-
-//
-// Public
-//
-
-static uint32_t _uni_hal_spi_prescaler_div_get(uint32_t prescaler_ll) {
-    uint32_t result = 0U;
-    switch (prescaler_ll) {
-        case LL_SPI_BAUDRATEPRESCALER_DIV2:
-            result = 2U;
-            break;
-        case LL_SPI_BAUDRATEPRESCALER_DIV4:
-            result = 4U;
-            break;
-        case LL_SPI_BAUDRATEPRESCALER_DIV8:
-            result = 8U;
-            break;
-        case LL_SPI_BAUDRATEPRESCALER_DIV16:
-            result = 16U;
-            break;
-        case LL_SPI_BAUDRATEPRESCALER_DIV32:
-            result = 32U;
-            break;
-        case LL_SPI_BAUDRATEPRESCALER_DIV64:
-            result = 64U;
-            break;
-        case LL_SPI_BAUDRATEPRESCALER_DIV128:
-            result = 128U;
-            break;
-        case LL_SPI_BAUDRATEPRESCALER_DIV256:
-            result = 256U;
-            break;
-        default:
-            // unknown prescaler
-            break;
-    }
-    return result;
+static bool valid_config(const uni_hal_spi_config_t *config) {
+    const uni_hal_rcc_clksrc_e bus_clock = config->instance == UNI_HAL_CORE_PERIPH_SPI_1
+        ? UNI_HAL_RCC_CLKSRC_PCLK2 : UNI_HAL_RCC_CLKSRC_PCLK1;
+    return (config->clock_source == UNI_HAL_RCC_CLKSRC_UNKNOWN || config->clock_source == bus_clock) &&
+           (unsigned)config->mode <= UNI_HAL_SPI_MODE_SLAVE &&
+           (unsigned)config->prescaler < sizeof(prescalers) / sizeof(prescalers[0]) &&
+           (unsigned)config->polarity <= UNI_HAL_SPI_CPOL_1 && (unsigned)config->phase <= UNI_HAL_SPI_CPHA_1 &&
+           config->pin_sck && config->pin_miso && config->pin_mosi && (!config->nss_hard || config->pin_nss) &&
+           config->crc_type == UNI_HAL_SPI_CRC_DISABLE && !config->dma_rx && !config->dma_tx;
 }
 
 static uint32_t _uni_hal_spi_clk_get(uni_hal_core_periph_e instance) {
@@ -157,41 +97,43 @@ static uint32_t _uni_hal_spi_clk_get(uni_hal_core_periph_e instance) {
 }
 
 bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
-    bool result = false;
-
-    if (ctx != NULL && !uni_hal_spi_is_inited(ctx)) {
-        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-        if (instance != NULL) {
-            // clock
-            result = uni_hal_rcc_clk_set(ctx->config.instance, true);
-
-            // gpio
-            result = uni_hal_gpio_pin_init(ctx->config.pin_sck) && result;
-            result = uni_hal_gpio_pin_init(ctx->config.pin_miso) && result;
-            result = uni_hal_gpio_pin_init(ctx->config.pin_mosi) && result;
-
-            // spi
-            LL_SPI_InitTypeDef SPI_InitStruct = {0};
-            SPI_InitStruct.TransferDirection = LL_SPI_FULL_DUPLEX;
-            SPI_InitStruct.Mode = LL_SPI_MODE_MASTER;
-            SPI_InitStruct.DataWidth = LL_SPI_DATAWIDTH_8BIT;
-            SPI_InitStruct.ClockPolarity = _uni_hal_spi_polarity(ctx->config.polarity);
-            SPI_InitStruct.ClockPhase = _uni_hal_spi_phase(ctx->config.phase);
-            SPI_InitStruct.NSS = LL_SPI_NSS_SOFT;
-            SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV4;
-            SPI_InitStruct.BitOrder = LL_SPI_MSB_FIRST;
-            SPI_InitStruct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
-            SPI_InitStruct.CRCPoly = 7;
-            result = (LL_SPI_Init(instance, &SPI_InitStruct) == SUCCESS) && result;
-            if (result) {
-                LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
-                LL_SPI_DisableNSSPulseMgt(instance);
-            }
-            ctx->status.inited = result;
-        }
+    if (!ctx || uni_hal_spi_is_inited(ctx)) {
+        return false;
+    }
+    const uni_hal_spi_config_t *config = &ctx->config;
+    SPI_TypeDef *instance = _uni_hal_spi_handle_get(config->instance);
+    if (!instance || !valid_config(config)) {
+        return false;
     }
 
-    return result;
+    if (!uni_hal_rcc_clk_set(config->instance, true) ||
+        !uni_hal_gpio_pin_init(config->pin_sck) || !uni_hal_gpio_pin_init(config->pin_miso) ||
+        !uni_hal_gpio_pin_init(config->pin_mosi) || (config->pin_nss && !uni_hal_gpio_pin_init(config->pin_nss))) {
+        return false;
+    }
+
+    const bool master = config->mode == UNI_HAL_SPI_MODE_MASTER;
+    LL_SPI_InitTypeDef init = {
+        .TransferDirection = LL_SPI_FULL_DUPLEX,
+        .Mode = master ? LL_SPI_MODE_MASTER : LL_SPI_MODE_SLAVE,
+        .DataWidth = LL_SPI_DATAWIDTH_8BIT,
+        .ClockPolarity = config->polarity == UNI_HAL_SPI_CPOL_0 ? LL_SPI_POLARITY_LOW : LL_SPI_POLARITY_HIGH,
+        .ClockPhase = config->phase == UNI_HAL_SPI_CPHA_0 ? LL_SPI_PHASE_1EDGE : LL_SPI_PHASE_2EDGE,
+        .NSS = LL_SPI_NSS_SOFT,
+        .BaudRate = prescalers[config->prescaler],
+        .BitOrder = LL_SPI_MSB_FIRST,
+        .CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE,
+    };
+    if (config->nss_hard) {
+        init.NSS = master ? LL_SPI_NSS_HARD_OUTPUT : LL_SPI_NSS_HARD_INPUT;
+    }
+    if (LL_SPI_Init(instance, &init) != SUCCESS) {
+        return false;
+    }
+    LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
+    LL_SPI_DisableNSSPulseMgt(instance);
+    ctx->status.inited = true;
+    return true;
 }
 
 
@@ -212,10 +154,8 @@ uint32_t uni_hal_spi_bitrate_get(uni_hal_spi_context_t *ctx) {
         if (instance != NULL) {
             const uint32_t clk_hz = _uni_hal_spi_clk_get(ctx->config.instance);
             const uint32_t prescaler_ll = LL_SPI_GetBaudRatePrescaler(instance);
-            const uint32_t div = _uni_hal_spi_prescaler_div_get(prescaler_ll);
-            if (clk_hz > 0U && div > 0U) {
-                result = clk_hz / div;
-            }
+            // BR encodes powers of two: 000 = PCLK/2 through 111 = PCLK/256.
+            result = clk_hz / (2U << (prescaler_ll >> SPI_CR1_BR_Pos));
         }
     }
 
