@@ -10,6 +10,11 @@
 #include "pwr/uni_hal_pwr_stm32l4.h"
 #endif
 
+#if defined(UNI_HAL_TARGET_MCU_STM32L496) || defined(UNI_HAL_TARGET_MCU_ZYNQ7000)
+// A function declaration with one of these names would conflict at compile time.
+enum { uni_hal_spi_is_busy, uni_hal_spi_set_prescaler, uni_hal_spi_transceive_async };
+#endif
+
 #if configAPPLICATION_ALLOCATED_HEAP
 alignas(portBYTE_ALIGNMENT) uint8_t ucHeap[configTOTAL_HEAP_SIZE];
 #endif

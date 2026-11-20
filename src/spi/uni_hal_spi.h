@@ -241,6 +241,7 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx);
  */
 bool uni_hal_spi_is_inited(const uni_hal_spi_context_t *ctx);
 
+#if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_PC)
 /**
  * Check that SPI is busy
  * @param ctx SPI context
@@ -250,6 +251,7 @@ bool uni_hal_spi_is_busy(const uni_hal_spi_context_t *ctx);
 
 
 bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler_e prescaler);
+#endif
 
 /**
  * Gets current SPI bitrate (SCK frequency) in bits per second.
@@ -282,6 +284,7 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len);
 
 
+#if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_PC)
 /**
  * Start a DMA transfer on STM32H743 SPI1..5. Length is 1..65535 bytes. Supply an RX
  * buffer, a TX buffer, or both. Each direction needs its own configured DMA stream.
@@ -293,6 +296,7 @@ bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint3
  */
 bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, uint8_t *data_rx, const uint8_t *data_tx,
                                   uint32_t len);
+#endif
 
 
 /**
