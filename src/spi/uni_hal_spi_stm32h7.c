@@ -20,7 +20,7 @@
 #include "core/uni_hal_core_cm7.h"
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
-#include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 #include "dma/uni_hal_dma_stm32h7_irq.h"
 
 
@@ -882,7 +882,7 @@ static bool blocking_transfer(uni_hal_spi_context_t *ctx, const uint8_t *tx_data
     size_t idx_rx = 0U;
     bool const is_master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
     bool complete = false;
-    uint32_t activity_ms = uni_hal_systick_get_ms();
+    uni_hal_stm32_poll_budget_t budget = uni_hal_stm32_poll_begin(UNI_HAL_SPI_STALL_TIMEOUT_MS);
     for (;;) {
         uint32_t const status = instance->SR;
         if (status & (SPI_SR_OVR | SPI_SR_UDR | SPI_SR_CRCE | SPI_SR_TIFRE | SPI_SR_MODF)) {
@@ -910,8 +910,8 @@ static bool blocking_transfer(uni_hal_spi_context_t *ctx, const uint8_t *tx_data
         }
 
         if (progress) {
-            activity_ms = uni_hal_systick_get_ms();
-        } else if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+            budget = uni_hal_stm32_poll_begin(UNI_HAL_SPI_STALL_TIMEOUT_MS);
+        } else if (is_master && uni_hal_stm32_poll_expired(&budget)) {
             break;
         }
     }

@@ -13,7 +13,7 @@
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
-#include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 
 /**
  * A blocking master transfer is abandoned when the bus makes no progress for this long.
@@ -180,7 +180,10 @@ bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint3
 }
 
 static bool wait_for_flag(SPI_TypeDef *instance, uint32_t flag, bool set, bool master) {
-    uint32_t const start_ms = master ? uni_hal_systick_get_ms() : 0U;
+    uni_hal_stm32_poll_budget_t budget;
+    if (master) {
+        budget = uni_hal_stm32_poll_begin(UNI_HAL_SPI_STALL_TIMEOUT_MS);
+    }
     for (;;) {
         // Snapshot OVR together with TXE/RXNE/BSY. Reading DR and then SR clears OVR.
         uint32_t const status = LL_SPI_ReadReg(instance, SR);
@@ -190,7 +193,7 @@ static bool wait_for_flag(SPI_TypeDef *instance, uint32_t flag, bool set, bool m
         if (((status & flag) != 0U) == set) {
             return true;
         }
-        if (master && uni_hal_systick_get_ms() - start_ms > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+        if (master && uni_hal_stm32_poll_expired(&budget)) {
             return false;
         }
     }
