@@ -58,6 +58,11 @@ typedef struct {
 // Functions
 //
 
+/**
+ * Bind the IO streams to a dedicated timer and start polling RTT. The context,
+ * IO and timer must remain alive while the timer runs. Existing IO streams
+ * are reused. Failure releases streams created by this call and permits retry.
+ */
 bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t* ctx);
 
 bool uni_hal_segger_rtt_stdio_is_inited(const uni_hal_segger_context_t* ctx);

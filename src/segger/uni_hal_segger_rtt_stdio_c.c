@@ -71,25 +71,31 @@ bool _uni_hal_segger_rtt_stdio_timer(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_ti
 
 bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t *ctx) {
 #if !defined(UNI_HAL_TARGET_MCU_PC)
-    bool result = false;
-
-    if (ctx && !ctx->initialized && ctx->io /*&& ctx->timer*/) {
-        uni_hal_segger_rtt_init();
-
-        if (!uni_hal_io_init(ctx->io)) {
-            return false;
-        }
-
-        uni_hal_tim_init(ctx->timer);
-        uni_hal_tim_register_callback(ctx->timer, _uni_hal_segger_rtt_stdio_timer, ctx);
-        uni_hal_tim_start(ctx->timer);
-
-        ctx->initialized = true;
-
-        result = true;
+    if (!ctx || ctx->initialized || !ctx->io || !ctx->timer) {
+        return false;
     }
 
-    return result;
+    bool const existing_io = ctx->io->buf_rx.handle && ctx->io->buf_tx.handle;
+    if (!existing_io && !uni_hal_io_init(ctx->io)) {
+        return false;
+    }
+
+    uni_hal_segger_rtt_init();
+    if (uni_hal_tim_init(ctx->timer) &&
+        uni_hal_tim_register_callback(ctx->timer, _uni_hal_segger_rtt_stdio_timer, ctx)) {
+        if (uni_hal_tim_start(ctx->timer)) {
+            ctx->initialized = true;
+            return true;
+        }
+        // Starting an interrupt source can fail after partially enabling it.
+        uni_hal_tim_stop(ctx->timer);
+        uni_hal_tim_register_callback(ctx->timer, nullptr, nullptr);
+    }
+
+    if (!existing_io) {
+        uni_hal_io_deinit(ctx->io);
+    }
+    return false;
 #else
     (void)ctx;
     return false;

@@ -78,6 +78,8 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         -kernel $<TARGET_FILE:i2c_polling_qemu>)
     set_tests_properties(i2c_polling_cortex_m4 PROPERTIES TIMEOUT 15)
 
+    add_subdirectory(../rtt rtt)
+
     uni_hal_add_executable(dma_l4_qemu)
     target_sources(dma_l4_qemu PRIVATE ../dma_l4/channel_irq_qemu.c)
     target_link_options(dma_l4_qemu PRIVATE
