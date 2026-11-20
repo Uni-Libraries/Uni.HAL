@@ -2,7 +2,7 @@
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include "flash/uni_hal_flash.h"
-#include "runner.h"
+#include "../arm/semihost_test.h"
 
 static unsigned allocations, releases, irq_enables;
 static bool fail, preempt;

@@ -1241,75 +1241,74 @@ bool uni_hal_rcc_stm32l4_config_set(uni_hal_rcc_stm32l4_config_t* config)
 
 
 uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e clock_source, uint32_t clock_divider) {
-    bool result = false;
-    if (mco_index == 0 && (clock_divider == 1 || clock_divider == 2 || clock_divider == 4 || clock_divider == 8 || clock_divider == 16)) {
-        // configure pin
-        uni_hal_gpio_pin_context_t pin = {
-                .gpio_bank = UNI_HAL_CORE_PERIPH_GPIO_A,
-                .gpio_pin = UNI_HAL_GPIO_PIN_8,
-                .gpio_speed = UNI_HAL_GPIO_SPEED_3,
-                .gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP,
-                .alternate = UNI_HAL_GPIO_ALTERNATE_0,
-        };
-        result = uni_hal_gpio_pin_init(&pin);
-
-        uint32_t source = UINT32_MAX;
-        uint32_t prescaler = UINT32_MAX;
-        switch (clock_source) {
-            case UNI_HAL_RCC_CLKSRC_HSI:
-                source = LL_RCC_MCO1SOURCE_HSI;
-                break;
-            case UNI_HAL_RCC_CLKSRC_LSE:
-                source = LL_RCC_MCO1SOURCE_LSE;
-                break;
-            case UNI_HAL_RCC_CLKSRC_HSE:
-                source = LL_RCC_MCO1SOURCE_HSE;
-                break;
-            case UNI_HAL_RCC_CLKSRC_PLL1R:
-                source = LL_RCC_MCO1SOURCE_PLLCLK;
-                break;
-            case UNI_HAL_RCC_CLKSRC_HSI48:
-                source = LL_RCC_MCO1SOURCE_HSI48;
-                break;
-            case UNI_HAL_RCC_CLKSRC_SYSCLK:
-                source = LL_RCC_MCO1SOURCE_SYSCLK;
-                break;
-            case UNI_HAL_RCC_CLKSRC_MSI:
-                source = LL_RCC_MCO1SOURCE_MSI;
-                break;
-            case UNI_HAL_RCC_CLKSRC_LSI:
-                source = LL_RCC_MCO1SOURCE_LSI;
-                break;
-            default:
-                break;
-        }
-
-        switch (clock_divider) {
-            case 1:
-                prescaler = LL_RCC_MCO1_DIV_1;
-                break;
-            case 2:
-                prescaler = LL_RCC_MCO1_DIV_2;
-                break;
-            case 4:
-                prescaler = LL_RCC_MCO1_DIV_4;
-                break;
-            case 8:
-                prescaler = LL_RCC_MCO1_DIV_8;
-                break;
-            case 16:
-                prescaler = LL_RCC_MCO1_DIV_16;
-                break;
-            default:
-                break;
-        }
-
-        if (source != UINT32_MAX && prescaler != UINT32_MAX) {
-            LL_RCC_ConfigMCO(source, prescaler);
-            result = true;
-        }
+    if (mco_index != 0) {
+        return 0U;
     }
-    return result;
+
+    uint32_t source;
+    uint32_t prescaler;
+    switch (clock_source) {
+        case UNI_HAL_RCC_CLKSRC_HSI:
+            source = LL_RCC_MCO1SOURCE_HSI;
+            break;
+        case UNI_HAL_RCC_CLKSRC_LSE:
+            source = LL_RCC_MCO1SOURCE_LSE;
+            break;
+        case UNI_HAL_RCC_CLKSRC_HSE:
+            source = LL_RCC_MCO1SOURCE_HSE;
+            break;
+        case UNI_HAL_RCC_CLKSRC_PLL1R:
+            source = LL_RCC_MCO1SOURCE_PLLCLK;
+            break;
+        case UNI_HAL_RCC_CLKSRC_HSI48:
+            source = LL_RCC_MCO1SOURCE_HSI48;
+            break;
+        case UNI_HAL_RCC_CLKSRC_SYSCLK:
+            source = LL_RCC_MCO1SOURCE_SYSCLK;
+            break;
+        case UNI_HAL_RCC_CLKSRC_MSI:
+            source = LL_RCC_MCO1SOURCE_MSI;
+            break;
+        case UNI_HAL_RCC_CLKSRC_LSI:
+            source = LL_RCC_MCO1SOURCE_LSI;
+            break;
+        default:
+            return 0U;
+    }
+
+    switch (clock_divider) {
+        case 1:
+            prescaler = LL_RCC_MCO1_DIV_1;
+            break;
+        case 2:
+            prescaler = LL_RCC_MCO1_DIV_2;
+            break;
+        case 4:
+            prescaler = LL_RCC_MCO1_DIV_4;
+            break;
+        case 8:
+            prescaler = LL_RCC_MCO1_DIV_8;
+            break;
+        case 16:
+            prescaler = LL_RCC_MCO1_DIV_16;
+            break;
+        default:
+            return 0U;
+    }
+
+    uni_hal_gpio_pin_context_t pin = {
+        .gpio_bank = UNI_HAL_CORE_PERIPH_GPIO_A,
+        .gpio_pin = UNI_HAL_GPIO_PIN_8,
+        .gpio_speed = UNI_HAL_GPIO_SPEED_3,
+        .gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP,
+        .alternate = UNI_HAL_GPIO_ALTERNATE_0,
+    };
+    if (!uni_hal_gpio_pin_init(&pin)) {
+        return 0U;
+    }
+
+    LL_RCC_ConfigMCO(source, prescaler);
+    return 1U;
 }
 
 

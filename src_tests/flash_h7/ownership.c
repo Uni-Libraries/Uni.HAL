@@ -5,7 +5,7 @@
 #include <task.h>
 #include "flash/uni_hal_flash.h"
 #include "systick/uni_hal_systick.h"
-#include "runner.h"
+#include "../arm/semihost_test.h"
 
 static FLASH_TypeDef regs;
 static SCB_Type scb;
