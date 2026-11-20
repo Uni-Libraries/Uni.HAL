@@ -92,6 +92,8 @@ void ADC3_IRQHandler(void) {
 // PRIVATE
 //
 
+static bool initializing_adc[3];
+
 static void _uni_hal_adc_stm32h7_cache_cal(uni_hal_adc_context_t *ctx) {
     ctx->state.cal.valid = false;
 
@@ -695,21 +697,6 @@ bool _uni_hal_adc_enable(uni_hal_adc_context_t *ctx) {
     return uni_hal_adc_wait_startup_flag(&instance->ISR, ADC_ISR_ADRDY, true, ctx->config.timeout);
 }
 
-bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
-    bool result = false;
-    ADC_TypeDef *instance = _uni_hal_adc_get_instance(ctx->config.instance);
-    if (instance != nullptr) {
-        if (!LL_ADC_REG_IsConversionOngoing(instance)) {
-            LL_ADC_REG_StartConversion(instance);
-            result = true;
-        }
-    }
-
-    return result;
-}
-
-
-
 //
 // Functions
 //
@@ -730,21 +717,24 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         clock_source != UNI_HAL_RCC_CLKSRC_CLKP) {
         return false;
     }
-    if (ctx->state.initialized) {
-        return uni_hal_adc_is_inited(ctx);
-    }
-    if (config->dma) {
-        if (!uni_hal_dma_init(config->dma)) {
-            return false;
-        }
-        uint32_t const mask = uni_hal_core_irq_pause();
-        bool const claimed = uni_hal_dma_stm32h7_claim(config->dma, nullptr, ctx);
+    unsigned const index = config->instance - UNI_HAL_CORE_PERIPH_ADC_1;
+    ADC_TypeDef *adc = _uni_hal_adc_get_instance(config->instance);
+    uint32_t mask = uni_hal_core_irq_pause();
+    if (ctx->state.initialized || initializing_adc[index]) {
+        bool const ready = uni_hal_adc_is_inited(ctx);
         uni_hal_core_irq_resume(mask);
-        if (!claimed) {
-            return false;
-        }
+        return ready;
     }
+    if (config->dma && (!uni_hal_dma_init(config->dma) || !uni_hal_dma_stm32h7_claim(config->dma, nullptr, ctx))) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    initializing_adc[index] = true;
+    uni_hal_core_irq_resume(mask);
 
+    if (!uni_hal_rcc_clk_set(config->instance, true) || LL_ADC_REG_IsConversionOngoing(adc)) {
+        goto failed;
+    }
     _uni_hal_adc_stm32h7_cache_cal(ctx);
 
     for (uint32_t rank = 0; rank < config->channels_count; ++rank) {
@@ -758,7 +748,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         }
     }
 
-    if (!uni_hal_rcc_clksrc_set(config->instance, clock_source) || !uni_hal_rcc_clk_set(config->instance, true)) {
+    if (!uni_hal_rcc_clksrc_set(config->instance, clock_source)) {
         goto failed;
     }
     const uint32_t interrupt = _uni_hal_adc_get_interrupt(config->instance);
@@ -772,23 +762,25 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     if (config->dma && !_uni_hal_adc_configure_dma(ctx)) {
         goto failed;
     }
-    uint32_t const mask = uni_hal_core_irq_pause();
+    mask = uni_hal_core_irq_pause();
     if (config->dma) {
         DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(config->dma->config.instance);
         uni_hal_dma_stm32h7_circular_started(config->dma);
         LL_DMA_EnableStream(module, config->dma->config.channel);
     }
+    LL_ADC_REG_StartConversion(adc);
     ctx->state.initialized = true;
-    _uni_hal_adc_trigger(ctx);
+    initializing_adc[index] = false;
     uni_hal_core_irq_resume(mask);
     return true;
 
 failed:
+    mask = uni_hal_core_irq_pause();
     if (config->dma) {
-        uint32_t const mask = uni_hal_core_irq_pause();
         uni_hal_dma_stm32h7_release(config->dma);
-        uni_hal_core_irq_resume(mask);
     }
+    initializing_adc[index] = false;
+    uni_hal_core_irq_resume(mask);
     return false;
 }
 
