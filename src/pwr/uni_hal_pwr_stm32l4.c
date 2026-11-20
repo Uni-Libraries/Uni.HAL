@@ -47,16 +47,7 @@ bool uni_hal_pwr_init() {
         return false;
     }
 
-    LL_PWR_EnableBkUpAccess();
-
-    if (g_uni_hal_pwr_ctx.battery_charging) {
-        LL_PWR_SetBattChargResistor(LL_PWR_BATT_CHARGRESISTOR_1_5K);
-        LL_PWR_EnableBatteryCharging();
-    } else {
-        LL_PWR_DisableBatteryCharging();
-    }
-
-    LL_PWR_DisableBkUpAccess();
+    uni_hal_pwr_set_battery_charging(g_uni_hal_pwr_ctx.battery_charging);
     g_uni_hal_pwr_ctx.inited = true;
 
     return true;

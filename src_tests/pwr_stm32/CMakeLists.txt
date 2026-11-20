@@ -10,4 +10,5 @@ endfunction()
 
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
     add_pwr_test(pwr_l496_voltage_ready voltage_l4.c mps2-an386)
+    add_pwr_test(pwr_l496_backup_access backup_l4.c mps2-an386)
 endif()
