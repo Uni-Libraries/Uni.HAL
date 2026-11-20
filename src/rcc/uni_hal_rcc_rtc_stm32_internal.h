@@ -9,6 +9,36 @@
 #include <stm32h7xx_ll_rcc.h>
 #endif
 
+// Return the incoming DBP state so callers can restore the write protection.
+static inline bool open_backup_access(void) {
+    bool const was_open = LL_PWR_IsEnabledBkUpAccess() != 0U;
+    if (!was_open) {
+        LL_PWR_EnableBkUpAccess();
+    }
+    return was_open;
+}
+
+static inline bool set_rtc_clock_enabled(bool enabled) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    bool matches = (LL_RCC_IsEnabledRTC() != 0U) == enabled;
+    if (!matches) {
+        bool const was_open = open_backup_access();
+        if (LL_PWR_IsEnabledBkUpAccess()) {
+            if (enabled) {
+                LL_RCC_EnableRTC();
+            } else {
+                LL_RCC_DisableRTC();
+            }
+            matches = (LL_RCC_IsEnabledRTC() != 0U) == enabled;
+        }
+        if (!was_open) {
+            LL_PWR_DisableBkUpAccess();
+        }
+    }
+    uni_hal_core_irq_resume(mask);
+    return matches;
+}
+
 static inline bool select_rtc_source(uni_hal_rcc_clksrc_e source) {
     uint32_t selector;
     switch (source) {
@@ -26,10 +56,7 @@ static inline bool select_rtc_source(uni_hal_rcc_clksrc_e source) {
     uint32_t const mask = uni_hal_core_irq_pause();
     bool selected = LL_RCC_GetRTCClockSource() == selector;
     if (!selected) {
-        bool const was_open = LL_PWR_IsEnabledBkUpAccess() != 0U;
-        if (!was_open) {
-            LL_PWR_EnableBkUpAccess();
-        }
+        bool const was_open = open_backup_access();
         if (LL_PWR_IsEnabledBkUpAccess()) {
             LL_RCC_SetRTCClockSource(selector);
             // RTCSEL normally remains locked until a backup reset. LSE failure can unlock it.

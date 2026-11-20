@@ -810,6 +810,10 @@ bool uni_hal_rcc_clk_get(uni_hal_core_periph_e clock) {
 
 
 bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) {
+    if (target == UNI_HAL_CORE_PERIPH_RTC) {
+        return set_rtc_clock_enabled(state);
+    }
+
     bool result = false;
 
     if (state != uni_hal_rcc_clk_get(target)) {
@@ -957,12 +961,6 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) {
                 state
                     ? LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_RNG)
                     : LL_AHB2_GRP1_DisableClock(LL_AHB2_GRP1_PERIPH_RNG);
-            result = true;
-            break;
-            case UNI_HAL_CORE_PERIPH_RTC:
-                uni_hal_pwr_stm_set_backup_access(true);
-            state ? LL_RCC_EnableRTC() : LL_RCC_DisableRTC();
-            uni_hal_pwr_stm_set_backup_access(false);
             result = true;
             break;
             case UNI_HAL_CORE_PERIPH_SPI_1:
