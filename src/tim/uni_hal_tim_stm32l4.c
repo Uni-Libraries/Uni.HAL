@@ -954,28 +954,37 @@ bool uni_hal_tim_is_channel_valid(uni_hal_tim_context_t *ctx, uni_hal_tim_channe
 // get_tick_period
 //
 
-uint32_t uni_hal_tim_get_tick_period_ns(uni_hal_tim_context_t *ctx) {
-    uint32_t result = 0U;
-
-    if (uni_hal_tim_is_inited(ctx) && _uni_hal_tim_prescaler_valid(ctx->config.prescaler))
-    {
-        result = uni_hal_rcc_clk_get_freq(ctx->config.instance);
-        result = result / (ctx->config.prescaler + 1);
-        if (result)
-        {
-            result = 1000000000UL / result;
-        }
-        else
-        {
-            result = 0;
-        }
+static uint32_t timer_clock_hz(uni_hal_tim_context_t *ctx) {
+    if (!uni_hal_tim_is_inited(ctx) || !_uni_hal_tim_prescaler_valid(ctx->config.prescaler)) {
+        return 0U;
     }
+    return uni_hal_rcc_clk_get_freq(ctx->config.instance);
+}
 
-    return result;
+static uint64_t timer_period(uni_hal_tim_context_t *ctx, uint32_t ticks, uint32_t units_per_second) {
+    uint32_t const clock = timer_clock_hz(ctx);
+    if (clock == 0U) {
+        return UINT64_MAX;
+    }
+    // The counter covers up to 48 bits of input clocks. Scale only the remainder
+    // before division so a long capture retains the fraction of every tick.
+    uint64_t const cycles = (uint64_t)ticks * (ctx->config.prescaler + 1U);
+    uint64_t const seconds = cycles / clock;
+    uint64_t const fraction = (cycles % clock) * units_per_second / clock;
+    if (seconds > (UINT64_MAX - fraction) / units_per_second) {
+        return UINT64_MAX;
+    }
+    return seconds * units_per_second + fraction;
+}
+
+uint32_t uni_hal_tim_get_tick_period_ns(uni_hal_tim_context_t *ctx) {
+    uint64_t const ns = timer_period(ctx, 1U, 1'000'000'000U);
+    return ns <= UINT32_MAX ? (uint32_t)ns : 0U;
 }
 
 uint32_t uni_hal_tim_get_tick_period_us(uni_hal_tim_context_t *ctx) {
-    return uni_hal_tim_get_tick_period_ns(ctx) / 1'000;
+    uint64_t const us = timer_period(ctx, 1U, 1'000'000U);
+    return us <= UINT32_MAX ? (uint32_t)us : 0U;
 }
 
 
@@ -1000,26 +1009,12 @@ bool uni_hal_tim_get_chan_state(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_
 // get_chan_period
 //
 
-uint64_t uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state) {
-    uint64_t result = UINT64_MAX;
-
-    if (uni_hal_tim_is_inited(ctx) && chan_state != NULL && chan_state->valid)
-    {
-        result = chan_state->period * (uint64_t)uni_hal_tim_get_tick_period_ns(ctx);
-    }
-
-    return result;
+uint64_t uni_hal_tim_get_chan_period_ns(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t *chan_state) {
+    return chan_state && chan_state->valid ? timer_period(ctx, chan_state->period, 1'000'000'000U) : UINT64_MAX;
 }
 
-uint64_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state) {
-    uint64_t result = UINT64_MAX;
-
-    uint64_t period_ns = uni_hal_tim_get_chan_period_ns(ctx, chan_state);
-    if(period_ns < UINT64_MAX){
-        result = period_ns / 1'000;
-    }
-
-    return result;
+uint64_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t *chan_state) {
+    return chan_state && chan_state->valid ? timer_period(ctx, chan_state->period, 1'000'000U) : UINT64_MAX;
 }
 
 
@@ -1027,28 +1022,22 @@ uint64_t uni_hal_tim_get_chan_period_us(uni_hal_tim_context_t *ctx, uni_hal_tim_
 // get_chan_freq
 //
 
-uint64_t uni_hal_tim_get_chan_freq_mhz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t* chan_state) {
-    uint64_t result = UINT64_MAX;
-
-    uint64_t period_ns = uni_hal_tim_get_chan_period_ns(ctx, chan_state);
-    if (period_ns != 0U && period_ns != UINT64_MAX)
-    {
-        result = (1'000'000'000'000 + (period_ns / 2U)) / period_ns;
+static uint64_t capture_frequency(uni_hal_tim_context_t *ctx, const uni_hal_tim_channel_state_t *capture,
+                                  uint32_t units_per_hz) {
+    uint32_t const clock = timer_clock_hz(ctx);
+    if (!clock || !capture || !capture->valid || !capture->period) {
+        return UINT64_MAX;
     }
-
-    return result;
+    uint64_t const cycles = (uint64_t)capture->period * (ctx->config.prescaler + 1U);
+    return ((uint64_t)clock * units_per_hz + cycles / 2U) / cycles;
 }
 
-uint64_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_state_t* chan_state)
-{
-    uint64_t result = UINT64_MAX;
+uint64_t uni_hal_tim_get_chan_freq_mhz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t *chan_state) {
+    return capture_frequency(ctx, chan_state, 1000U);
+}
 
-    uint64_t freq_mhz = uni_hal_tim_get_chan_freq_mhz(ctx, chan_state);
-    if(freq_mhz != UINT64_MAX){
-        result = (freq_mhz + 500U) / 1'000;
-    }
-
-    return result;
+uint64_t uni_hal_tim_get_chan_freq_hz(uni_hal_tim_context_t *ctx, uni_hal_tim_channel_state_t *chan_state) {
+    return capture_frequency(ctx, chan_state, 1U);
 }
 
 uint32_t uni_hal_tim_get_chan_age(uni_hal_tim_context_t* ctx, uni_hal_tim_channel_state_t* chan_state)
