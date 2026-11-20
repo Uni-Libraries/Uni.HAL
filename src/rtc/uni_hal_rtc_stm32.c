@@ -205,6 +205,10 @@ static rtc_snapshot_t read_snapshot(void) {
 }
 
 static bool read_consistent_snapshot(rtc_snapshot_t *sample) {
+    // System reset clears the shadow registers even when the calendar was retained.
+    if (!LL_RTC_IsShadowRegBypassEnabled(RTC) && !LL_RTC_IsActiveFlag_RS(RTC)) {
+        return false;
+    }
     // In bypass mode registers can change independently. A shadow lock can also be
     // missed at an update (STM32H743 ES0392). Compare two complete calendar reads.
     rtc_snapshot_t previous = read_snapshot();

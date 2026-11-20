@@ -40,13 +40,20 @@ static uint32_t read_date(RTC_TypeDef *dev) {
 static unsigned check(void) {
     uni_hal_rtc_context_t ctx = {.inited = true};
     rtc.PRER = 255U;
+    // A system reset cleared the shadows while the calendar kept running.
+    rtc.DR = 0x00002101U;
+    rtc.ISR = RTC_ISR_INITS;
+    uni_hal_rtc_datetime_t observed = {.year = 2099U, .milliseconds = 789U};
+    CHECK(!uni_hal_rtc_get(&ctx, &observed));
+    CHECK(observed.year == 2099U && observed.milliseconds == 789U);
     for (unsigned bypass = 0; bypass <= 1; ++bypass) {
         rtc.CR = bypass ? RTC_CR_BYPSHAD : 0U;
+        // Shadow reads can resume after the first copy. Direct reads do not use RSF.
+        rtc.ISR = RTC_ISR_INITS | (bypass ? 0U : RTC_ISR_RSF);
         LL_RTC_DATE_Config(&rtc, 4U, 0x19U, 0x11U, 0x26U);
         LL_RTC_TIME_Config(&rtc, LL_RTC_TIME_FORMAT_AM_OR_24, 0x23U, 0x59U, 0x59U);
         midnight_pending = true;
         subsecond = 0U;
-        uni_hal_rtc_datetime_t observed;
         CHECK(uni_hal_rtc_get(&ctx, &observed));
         CHECK(observed.day == 20U && observed.hours == 0U && observed.seconds == 0U && observed.milliseconds == 0U);
         CHECK(!shadow_locked);
