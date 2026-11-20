@@ -1,0 +1,4 @@
+add_executable(uni_hal_test_i2c_recovery_lines lines.c)
+target_link_libraries(uni_hal_test_i2c_recovery_lines PRIVATE uni.hal)
+add_test(NAME i2c_recovery_lines COMMAND uni_hal_test_i2c_recovery_lines)
+set_tests_properties(i2c_recovery_lines PROPERTIES TIMEOUT 10)

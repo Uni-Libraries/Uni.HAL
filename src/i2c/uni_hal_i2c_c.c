@@ -45,7 +45,46 @@ enum {
     UNI_HAL_I2C_RECOVER_HALF_PERIOD_US = 50U,
     /** a slave stuck in the middle of a byte lets go of SDA within nine clocks */
     UNI_HAL_I2C_RECOVER_CLOCKS = 9U,
+    /** shared allowance for clock stretching across all pulses and STOP */
+    UNI_HAL_I2C_RECOVER_STRETCH_US = 1000U,
 };
+
+static bool _uni_hal_i2c_raise_scl(uni_hal_gpio_pin_context_t *scl, uint32_t *stretch_left_us) {
+    uni_hal_gpio_pin_set(scl, true);
+    while (!uni_hal_gpio_pin_get(scl)) {
+        if (*stretch_left_us < UNI_HAL_I2C_RECOVER_HALF_PERIOD_US) {
+            return false;
+        }
+        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+        *stretch_left_us -= UNI_HAL_I2C_RECOVER_HALF_PERIOD_US;
+    }
+    // Start the high period only after the target has released the physical line.
+    uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+    return true;
+}
+
+static bool _uni_hal_i2c_recover_lines(uni_hal_gpio_pin_context_t *scl, uni_hal_gpio_pin_context_t *sda) {
+    uint32_t stretch_left_us = UNI_HAL_I2C_RECOVER_STRETCH_US;
+    for (uint32_t idx = 0U; idx < UNI_HAL_I2C_RECOVER_CLOCKS && !uni_hal_gpio_pin_get(sda); idx++) {
+        uni_hal_gpio_pin_set(scl, false);
+        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+        if (!_uni_hal_i2c_raise_scl(scl, &stretch_left_us)) {
+            return false;
+        }
+    }
+
+    // STOP condition: SDA rises while SCL is high.
+    uni_hal_gpio_pin_set(scl, false);
+    uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+    uni_hal_gpio_pin_set(sda, false);
+    uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+    if (!_uni_hal_i2c_raise_scl(scl, &stretch_left_us)) {
+        return false;
+    }
+    uni_hal_gpio_pin_set(sda, true);
+    uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
+    return uni_hal_gpio_pin_get(scl) && uni_hal_gpio_pin_get(sda);
+}
 
 bool uni_hal_i2c_recover(uni_hal_i2c_context_t *ctx) {
     if (ctx == NULL || ctx->config.pin_sck == NULL || ctx->config.pin_sda == NULL) {
@@ -79,26 +118,7 @@ bool uni_hal_i2c_recover(uni_hal_i2c_context_t *ctx) {
     result = uni_hal_gpio_pin_init(sda) && result;
 
     if (result) {
-        // clock the slave until it releases SDA
-        for (uint32_t idx = 0U; idx < UNI_HAL_I2C_RECOVER_CLOCKS && !uni_hal_gpio_pin_get(sda); idx++) {
-            uni_hal_gpio_pin_set(scl, false);
-            uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
-            uni_hal_gpio_pin_set(scl, true);
-            uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
-        }
-
-        // STOP condition: SDA rises while SCL is high
-        uni_hal_gpio_pin_set(scl, false);
-        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
-        uni_hal_gpio_pin_set(sda, false);
-        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
-        uni_hal_gpio_pin_set(scl, true);
-        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
-        uni_hal_gpio_pin_set(sda, true);
-        uni_hal_dwt_delay_us(UNI_HAL_I2C_RECOVER_HALF_PERIOD_US);
-
-        // the bus is free when both lines are high with nobody driving them
-        result = uni_hal_gpio_pin_get(scl) && uni_hal_gpio_pin_get(sda);
+        result = _uni_hal_i2c_recover_lines(scl, sda);
     }
 
     // hand the pins back to the peripheral
