@@ -10,9 +10,13 @@ static unsigned refill_bytes;
 static bool waiting_for_byte;
 static TickType_t last_wait;
 static uint32_t wake_after_ms;
+static bool model_long_wait;
+static bool send_on_late_wake;
+static bool indefinite_wait;
+static uint64_t waited_ms;
 
 static BaseType_t scheduler_state(void) {
-    return waiting_for_byte ? taskSCHEDULER_RUNNING : xTaskGetSchedulerState();
+    return (waiting_for_byte || model_long_wait) ? taskSCHEDULER_RUNNING : xTaskGetSchedulerState();
 }
 
 uint32_t uni_hal_systick_get_ms(void) {
@@ -22,7 +26,22 @@ uint32_t uni_hal_systick_get_ms(void) {
 // Use a real FreeRTOS stream buffer. Advance a controlled clock and model the
 // producer immediately refilling each slot freed by the consumer.
 static size_t receive_byte(StreamBufferHandle_t buffer, void *data, size_t size, TickType_t wait) {
-    if (waiting_for_byte) {
+    if (model_long_wait) {
+        indefinite_wait |= wait == portMAX_DELAY;
+        // Model a task scheduled every 8 ms. Its last wake crosses the 32-bit budget.
+        bool const past_deadline = waited_ms > UINT32_MAX;
+        uint64_t delay = ((uint64_t)wait * 1000U + configTICK_RATE_HZ - 1U) / configTICK_RATE_HZ;
+        delay = (delay + 7U) / 8U * 8U;
+        if (delay == 0U) {
+            delay = 8U;
+        }
+        waited_ms += delay;
+        now_ms += (uint32_t)delay;
+        if (past_deadline || (send_on_late_wake && waited_ms > UINT32_MAX)) {
+            uint8_t byte = 'B';
+            (void)xStreamBufferSend(buffer, &byte, 1U, 0);
+        }
+    } else if (waiting_for_byte) {
         last_wait = wait;
         now_ms += wake_after_ms;
         waiting_for_byte = false;
@@ -162,12 +181,36 @@ static bool final_byte(uint32_t delay) {
     last_wait = 0;
     now_ms = UINT32_MAX - 1U;
     CHECK(uni_hal_io_receive_sync(&io_ctx, marker, 2, 3) == (delay == 3));
-    CHECK(last_wait > 0U);
+    TickType_t const ticks = pdMS_TO_TICKS(3U);
+    CHECK(last_wait == (ticks > 0U ? ticks : 1U));
     CHECK(uni_hal_io_receive_available(&io_ctx) == 0U);
     if (delay > 3) {
         CHECK(uni_hal_io_receive_sync(&io_ctx, marker, 2, 0));
     }
     CHECK(!uni_hal_io_receive_sync(&io_ctx, marker, 2, 0));
+    uni_hal_io_deinit(&io_ctx);
+    return true;
+}
+
+static bool full_timeout(bool search) {
+    UNI_HAL_IO_DEFINITION(io, 4, 3);
+    const uint8_t marker = 'B';
+    uint8_t byte = 0;
+    CHECK(uni_hal_io_init(&io_ctx));
+    model_long_wait = true;
+    send_on_late_wake = search;
+    indefinite_wait = false;
+    waited_ms = 0;
+    now_ms = 123U;
+    bool const found = search ? uni_hal_io_receive_sync(&io_ctx, &marker, 1U, UINT32_MAX) :
+                                uni_hal_io_receive_data(&io_ctx, &byte, 1U, UINT32_MAX) != 0U;
+    model_long_wait = false;
+    CHECK(!indefinite_wait);
+    CHECK(!found);
+    CHECK(waited_ms == UINT64_C(0x100000000));
+    if (search) {
+        CHECK(uni_hal_io_receive_sync(&io_ctx, &marker, 1U, 0));
+    }
     uni_hal_io_deinit(&io_ctx);
     return true;
 }
@@ -182,5 +225,7 @@ int main(void) {
     ok = always_ready(0, 1) && ok;
     ok = final_byte(3) && ok;
     ok = final_byte(7) && ok;
+    ok = full_timeout(false) && ok;
+    ok = full_timeout(true) && ok;
     return ok ? 0 : 1;
 }

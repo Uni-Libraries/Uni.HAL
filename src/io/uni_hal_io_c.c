@@ -56,13 +56,27 @@ static size_t _uni_hal_io_buf_read(uni_hal_io_buffer_t *buf, uint8_t *data, size
 
     TickType_t ticks_to_wait = 0U;
     if (wait_ms > 0U && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+        // Sample the 32-bit HAL clock at least once per half wrap, even with a coarse tick.
+        if (wait_ms > UINT32_MAX / 2U) {
+            wait_ms = UINT32_MAX / 2U;
+        }
         ticks_to_wait = pdMS_TO_TICKS(wait_ms);
-        if (ticks_to_wait == 0U) {
+        if (ticks_to_wait == portMAX_DELAY || (uint64_t)wait_ms * configTICK_RATE_HZ / 1000U > portMAX_DELAY) {
+            // A finite budget must neither wrap TickType_t nor select the infinite wait sentinel.
+            ticks_to_wait = portMAX_DELAY - 1U;
+        } else if (ticks_to_wait == 0U) {
             ticks_to_wait = 1U;
         }
     }
 
     return xStreamBufferReceive(buf->handle, data, data_len, ticks_to_wait);
+}
+
+static uint32_t elapsed_since(uint32_t *sample) {
+    uint32_t const now = uni_hal_systick_get_ms();
+    uint32_t const elapsed = now - *sample;
+    *sample = now;
+    return elapsed;
 }
 
 // A one-byte write already has whole-block semantics in a FreeRTOS stream buffer.
@@ -171,17 +185,17 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
         if (from_isr) {
             timeout = 0U;
         }
-        uint32_t const t_start = uni_hal_systick_get_ms();
-
+        uint32_t sample = timeout != 0U ? uni_hal_systick_get_ms() : 0U;
         for (;;) {
-            uint32_t const elapsed = uni_hal_systick_get_ms() - t_start;
-            uint32_t const wait_ms = (elapsed < timeout) ? (timeout - elapsed) : 0U;
-
-            received += _uni_hal_io_buf_read(&ctx->buf_rx, &data[received], data_len - received, wait_ms, from_isr);
-
-            if (received >= data_len || (uni_hal_systick_get_ms() - t_start) >= timeout) {
+            received += _uni_hal_io_buf_read(&ctx->buf_rx, &data[received], data_len - received, timeout, from_isr);
+            if (received >= data_len || timeout == 0U) {
                 break;
             }
+            uint32_t const elapsed = elapsed_since(&sample);
+            if (elapsed >= timeout) {
+                break;
+            }
+            timeout -= elapsed;
         }
     }
 
@@ -221,16 +235,17 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
     if (from_isr) {
         timeout = 0U;
     }
-    uint32_t const start = timeout != 0U ? uni_hal_systick_get_ms() : 0U;
+    uint32_t sample = timeout != 0U ? uni_hal_systick_get_ms() : 0U;
     size_t available = timeout == 0U ? xStreamBufferBytesAvailable(ctx->buf_rx.handle) : 0U;
     for (;;) {
         uint32_t wait_ms = 0U;
         if (timeout != 0U) {
-            uint32_t const elapsed = uni_hal_systick_get_ms() - start;
+            uint32_t const elapsed = elapsed_since(&sample);
             if (elapsed >= timeout) {
                 break;
             }
-            wait_ms = timeout - elapsed;
+            timeout -= elapsed;
+            wait_ms = timeout;
         } else {
             if (available == 0U) {
                 break;
@@ -249,7 +264,7 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
         if (ch == data[match_idx]) {
             match_idx++;
             if (match_idx == data_len) {
-                if (timeout != 0U && (uni_hal_systick_get_ms() - start) > timeout) {
+                if (timeout != 0U && (uni_hal_systick_get_ms() - sample) > timeout) {
                     // The read consumed the marker. Deliver it on the next matching call.
                     break;
                 }
