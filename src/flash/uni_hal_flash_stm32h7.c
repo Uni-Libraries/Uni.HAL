@@ -245,7 +245,7 @@ static uint32_t _uni_hal_flash_calc_pll1_p_hz(void) {
         return 0U;
     }
 
-    uint32_t const pll_fracn = LL_RCC_PLL1_GetFRACN();
+    uint32_t const pll_fracn = LL_RCC_PLL1FRACN_IsEnabled() ? LL_RCC_PLL1_GetFRACN() : 0U;
     uint64_t const vco_input_hz = ((uint64_t)pll_input_hz) / pll_m;
     uint64_t const vco_mult_q13 = ((uint64_t)pll_n << 13U) + pll_fracn;
     uint64_t const vco_hz = (vco_input_hz * vco_mult_q13) >> 13U;

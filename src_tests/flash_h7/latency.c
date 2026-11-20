@@ -38,5 +38,15 @@ static unsigned check(void) {
     CHECK(uni_hal_flash_configure_latency_auto(200000000U) && latency_is(LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_1));
     LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_1);
     CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0));
+    // HSI64 / 16 * (140 + FRACN / 8192) / 2 / 2 gives 140 or 140.5 MHz AXI.
+    // The programmed fraction stays in PLL1FRACR when fractional mode is disabled.
+    LL_RCC_SetSysPrescaler(LL_RCC_SYSCLK_DIV_1);
+    LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_2);
+    LL_RCC_PLL1_SetN(140U);
+    LL_RCC_PLL1_SetFRACN(4096U);
+    LL_RCC_PLL1FRACN_Enable();
+    CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_0));
+    LL_RCC_PLL1FRACN_Disable();
+    CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0));
     return 0;
 }
