@@ -30,7 +30,8 @@ static bool g_uni_hal_segger_rtt_inited = false;
 void uni_hal_segger_rtt_init(void) {
 #if !defined(UNI_HAL_TARGET_MCU_PC)
     if (!g_uni_hal_segger_rtt_inited) {
-        SEGGER_RTT_Init();
+        // This read-only query initializes RTT lazily and preserves previously configured channels.
+        (void)SEGGER_RTT_HasKey();
         g_uni_hal_segger_rtt_inited = true;
     }
 #endif

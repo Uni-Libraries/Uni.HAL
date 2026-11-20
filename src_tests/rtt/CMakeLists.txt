@@ -12,3 +12,4 @@ endfunction()
 
 add_rtt_test(rtt_stdio_init init.c)
 add_rtt_test(rtt_stdio_tx transmit.c)
+add_rtt_test(rtt_stdio_preserve_buffers preserve_buffers.c)
