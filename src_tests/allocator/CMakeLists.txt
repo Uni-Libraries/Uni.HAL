@@ -119,6 +119,7 @@ endif()
 
 if(UNI_HAL_TEST_STM32_QEMU)
     add_subdirectory(../mco mco)
+    add_subdirectory(../gpio gpio)
     add_subdirectory(../dwt_stm32 dwt_stm32)
     add_subdirectory(../rtc_stm32 rtc_stm32)
     add_subdirectory(../adc adc)

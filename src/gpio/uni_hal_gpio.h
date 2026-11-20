@@ -276,8 +276,10 @@ bool uni_hal_gpio_pin_get(const uni_hal_gpio_pin_context_t* ctx_pin);
 bool uni_hal_gpio_pin_set(uni_hal_gpio_pin_context_t* ctx_pin, bool val);
 
 /**
- * Sets interrupt callback for a given pin
- * @param ctx_pin pointer to GPIO pint context structure
+ * Sets the interrupt callback for a pin. On STM32, pins with the same number
+ * share an EXTI line. Registration moves that line to the selected port and
+ * discards any edge latched before the new configuration takes effect.
+ * @param ctx_pin pointer to the GPIO pin context
  * @param edge edge to trigger on
  * @param cb callback
  * @param cookie user data for callback

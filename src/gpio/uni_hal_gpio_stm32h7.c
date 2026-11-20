@@ -463,6 +463,8 @@ bool uni_hal_gpio_pin_deinit(uni_hal_gpio_pin_context_t *ctx) {
     bool result = false;
 
     if (ctx != NULL) {
+        // Keep a replacement from claiming this EXTI line between the owner check and release.
+        uint32_t const mask = uni_hal_core_irq_pause();
         result = true;
         if (ctx->inited && ctx->gpio_bank != UNI_HAL_CORE_PERIPH_EMPTY) {
             GPIO_TypeDef *bank = _uni_hal_gpio_bank(ctx->gpio_bank);
@@ -484,6 +486,7 @@ bool uni_hal_gpio_pin_deinit(uni_hal_gpio_pin_context_t *ctx) {
             }
         }
         ctx->inited = false;
+        uni_hal_core_irq_resume(mask);
     }
 
     return result;
@@ -532,6 +535,8 @@ bool uni_hal_gpio_pin_set(uni_hal_gpio_pin_context_t *ctx_pin, bool val) {
 
 bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx, uni_hal_gpio_it_edge_e edge, uni_hal_gpio_callback_t cb, void* cookie) {
     bool result = false;
+    // The previous owner can already have an enabled and pending shared IRQ.
+    uint32_t const mask = uni_hal_core_irq_pause();
     if (uni_hal_gpio_pin_is_inited(ctx)) {
         uint32_t exti_port = _uni_hal_gpio_exti_port(ctx->gpio_bank);
         uint32_t exti_line = _uni_hal_gpio_exti_line(ctx->gpio_pin);
@@ -569,6 +574,7 @@ bool uni_hal_gpio_pin_set_interrupt_callback(uni_hal_gpio_pin_context_t* ctx, un
             result = true;
         }
     }
+    uni_hal_core_irq_resume(mask);
     return result;
 }
 
