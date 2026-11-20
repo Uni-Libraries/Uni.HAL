@@ -25,6 +25,7 @@ static uint32_t now, erase_calls, writes, ranges, unlocks, locks, wakes;
 static uint32_t cache_addr, cache_size, icache_flushes, dcache_flushes;
 static uint8_t word[32] __attribute__((aligned(32)));
 static bool signalled, pending, unlocked, nested_ok, reject_unlock, fail_allocation;
+static uint32_t range_error_sector = UINT32_MAX;
 static unsigned allocations, kernel_calls_before_start, suspends, resumes, ob_programs, ob_launches;
 static bool reject_option_program, reject_lock, reject_option_lock, option_timeout;
 static BaseType_t model_scheduler = taskSCHEDULER_RUNNING;
@@ -122,8 +123,8 @@ static HAL_StatusTypeDef program(void) {
 static HAL_StatusTypeDef erase(uint32_t *error) {
     ++ranges;
     nested_ok = nested_ok && all_competitors_rejected();
-    *error = UINT32_MAX;
-    return HAL_OK;
+    *error = range_error_sector;
+    return *error == UINT32_MAX ? HAL_OK : HAL_ERROR;
 }
 static HAL_StatusTypeDef program_options(void) {
     ++ob_programs;
@@ -225,6 +226,23 @@ static unsigned check(void) {
     CHECK(erase_calls == before + FLASH_SECTOR_TOTAL && nested_ok);
     CHECK(uni_hal_flash_write(FLASH_BASE, sizeof word, word) == sizeof word && nested_ok);
     CHECK(uni_hal_flash_erase(FLASH_BASE, 1) && nested_ok);
+
+    // Two requested bytes erase two full cacheable sectors, including their instructions.
+    uint32_t const start = FLASH_BANK2_BASE + FLASH_SECTOR_SIZE - 1U;
+    unsigned const d_before = dcache_flushes, i_before = icache_flushes;
+    CHECK(uni_hal_flash_erase(start, 2U));
+    CHECK(dcache_flushes == d_before + 1U && icache_flushes == i_before + 1U);
+    CHECK(cache_addr == FLASH_BANK2_BASE && cache_size == 2U * FLASH_SECTOR_SIZE);
+    // The first sector has already changed when the second sector fails.
+    range_error_sector = 1U;
+    CHECK(!uni_hal_flash_erase(start, 2U));
+    CHECK(dcache_flushes == d_before + 2U && icache_flushes == i_before + 2U);
+    CHECK(cache_addr == FLASH_BANK2_BASE && cache_size == 2U * FLASH_SECTOR_SIZE);
+    range_error_sector = UINT32_MAX;
+    scb.CCR = 0;
+    CHECK(uni_hal_flash_erase(start, 2U));
+    CHECK(dcache_flushes == d_before + 2U && icache_flushes == i_before + 2U);
+    scb.CCR = SCB_CCR_IC_Msk | SCB_CCR_DC_Msk;
 
     reject_option_program = true;
     CHECK(!uni_hal_flash_swap_banks());
