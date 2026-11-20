@@ -192,37 +192,58 @@ bool uni_hal_rtc_is_inited(const uni_hal_rtc_context_t *ctx) {
 }
 
 
+typedef struct {
+    uint32_t subsecond, time, date;
+} rtc_snapshot_t;
+
+static rtc_snapshot_t read_snapshot(void) {
+    rtc_snapshot_t sample;
+    sample.subsecond = LL_RTC_TIME_GetSubSecond(RTC);
+    sample.time = READ_REG(RTC->TR);
+    sample.date = LL_RTC_DATE_Get(RTC); // Release the shadow latch on every path.
+    return sample;
+}
+
+static bool read_consistent_snapshot(rtc_snapshot_t *sample) {
+    // In bypass mode registers can change independently. A shadow lock can also be
+    // missed at an update (STM32H743 ES0392). Compare two complete calendar reads.
+    rtc_snapshot_t previous = read_snapshot();
+    for (unsigned retry = 0U; retry < 3U; ++retry) {
+        *sample = read_snapshot();
+        if (sample->subsecond == previous.subsecond && sample->time == previous.time && sample->date == previous.date) {
+            return true;
+        }
+        previous = *sample;
+    }
+    return false;
+}
+
+
 bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *datetime) {
     bool result = false;
 
-    if (uni_hal_rtc_is_inited(ctx) && datetime != nullptr) {
-        // Reading the sub-second or the time register freezes the higher registers until the
-        // date register is read: in this order the three values belong to the same instant.
-        uint32_t const subsecond = LL_RTC_TIME_GetSubSecond(RTC);
-        // Keep the AM/PM flag and BCD hour from the same register read.
-        uint32_t const time = READ_REG(RTC->TR);
-        uint32_t const date = LL_RTC_DATE_Get(RTC);
-
+    rtc_snapshot_t sample;
+    if (uni_hal_rtc_is_inited(ctx) && datetime != nullptr && read_consistent_snapshot(&sample)) {
         // the sub-second counter runs down from the synchronous prescaler to 0 within a second
         uint32_t const prescaler = LL_RTC_GetSynchPrescaler(RTC);
         uint32_t milliseconds = 0U;
-        if (subsecond <= prescaler) {
-            milliseconds = (1000U * (prescaler - subsecond)) / (prescaler + 1U);
+        if (sample.subsecond <= prescaler) {
+            milliseconds = (1000U * (prescaler - sample.subsecond)) / (prescaler + 1U);
         }
         datetime->milliseconds = (uint16_t)((milliseconds < 1000U) ? milliseconds : 999U);
 
-        uint32_t const hour_bcd = (time & (RTC_TR_HT | RTC_TR_HU)) >> RTC_TR_HU_Pos;
+        uint32_t const hour_bcd = (sample.time & (RTC_TR_HT | RTC_TR_HU)) >> RTC_TR_HU_Pos;
         uint8_t hour = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(hour_bcd);
         if (LL_RTC_GetHourFormat(RTC) == LL_RTC_HOURFORMAT_AMPM) {
-            hour = (uint8_t)((hour % 12U) + ((time & RTC_TR_PM) ? 12U : 0U));
+            hour = (uint8_t)((hour % 12U) + ((sample.time & RTC_TR_PM) ? 12U : 0U));
         }
         datetime->hours = hour;
-        datetime->minutes = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_MINUTE(time));
-        datetime->seconds = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_SECOND(time));
-        datetime->year = (uint16_t)(UNI_HAL_RTC_YEAR_BASE + __LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_YEAR(date)));
-        datetime->month = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_MONTH(date));
-        datetime->day = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_DAY(date));
-        datetime->weekday = (uint8_t)__LL_RTC_GET_WEEKDAY(date);
+        datetime->minutes = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_MINUTE(sample.time));
+        datetime->seconds = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_SECOND(sample.time));
+        datetime->year = (uint16_t)(UNI_HAL_RTC_YEAR_BASE + __LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_YEAR(sample.date)));
+        datetime->month = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_MONTH(sample.date));
+        datetime->day = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_DAY(sample.date));
+        datetime->weekday = (uint8_t)__LL_RTC_GET_WEEKDAY(sample.date);
 
         result = true;
     }

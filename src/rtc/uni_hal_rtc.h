@@ -123,7 +123,8 @@ bool uni_hal_rtc_is_inited(const uni_hal_rtc_context_t *ctx);
 uni_hal_rcc_clksrc_e uni_hal_rtc_clock_source_get(void);
 
 /**
- * Read the calendar
+ * Read a coherent calendar value. On STM32, if consecutive snapshots keep differing,
+ * the call returns false and leaves the output untouched.
  * @param ctx pointer to the RTC context
  * @param datetime receives date and time
  * @return true on success
