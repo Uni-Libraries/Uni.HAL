@@ -106,3 +106,13 @@ target_include_directories(uni_hal_test_rcc SYSTEM PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/st_stm32l4/include_device"
     "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/st_stm32l4/include_hal"
 )
+
+foreach(hz IN ITEMS 128 1000 4000)
+    set(target systick_zynq_delay_${hz})
+    add_executable(${target} systick/zynq_delay.c)
+    target_compile_definitions(${target} PRIVATE TEST_TICK_HZ=${hz})
+    target_include_directories(${target} PRIVATE uart_zynq/fakes)
+    target_link_libraries(${target} PRIVATE uni.hal)
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target} PROPERTIES TIMEOUT 10)
+endforeach()

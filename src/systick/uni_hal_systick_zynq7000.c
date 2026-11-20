@@ -54,15 +54,30 @@ uint32_t uni_hal_systick_get_freq(void) {
 }
 
 
+// Convert the remaining global-timer counts to a finite scheduler wait, rounded up.
+// Splitting off whole seconds keeps the product in range for long delays.
+static TickType_t delay_ticks(XTime counts) {
+    uint64_t const hz = (COUNTS_PER_SECOND);
+    uint64_t const seconds = counts / hz;
+    uint64_t const fraction = counts % hz;
+    uint64_t const ticks = seconds * configTICK_RATE_HZ + (fraction * configTICK_RATE_HZ + hz - 1U) / hz;
+    return ticks < portMAX_DELAY ? (TickType_t)ticks : portMAX_DELAY - 1U;
+}
+
 void uni_hal_systick_delay(uint32_t val) {
-    if (val == 0U) {
-        val = 1U;
-    }
-    if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
-        vTaskDelay(pdMS_TO_TICKS(val));
-        return;
-    }
-    uint32_t start = uni_hal_systick_get_ms();
-    while ((uni_hal_systick_get_ms() - start) < val) {
+    uint64_t const ms = val != 0U ? val : 1U;
+    XTime const duration = (ms * (COUNTS_PER_SECOND) + 999U) / 1000U;
+    bool const scheduled = xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
+    XTime start;
+    XTime_GetTime(&start);
+    XTime elapsed = 0U;
+    while (elapsed < duration) {
+        if (scheduled) {
+            vTaskDelay(delay_ticks(duration - elapsed));
+        }
+        // A tick can arrive immediately after vTaskDelay blocks the task.
+        XTime now;
+        XTime_GetTime(&now);
+        elapsed = now - start;
     }
 }
