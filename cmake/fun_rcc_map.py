@@ -1046,8 +1046,11 @@ def main() -> int:
     mco_sources: dict[int, str | None] = {1: None, 2: None}
     mco_divs: dict[int, int] = {1: 1, 2: 1}
 
-    for match in re.finditer(r"uni_hal_rcc_stm32_mco_enable\s*\(\s*([12])\s*,\s*([^,\)]+)\s*,\s*([^,\)]+)\s*\)", merged_raw):
-        idx = int(match.group(1), 10)
+    for match in re.finditer(r"\buni_hal_rcc_stm32_mco_enable\s*\(\s*([^,;]+),\s*([^,)]+),\s*([^,)]+)\)", merged_raw):
+        index = parse_int(match.group(1))
+        if index not in (0, 1) or (index == 1 and "STM32L4" in defined):
+            continue
+        idx = index + 1  # The HAL uses zero-based indices for MCO1 and MCO2.
         src = match.group(2).strip()
         div = match.group(3).strip()
         mco_sources[idx] = src
