@@ -1177,6 +1177,14 @@ uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
     uni_hal_rcc_clksrc_e result = UNI_HAL_RCC_CLKSRC_UNKNOWN;
     if (uni_hal_rcc_is_inited()) {
         switch (target) {
+            case UNI_HAL_CORE_PERIPH_ADC_1:
+            case UNI_HAL_CORE_PERIPH_ADC_2:
+            case UNI_HAL_CORE_PERIPH_ADC_3:
+                switch (LL_RCC_GetADCClockSource(LL_RCC_ADC_CLKSOURCE)) {
+                    case LL_RCC_ADC_CLKSOURCE_SYSCLK: return UNI_HAL_RCC_CLKSRC_SYSCLK;
+                    case LL_RCC_ADC_CLKSOURCE_NONE: return UNI_HAL_RCC_CLKSRC_NONE;
+                    default: return UNI_HAL_RCC_CLKSRC_UNKNOWN;
+                }
             case UNI_HAL_CORE_PERIPH_RTC:
                 switch (LL_RCC_GetRTCClockSource()) {
                     case LL_RCC_RTC_CLKSOURCE_NONE:
