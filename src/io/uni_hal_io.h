@@ -279,7 +279,8 @@ bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx);
 
 
 /**
- * Receive data
+ * Receive data. From a FreeRTOS-callable MCU interrupt, read only the bytes
+ * already available, regardless of timeout. Serialize readers of the same RX buffer.
  * @param ctx pointer to the interface context
  * @param data pointer to the data array (must be allocated by the caller)
  * @param data_len number of bytes to receive
@@ -292,7 +293,8 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 /**
  * Consume RX bytes through the first complete marker, leaving later bytes queued.
  * @param timeout overall search budget in milliseconds. Zero polls only the bytes
- *        already queued on entry.
+ *        already queued on entry. A FreeRTOS-callable MCU interrupt always
+ *        uses this nonblocking polling mode.
  * @return true when the marker was found
  * @note A partial match resumes on the next call with the same marker address and
  *       length. Keep its bytes unchanged between retries. Call uni_hal_io_receive_sync_reset

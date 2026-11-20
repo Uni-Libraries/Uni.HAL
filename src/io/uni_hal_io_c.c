@@ -31,20 +31,31 @@ static bool _uni_hal_io_buf_create(uni_hal_io_buffer_t *buf) {
     return buf->handle != NULL;
 }
 
-/**
- * Take bytes out of a buffer, task context
- * @param wait_ms how long to sleep for the first byte when the buffer is empty
- */
-static size_t _uni_hal_io_buf_read(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, uint32_t wait_ms) {
-    // A task sleeps until data arrives. Before the scheduler runs and inside an interrupt
-    // there is nothing to switch to, so the buffer is polled there.
-    bool can_block = xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
+static bool reading_from_isr(void) {
+#if defined(UNI_HAL_TARGET_MCU_PC)
+    return false;
+#else
+    return xPortIsInsideInterrupt() != pdFALSE;
+#endif
+}
+
+static size_t _uni_hal_io_buf_read(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len,
+                                   uint32_t wait_ms, bool from_isr) {
 #if !defined(UNI_HAL_TARGET_MCU_PC)
-    can_block = can_block && !xPortIsInsideInterrupt();
+    if (from_isr) {
+        BaseType_t woken = pdFALSE;
+        size_t const received = xStreamBufferReceiveFromISR(buf->handle, data, data_len, &woken);
+        if (woken) {
+            portYIELD_FROM_ISR(pdTRUE);
+        }
+        return received;
+    }
+#else
+    (void)from_isr;
 #endif
 
     TickType_t ticks_to_wait = 0U;
-    if (can_block && wait_ms > 0U) {
+    if (wait_ms > 0U && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
         ticks_to_wait = pdMS_TO_TICKS(wait_ms);
         if (ticks_to_wait == 0U) {
             ticks_to_wait = 1U;
@@ -156,13 +167,17 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
     size_t received = 0;
 
     if (ctx != NULL && ctx->buf_rx.handle != NULL && data != NULL) {
+        bool const from_isr = reading_from_isr();
+        if (from_isr) {
+            timeout = 0U;
+        }
         uint32_t const t_start = uni_hal_systick_get_ms();
 
         for (;;) {
             uint32_t const elapsed = uni_hal_systick_get_ms() - t_start;
             uint32_t const wait_ms = (elapsed < timeout) ? (timeout - elapsed) : 0U;
 
-            received += _uni_hal_io_buf_read(&ctx->buf_rx, &data[received], data_len - received, wait_ms);
+            received += _uni_hal_io_buf_read(&ctx->buf_rx, &data[received], data_len - received, wait_ms, from_isr);
 
             if (received >= data_len || (uni_hal_systick_get_ms() - t_start) >= timeout) {
                 break;
@@ -202,6 +217,10 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
         return true;
     }
 
+    bool const from_isr = reading_from_isr();
+    if (from_isr) {
+        timeout = 0U;
+    }
     uint32_t const start = timeout != 0U ? uni_hal_systick_get_ms() : 0U;
     size_t available = timeout == 0U ? xStreamBufferBytesAvailable(ctx->buf_rx.handle) : 0U;
     for (;;) {
@@ -220,7 +239,7 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
         }
 
         uint8_t ch;
-        if (_uni_hal_io_buf_read(&ctx->buf_rx, &ch, 1U, wait_ms) == 0U) {
+        if (_uni_hal_io_buf_read(&ctx->buf_rx, &ch, 1U, wait_ms, from_isr) == 0U) {
             if (timeout == 0U) {
                 break;
             }
