@@ -162,7 +162,8 @@ typedef struct {
 // Functions
 //
 
-bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t* config);
+/** Copy the configuration for startup and clock recovery. Returns false during clock initialization. */
+bool uni_hal_rcc_stm32h7_config_set(const uni_hal_rcc_stm32h7_config_t *config);
 
 uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get();
 

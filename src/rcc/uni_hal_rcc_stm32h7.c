@@ -34,8 +34,9 @@
 // Globals
 //
 
-uni_hal_rcc_stm32h7_config_t* g_uni_hal_rcc_config = nullptr;
-uni_hal_rcc_stm32h7_status_t  g_uni_hal_rcc_status = { 0 };
+static uni_hal_rcc_stm32h7_config_t rcc_configs[2];
+static const uni_hal_rcc_stm32h7_config_t *volatile g_uni_hal_rcc_config;
+static volatile uni_hal_rcc_stm32h7_status_t g_uni_hal_rcc_status;
 
 
 
@@ -1682,13 +1683,23 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
 // STM32H7 - specific
 //
 
-bool uni_hal_rcc_stm32h7_config_set(uni_hal_rcc_stm32h7_config_t *config) {
-    bool result = false;
-    if (config != nullptr) {
-        g_uni_hal_rcc_config = config;
-        result = true;
+bool uni_hal_rcc_stm32h7_config_set(const uni_hal_rcc_stm32h7_config_t *config) {
+    if (config == nullptr) {
+        return false;
     }
-    return result;
+
+    uint32_t const mask = uni_hal_core_irq_pause();
+    if (g_uni_hal_rcc_reconfig_in_progress) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    // An NMI can interrupt the copy. Publish only the completed snapshot.
+    uni_hal_rcc_stm32h7_config_t *next = g_uni_hal_rcc_config == &rcc_configs[0] ? &rcc_configs[1] : &rcc_configs[0];
+    *next = *config;
+    __DMB();
+    g_uni_hal_rcc_config = next;
+    uni_hal_core_irq_resume(mask);
+    return true;
 }
 
 uint32_t uni_hal_rcc_stm32h7_reset_flags_get(void) {
@@ -1822,11 +1833,6 @@ UNI_COMMON_COMPILER_WEAK void uni_hal_rcc_css_callback(void) {
 void NMI_Handler(void) {
     if (LL_RCC_IsActiveFlag_HSECSS()) {
         LL_RCC_ClearFlag_HSECSS();
-
-        if (g_uni_hal_rcc_config != nullptr)
-        {
-            g_uni_hal_rcc_config->hse_enable = false;
-        }
 
         g_uni_hal_rcc_status.css_fault = true;
         g_uni_hal_rcc_status.hse_inited = false;
