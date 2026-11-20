@@ -112,6 +112,25 @@ bool adc_model_capturing(const volatile uint16_t *data, uint32_t count) {
            LL_DMA_GetMemoryAddress(DMA1, index) == (uintptr_t)data && LL_DMA_GetDataLength(DMA1, index) == count;
 }
 
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+// TE clears EN in hardware. A direct-mode error can leave EN set until software stops the stream.
+bool adc_model_dma_fault(bool direct_mode) {
+    uint32_t const stream = LL_DMA_STREAM_1;
+    uint32_t const flag = direct_mode ? DMA_LISR_DMEIF1 : DMA_LISR_TEIF1;
+    DMA1->LISR |= flag | DMA_LISR_TCIF1;
+    if (!direct_mode) {
+        LL_DMA_DisableStream(DMA1, stream);
+    }
+    bool interrupt = direct_mode ? LL_DMA_IsEnabledIT_DME(DMA1, stream) : LL_DMA_IsEnabledIT_TE(DMA1, stream);
+    DMA1->LIFCR = 0U;
+    if (interrupt) {
+        DMA1_Stream1_IRQHandler();
+        DMA1->LISR &= ~DMA1->LIFCR; // W1C acknowledgement in the RAM model.
+    }
+    return !(DMA1->LISR & flag) && !LL_DMA_IsEnabledStream(DMA1, stream);
+}
+#endif
+
 bool model_gpio_init(uni_hal_gpio_pin_context_t *pin) {
     (void)pin;
     ++adc_peripheral_calls;
@@ -147,9 +166,11 @@ void model_delay(uint32_t ms) {
 }
 
 uint32_t model_tick(void) {
-    ADC1->CR &= ~ADC_CR_ADCAL;
-    if (ADC1->CR & ADC_CR_ADEN) {
-        ADC1->ISR |= ADC_ISR_ADRDY;
+    for (unsigned i = 0; i < 3; ++i) {
+        adcs[i].CR &= ~ADC_CR_ADCAL;
+        if (adcs[i].CR & ADC_CR_ADEN) {
+            adcs[i].ISR |= ADC_ISR_ADRDY;
+        }
     }
     return ++tick;
 }

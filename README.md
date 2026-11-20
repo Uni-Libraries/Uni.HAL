@@ -162,6 +162,11 @@ unavailable data, and `uni_hal_dma_stm32l4_has_transfer_error(dma)` reports the 
 Discard the old buffer contents, correct the transfer setup and reload its length before
 enabling the channel again. Starting the new transfer clears the fault indication.
 
+On STM32H743 a transfer or direct-mode error stops the ADC DMA stream. The ADC readiness query
+then returns false and its getters report unavailable data. Call `uni_hal_dma_enable(dma, false)`
+with the original descriptor to release the stream. Explicitly stopping the capture also makes
+the old ADC buffer unavailable, including after another peripheral takes over the stream.
+
 **UART output.** `uni_hal_usart_transmit_data()` and with it `printf()` queue the data for the
 interrupt handler and return; what does not fit into the TX buffer is dropped. Output that has
 to be complete, e.g. before a reset, is followed by a loop on `uni_hal_usart_transmit_busy()`.

@@ -30,12 +30,18 @@
 // ISRs
 //
 
+typedef enum {
+    DMA_NO_CIRCULAR_CAPTURE,
+    DMA_CIRCULAR_RUNNING,
+    DMA_CIRCULAR_FAILED
+} dma_capture_state_t;
+
 typedef struct {
     const uni_hal_dma_context_t *dma;
     uni_hal_dma_stm32h7_event_fn event;
     void *owner;
     uint32_t saved_interrupts;
-    bool circular_running;
+    dma_capture_state_t capture;
 } dma_listener_t;
 
 static dma_listener_t listeners[2][8];
@@ -80,8 +86,16 @@ bool uni_hal_dma_stm32h7_claim(const uni_hal_dma_context_t *dma, uni_hal_dma_stm
 }
 
 void uni_hal_dma_stm32h7_circular_started(const uni_hal_dma_context_t *dma) {
-    // Only the owner of an established circular capture may stop it through the public DMA API.
-    stream_owner(dma)->circular_running = true;
+    stream_owner(dma)->capture = DMA_CIRCULAR_RUNNING;
+}
+
+bool uni_hal_dma_stm32h7_circular_active(const uni_hal_dma_context_t *dma, const void *owner) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    const dma_listener_t *slot = stream_owner(dma);
+    bool const active = slot && slot->dma == dma && slot->owner == owner && slot->capture == DMA_CIRCULAR_RUNNING &&
+        LL_DMA_IsEnabledStream(uni_hal_dma_stm32h7_get_module(dma->config.instance), dma->config.channel);
+    uni_hal_core_irq_resume(mask);
+    return active;
 }
 
 bool uni_hal_dma_stm32h7_release(const uni_hal_dma_context_t *dma) {
@@ -99,14 +113,18 @@ static void handle_stream_irq(DMA_TypeDef *module, uint32_t stream) {
     uint32_t const mask = uni_hal_core_irq_pause();
     uint32_t const status = stream < 4U ? module->LISR : module->HISR;
     uint32_t const flags = (status >> flag_shift[stream % 4U]) & DMA_STREAM_FLAGS;
-    dma_listener_t const listener = listeners[module == DMA2][stream];
+    dma_listener_t *listener = &listeners[module == DMA2][stream];
     // Streams used directly by the application can also enable transfer interrupts.
-    uint32_t const handled = listener.dma ? flags : flags & (DMA_LISR_TCIF0 | DMA_LISR_TEIF0 | DMA_LISR_DMEIF0);
+    uint32_t const handled = listener->dma ? flags : flags & (DMA_LISR_TCIF0 | DMA_LISR_TEIF0 | DMA_LISR_DMEIF0);
     if (handled) {
         clear_stream_flags(module, stream, handled);
         uint32_t const fault = handled & (DMA_LISR_TEIF0 | DMA_LISR_DMEIF0);
-        if (listener.event && (fault || (handled & DMA_LISR_TCIF0))) {
-            listener.event(listener.owner, listener.dma, fault != 0U);
+        if (fault && listener->capture == DMA_CIRCULAR_RUNNING) {
+            listener->capture = DMA_CIRCULAR_FAILED;
+            LL_DMA_DisableStream(module, stream);
+        }
+        if (listener->event && (fault || (handled & DMA_LISR_TCIF0))) {
+            listener->event(listener->owner, listener->dma, fault != 0U);
         }
     }
     uni_hal_core_irq_resume(mask);
@@ -327,7 +345,7 @@ bool uni_hal_dma_enable(uni_hal_dma_context_t *ctx, bool val) {
     dma_listener_t *slot = stream_owner(ctx);
     bool ok = false;
     // The ADC owner can explicitly stop its circular capture using the original descriptor.
-    if (slot && ctx->state.initialized && (!slot->dma || (!val && slot->dma == ctx && slot->circular_running))) {
+    if (slot && ctx->state.initialized && (!slot->dma || (!val && slot->dma == ctx && slot->capture != DMA_NO_CIRCULAR_CAPTURE))) {
         DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.instance);
         uint32_t const stream = ctx->config.channel;
         if (val) {

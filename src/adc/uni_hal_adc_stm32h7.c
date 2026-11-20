@@ -22,6 +22,7 @@
 
 // Uni.HAL
 #include "adc/uni_hal_adc.h"
+#include "adc/uni_hal_adc_internal.h"
 #include "dma/uni_hal_dma_stm32h7_irq.h"
 #include "adc/uni_hal_adc_stm32_config.h"
 #include "rcc/uni_hal_rcc.h"
@@ -610,8 +611,8 @@ bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
                            (uint32_t) ctx->config.data, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
     LL_DMA_SetDataLength(module, stream, ctx->config.channels_count);
 
-    //LL_DMA_EnableIT_TC(module, stream);
-    //LL_DMA_EnableIT_TE(module, stream);
+    LL_DMA_EnableIT_TE(module, stream);
+    LL_DMA_EnableIT_DME(module, stream);
 
     return true;
 }
@@ -797,19 +798,17 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         !_uni_hal_adc_powerup(ctx) || !_uni_hal_adc_enable(ctx)) {
         goto failed;
     }
-    if (config->dma) {
-        if (!_uni_hal_adc_configure_dma(ctx)) {
-            goto failed;
-        }
-        DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(config->dma->config.instance);
-        LL_DMA_EnableStream(module, config->dma->config.channel);
+    if (config->dma && !_uni_hal_adc_configure_dma(ctx)) {
+        goto failed;
     }
     uint32_t const mask = uni_hal_core_irq_pause();
+    if (config->dma) {
+        DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(config->dma->config.instance);
+        uni_hal_dma_stm32h7_circular_started(config->dma);
+        LL_DMA_EnableStream(module, config->dma->config.channel);
+    }
     ctx->state.initialized = true;
     _uni_hal_adc_trigger(ctx);
-    if (config->dma) {
-        uni_hal_dma_stm32h7_circular_started(config->dma);
-    }
     uni_hal_core_irq_resume(mask);
     return true;
 
@@ -825,8 +824,9 @@ failed:
 
 uint16_t uni_hal_adc_get_channel_mv(const uni_hal_adc_context_t *ctx, uint32_t channel) {
     uint16_t result = UINT16_MAX;
-    if (uni_hal_adc_has_channel(ctx, channel)) {
-        result = __LL_ADC_CALC_DATA_TO_VOLTAGE(ctx->config.v_ref, uni_hal_adc_get_channel_raw(ctx, channel), ctx->state.resolution);
+    uint16_t sample;
+    if (uni_hal_adc_find_sample(ctx, channel, &sample)) {
+        result = __LL_ADC_CALC_DATA_TO_VOLTAGE(ctx->config.v_ref, sample, ctx->state.resolution);
     }
 
     return result;
@@ -875,11 +875,12 @@ static int32_t _uni_hal_adc_calc_temperature(const uni_hal_adc_state_t *state,
 
 int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
     int32_t result = INT32_MAX;
-    if (uni_hal_adc_has_channel(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR) &&
+    uint16_t sample;
+    if (uni_hal_adc_find_sample(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR, &sample) &&
         ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3) {
         result = _uni_hal_adc_calc_temperature(&ctx->state,
                                                ctx->config.v_ref,
-                                               uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_TEMPSENSOR),
+                                               sample,
                                                ctx->state.resolution);
     }
     return result;
@@ -887,11 +888,12 @@ int32_t uni_hal_adc_stm32h7_get_mcutemp(const uni_hal_adc_context_t *ctx) {
 
 uint32_t uni_hal_adc_stm32h7_get_vdda(uni_hal_adc_context_t* ctx) {
     uint32_t result = UINT32_MAX;
-    if(uni_hal_adc_has_channel(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT) &&
+    uint16_t sample;
+    if (uni_hal_adc_find_sample(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT, &sample) &&
        ctx->config.instance == UNI_HAL_CORE_PERIPH_ADC_3 && ctx->state.cal.valid != false) {
         // the calibration value was taken with 16 bits
         const uint32_t vrefint_raw = __LL_ADC_CONVERT_DATA_RESOLUTION(
-                (uint32_t)uni_hal_adc_get_channel_raw(ctx, UNI_HAL_ADC_STM32H7_CHANNEL_REFINT),
+                (uint32_t)sample,
                 ctx->state.resolution, LL_ADC_RESOLUTION_16B);
         if (vrefint_raw != 0U) {
             result = (3300U * ctx->state.cal.vref_int) / vrefint_raw;
