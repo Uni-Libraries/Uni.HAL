@@ -12,8 +12,9 @@ for other targets.
 - **STM32H743** provides blocking SPI and asynchronous SPI with DMA, classic CAN
   and optional CAN FD, sector and bank Flash operations, and the CM7 cache API.
   I²C1–4 support 7-bit master and memory transfers by polling. The TIM driver
-  implements base timers with update callbacks on TIM15–17. Channel
-  configuration and input capture measurements use the L496 driver.
+  implements base timers with update callbacks on TIM15–17. Initialization requires
+  `channel_count == 0`. Channel configuration and input capture measurements
+  use the L496 driver.
 - **STM32L496** provides blocking SPI, classic CAN, DMA channel configuration,
   TIM1 input capture (CH1–4) and update callbacks on TIM1, TIM2 and TIM15–17.
   I²C1–4 use polling for master transfers and probing. Memory transfers also

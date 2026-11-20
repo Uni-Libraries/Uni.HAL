@@ -186,6 +186,10 @@ bool uni_hal_tim_period_elapsed(uni_hal_core_periph_e periph) {
 bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
     bool result = false;
     if (ctx != NULL) {
+        if (ctx->config.channel_count != 0U) {
+            ctx->status.inited = false;
+            return false;
+        }
         result = uni_hal_rcc_clk_set(ctx->config.instance, true);
 
         TIM_TypeDef *handle = _uni_hal_tim_get_handle(ctx->config.instance);
