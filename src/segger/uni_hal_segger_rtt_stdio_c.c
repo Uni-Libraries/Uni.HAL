@@ -16,7 +16,16 @@
 // segger
 #include "SEGGER_RTT.h"
 
+static const volatile SEGGER_RTT_CB *rtt_control_block(void) {
+    return (const volatile SEGGER_RTT_CB *)((uintptr_t)&_SEGGER_RTT + SEGGER_RTT_UNCACHED_OFF);
+}
 
+static unsigned pending_down_bytes(unsigned index) {
+    const volatile SEGGER_RTT_BUFFER_DOWN *down = &rtt_control_block()->aDown[index];
+    unsigned const rd = down->RdOff;
+    unsigned const wr = down->WrOff;
+    return wr >= rd ? wr - rd : down->SizeOfBuffer - rd + wr;
+}
 
 
 //
@@ -32,8 +41,10 @@ bool _uni_hal_segger_rtt_stdio_timer(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_ti
     if (ctx_fn != NULL) {
         uni_hal_io_context_t *ctx_io = ctx_fn->io;
         if (ctx_io != NULL) {
-            // RX
-            while (SEGGER_RTT_Read(ctx_fn->buffer_index_down, &data, sizeof(data))) {
+            // The debugger can refill the down ring while this interrupt is executing.
+            unsigned rx_remaining = pending_down_bytes(ctx_fn->buffer_index_down);
+            while (rx_remaining && SEGGER_RTT_Read(ctx_fn->buffer_index_down, &data, sizeof(data))) {
+                --rx_remaining;
                 // try to tunnel data
                 uni_hal_io_tunnel_transmit_result_t tunnel_result =
                         uni_hal_io_tunnel_transmit(ctx_io->handlers.tunnel_ctx, ctx_io, &data, sizeof(data));
@@ -49,8 +60,11 @@ bool _uni_hal_segger_rtt_stdio_timer(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_ti
                 }
             }
 
-            // TX
-            while (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
+            // Include bytes tunneled during RX, then defer new TX arrivals to the next poll.
+            StreamBufferHandle_t const tx = ctx_io->buf_tx.handle;
+            size_t tx_remaining = tx ? xStreamBufferBytesAvailable(tx) : 0U;
+            while (tx_remaining && uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
+                --tx_remaining;
                 // An IRQ cannot wait for the debugger to drain a blocking up-buffer.
                 if (SEGGER_RTT_PutCharSkip(ctx_fn->buffer_index_up, (char)data)) {
                     ctx_io->stats.tx_transmited++;
@@ -82,7 +96,7 @@ bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t *ctx) {
     }
     uni_hal_segger_rtt_init();
     // Use the same uncached control-block alias as SEGGER's read and write functions.
-    const volatile SEGGER_RTT_CB *rtt = (const volatile SEGGER_RTT_CB *)((uintptr_t)&_SEGGER_RTT + SEGGER_RTT_UNCACHED_OFF);
+    const volatile SEGGER_RTT_CB *rtt = rtt_control_block();
     const volatile SEGGER_RTT_BUFFER_UP *up = &rtt->aUp[ctx->buffer_index_up];
     const volatile SEGGER_RTT_BUFFER_DOWN *down = &rtt->aDown[ctx->buffer_index_down];
     if (!up->pBuffer || up->SizeOfBuffer < 2U || !down->pBuffer || down->SizeOfBuffer < 2U) {

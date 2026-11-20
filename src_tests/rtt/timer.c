@@ -1,3 +1,4 @@
+#include <stm32l4xx.h>
 #include "timer.h"
 
 #if configAPPLICATION_ALLOCATED_HEAP
@@ -31,6 +32,24 @@ bool __wrap_uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
     ++stop_calls;
     running = false;
     return ctx != nullptr;
+}
+
+// Dispatch the registered timer callback from an actual Cortex-M interrupt.
+static volatile unsigned polls;
+
+void WWDG_IRQHandler(void) {
+    ++polls;
+    portYIELD_FROM_ISR(callback(nullptr, callback_ctx));
+}
+
+void poll_from_irq(void) {
+    unsigned const before = polls;
+    NVIC_SetPriority(WWDG_IRQn, configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS));
+    NVIC_EnableIRQ(WWDG_IRQn);
+    NVIC_SetPendingIRQ(WWDG_IRQn);
+    __DSB();
+    __ISB();
+    CHECK(polls == before + 1U);
 }
 
 void finish(unsigned code) {

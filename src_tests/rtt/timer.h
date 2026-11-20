@@ -8,5 +8,6 @@ extern bool running;
 extern uni_hal_tim_callback_fn callback;
 extern void *callback_ctx;
 
+void poll_from_irq(void);
 void finish(unsigned code);
 #define CHECK(condition) do { if (!(condition)) finish(__LINE__); } while (0)

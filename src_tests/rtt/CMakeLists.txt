@@ -17,3 +17,7 @@ add_rtt_test(rtt_stdio_buffer_indices buffer_indices.c)
 
 add_rtt_test(rtt_stdio_empty_read empty_read.c)
 target_link_options(rtt_stdio_empty_read_qemu PRIVATE "LINKER:--wrap=SEGGER_RTT_Read")
+
+add_rtt_test(rtt_stdio_poll_budget poll_budget.c)
+target_link_options(rtt_stdio_poll_budget_qemu PRIVATE
+    "LINKER:--wrap=SEGGER_RTT_Read,--wrap=SEGGER_RTT_PutCharSkip")

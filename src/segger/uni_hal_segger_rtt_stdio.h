@@ -64,7 +64,9 @@ typedef struct {
  * IO and timer must remain alive while the timer runs. Index 0 uses the SEGGER
  * terminal buffers. Configure other RTT buffers before binding them and keep
  * the indices, buffers and their storage valid while active. Existing IO streams
- * are reused. Failure releases streams created by this call and permits retry.
+ * are reused. Each timer interrupt reads up to the bytes pending on its down
+ * channel at entry, then drains up to the bytes queued when its TX phase begins.
+ * Failure releases streams created by this call and permits retry.
  */
 bool uni_hal_segger_rtt_stdio_init(uni_hal_segger_context_t* ctx);
 
