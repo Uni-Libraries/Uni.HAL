@@ -4,6 +4,12 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+// Called after claim_transfer accepts a 7-bit address or an already shifted address byte.
+static inline uint16_t address_byte(uint16_t addr)
+{
+    return addr <= 0x7FU ? (uint16_t)(addr << 1U) : addr;
+}
+
 // The same millisecond budget covers the initial claim, ST polling and every HAL_BUSY retry.
 static inline uint32_t remaining_ms(uint32_t start, uint32_t timeout)
 {

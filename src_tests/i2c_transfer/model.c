@@ -262,6 +262,7 @@ typedef bool (*operation_t)(uni_hal_i2c_context_t *, uint16_t, uint16_t, uni_hal
 static void exercise(operation_t op)
 {
     uint32_t initial_starts = irq_starts;
+    assert(!op(&ctx, 0x0480, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 20));
     assert(!op(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 0));
     assert(irq_starts == initial_starts);
 

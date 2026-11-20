@@ -131,16 +131,6 @@ static uint16_t _uni_hal_i2c_memadd_size(uni_hal_i2c_memadd_size_e size) {
 }
 
 
-static uint16_t _uni_hal_i2c_shiftaddr(uint16_t addr) {
-    uint16_t result = addr;
-    if (result < UINT8_MAX && !(result & (1 << 7))) {
-        result = result << 1;
-    }
-
-    return result;
-}
-
-
 static I2C_TypeDef *_uni_hal_i2c_get_handle(uni_hal_core_periph_e instance) {
     I2C_TypeDef *result = NULL;
     switch (instance) {
@@ -255,9 +245,9 @@ static void release_bus(i2c_bus_t *bus)
     uni_hal_core_irq_resume(mask);
 }
 
-static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uint32_t timeout)
+static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t start, uint32_t timeout)
 {
-    if (!timeout || !polling_allowed() || !uni_hal_i2c_is_inited(ctx)) {
+    if (dev_addr > UINT8_MAX || !timeout || !polling_allowed() || !uni_hal_i2c_is_inited(ctx)) {
         return NULL;
     }
     i2c_bus_t *bus = get_bus(ctx->config.instance);
@@ -439,9 +429,9 @@ bool uni_hal_i2c_isready(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint32_t
     bool result = false;
 
     uint32_t const start_ms = uni_hal_systick_get_ms();
-    i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
+    i2c_bus_t *bus = claim_transfer(ctx, dev_addr, start_ms, timeout);
     if (bus) {
-        result = poll_ready(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr),
+        result = poll_ready(_uni_hal_i2c_get_handle_hal(ctx->config.instance), address_byte(dev_addr),
                             trials, start_ms, timeout);
         release_bus(bus);
     }
@@ -454,9 +444,9 @@ bool uni_hal_i2c_master_receive(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, u
     bool result = false;
 
     uint32_t const start_ms = uni_hal_systick_get_ms();
-    i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
+    i2c_bus_t *bus = claim_transfer(ctx, dev_addr, start_ms, timeout);
     if (bus) {
-        result = poll_master(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr),
+        result = poll_master(_uni_hal_i2c_get_handle_hal(ctx->config.instance), address_byte(dev_addr),
                              buf, buf_len, true, start_ms, timeout);
         release_bus(bus);
     }
@@ -469,9 +459,9 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
     bool result = false;
 
     uint32_t const start_ms = uni_hal_systick_get_ms();
-    i2c_bus_t *bus = claim_transfer(ctx, start_ms, timeout);
+    i2c_bus_t *bus = claim_transfer(ctx, dev_addr, start_ms, timeout);
     if (bus) {
-        result = poll_master(_uni_hal_i2c_get_handle_hal(ctx->config.instance), _uni_hal_i2c_shiftaddr(dev_addr),
+        result = poll_master(_uni_hal_i2c_get_handle_hal(ctx->config.instance), address_byte(dev_addr),
                              buf, buf_len, false, start_ms, timeout);
         release_bus(bus);
     }
@@ -485,12 +475,12 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
                          uni_hal_i2c_memadd_size_e mem_addr_size, uint8_t *buf, uint16_t len, uint32_t timeout)
 {
     uint32_t const start = uni_hal_systick_get_ms();
-    i2c_bus_t *bus = claim_transfer(ctx, start, timeout);
+    i2c_bus_t *bus = claim_transfer(ctx, dev_addr, start, timeout);
     if (!bus) {
         return false;
     }
     I2C_HandleTypeDef *handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-    uint16_t addr = _uni_hal_i2c_shiftaddr(dev_addr);
+    uint16_t addr = address_byte(dev_addr);
     uint16_t size = _uni_hal_i2c_memadd_size(mem_addr_size);
     bool result = false;
     uint32_t remaining = remaining_ms(start, timeout);

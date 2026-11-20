@@ -166,8 +166,8 @@ typedef struct {
  * Device addresses
  *
  * Every function takes the plain 7-bit address of the device, as data sheets give it, and
- * shifts it into the address byte itself. A value of 0x80 or above cannot be a 7-bit address
- * and is taken as an address byte that is already shifted left (e.g. 0xA0 for the device 0x50).
+ * shifts it into the address byte itself. Values from 0x80 to 0xFF are taken as address bytes
+ * that are already shifted left (e.g. 0xA0 for the device 0x50). Larger values are rejected.
  * A shifted address below 0x80 cannot be told apart from a 7-bit one, so never pass those.
  */
 
