@@ -47,6 +47,7 @@ typedef struct {
     uni_hal_i2c_context_t *owner;
     bool busy;
     volatile i2c_irq_state_t irq_state;
+    uint32_t completed_at_ms;
     bool wait_with_event;
     BaseType_t higher_priority_woken;
     SemaphoreHandle_t event;
@@ -307,6 +308,7 @@ static void _uni_hal_i2c_callback(I2C_HandleTypeDef *handle, bool success)
 {
     i2c_bus_t *bus = get_bus(_uni_hal_i2c_get_periph(handle->Instance));
     if (bus && bus->irq_state == IRQ_PENDING) {
+        bus->completed_at_ms = uni_hal_systick_get_ms();
         bus->irq_state = success ? IRQ_SUCCEEDED : IRQ_FAILED;
         if (bus->wait_with_event) {
             xSemaphoreGiveFromISR(bus->event, &bus->higher_priority_woken);
@@ -565,7 +567,8 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
         // HAL init reapplies TIMINGR and the driver's analog-on/digital-off filter defaults.
         ctx->state.initialized = reset && HAL_I2C_Init(handle) == HAL_OK;
     } else if (status == HAL_OK) {
-        result = bus->irq_state == IRQ_SUCCEEDED;
+        // The waiter may resume late even when the interrupt completed on time.
+        result = bus->irq_state == IRQ_SUCCEEDED && bus->completed_at_ms - start <= timeout;
         handle->pBuffPtr = NULL;
     }
     bus->irq_state = IRQ_IDLE;

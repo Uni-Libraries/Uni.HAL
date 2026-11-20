@@ -24,6 +24,8 @@ static uint8_t buffer[1], competitor_buffer[1];
 static uint32_t now, irq_mask, irq_starts, resets, accesses, polls, scheduled_at, waits, delays;
 static bool deliver, fail, compete, read_direction, fail_init, fail_start;
 static bool complete_at_deadline;
+static uint32_t irq_lag_ms, resume_lag_ms;
+static bool sample_wake_tick;
 static bool scheduler_running;
 static bool in_irq;
 static SemaphoreHandle_t active_event;
@@ -56,13 +58,21 @@ static void advance(void)
     }
 }
 
-uint32_t uni_hal_systick_get_ms(void) { advance(); return now; }
+uint32_t uni_hal_systick_get_ms(void) {
+    if (!in_irq) {
+        if (!sample_wake_tick) { advance(); }
+        sample_wake_tick = false;
+    }
+    return now;
+}
 uint32_t uni_hal_core_irq_pause(void) {
     uint32_t prior = irq_mask;
     if (!prior && complete_at_deadline && hi2c1.XferISR) {
         // STOPF arrives after the wait expires but just before cancellation masks IRQs.
         complete_at_deadline = false;
+        now += irq_lag_ms;
         run_irq();
+        now += resume_lag_ms;
     }
     irq_mask = 1;
     return prior;
@@ -118,9 +128,14 @@ BaseType_t xSemaphoreGiveFromISR(SemaphoreHandle_t event, BaseType_t *woken) {
 }
 BaseType_t xSemaphoreTake(SemaphoreHandle_t event, TickType_t ticks) {
     assert(event == active_event && !irq_mask && !in_irq && scheduler_running);
-    if (ticks) { ++waits; }
+    bool const blocking = ticks != 0U;
+    if (blocking) { ++waits; }
     while (!event->count && ticks--) { advance(); }
-    if (!event->count) { return pdFALSE; }
+    if (!event->count) {
+        // The first clock read after a timed wait sees the tick that woke the task.
+        sample_wake_tick = blocking;
+        return pdFALSE;
+    }
     event->count = 0;
     return pdTRUE;
 }
@@ -233,12 +248,21 @@ static void exercise(operation_t op)
     ctx.config.irq_enable = true;
 
     deliver = false;
+    now = UINT32_MAX - 5U;
     complete_at_deadline = true;
+    resume_lag_ms = 20U; // Another task can run after the completion IRQ.
     assert(op(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 10));
     assert(!complete_at_deadline && resets == initial_resets + 1 && accesses == initial_accesses + 2);
+    // An IRQ arriving one millisecond later must report timeout even if cancellation has not run yet.
+    complete_at_deadline = true;
+    irq_lag_ms = 1U;
+    assert(!op(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 10));
+    assert(!complete_at_deadline && !hi2c1.pBuffPtr && !hi2c1.XferISR);
+    assert(resets == initial_resets + 1 && accesses == initial_accesses + 3);
+    irq_lag_ms = resume_lag_ms = 0U;
     // A completion semaphore posted at the deadline cannot complete the next transfer.
     assert(!op(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 10));
-    assert(resets == initial_resets + 2 && accesses == initial_accesses + 2);
+    assert(resets == initial_resets + 2 && accesses == initial_accesses + 3);
 }
 
 int main(void)
