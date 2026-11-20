@@ -4,6 +4,7 @@
 
 // stdlib
 #include <stddef.h>
+#include <string.h>
 
 // STM32 LL
 #pragma GCC diagnostic push
@@ -75,44 +76,27 @@ bool uni_hal_crc_init(uni_hal_crc_context_t *ctx) {
 
 
 bool uni_hal_crc_append(uni_hal_crc_context_t *ctx, const uint8_t *data, uint32_t data_len) {
-    bool result = false;
-    if (uni_hal_crc_is_inited(ctx) && data != NULL) {
-        size_t idx;
-
-        if ((size_t) data % 4 == 0) {
-            // optimized path for aligned data
-            for (idx = 0; idx < data_len / 4; idx++) {
-                LL_CRC_FeedData32(CRC, uni_common_bytes_swap32(((const uint32_t *) data)[idx]));
-            }
-        } else {
-            // common path for unaligned data
-            for (idx = 0; idx < data_len / 4; idx++) {
-                const uint32_t val =
-                        (data[4U * idx] << 24U) | (data[(4U * idx) + 1U] << 16U) | (data[(4U * idx) + 2U] << 8U) |
-                        data[(4U * idx) + 3U];
-                LL_CRC_FeedData32(CRC, val);
-            }
-        }
-
-        switch (data_len % 4) {
-            case 1:
-                LL_CRC_FeedData8(CRC, data[4 * idx]);
-                break;
-            case 2:
-                LL_CRC_FeedData16(CRC, (data[4 * idx] << 8U) | data[4 * idx + 1]);
-                break;
-            case 3:
-                LL_CRC_FeedData16(CRC, (data[4 * idx] << 8U) | data[4 * idx + 1]);
-                LL_CRC_FeedData8(CRC, data[4 * idx + 2]);
-                break;
-            default:
-                break;
-        }
-
-        result = true;
+    if (!uni_hal_crc_is_inited(ctx) || data == nullptr) {
+        return false;
     }
 
-    return  result;
+    // Only load full words at aligned addresses, including when unaligned access traps are enabled.
+    while (data_len && (uintptr_t)data % sizeof(uint32_t) != 0U) {
+        LL_CRC_FeedData8(CRC, *data++);
+        --data_len;
+    }
+    while (data_len >= sizeof(uint32_t)) {
+        uint32_t word;
+        memcpy(&word, data, sizeof(word));
+        LL_CRC_FeedData32(CRC, uni_common_bytes_swap32(word));
+        data += sizeof(word);
+        data_len -= sizeof(word);
+    }
+    while (data_len) {
+        LL_CRC_FeedData8(CRC, *data++);
+        --data_len;
+    }
+    return true;
 }
 
 
