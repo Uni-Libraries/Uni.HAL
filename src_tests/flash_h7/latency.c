@@ -3,6 +3,9 @@
 
 static RCC_TypeDef rcc;
 static PWR_TypeDef pwr;
+static SYSCFG_TypeDef syscfg;
+#undef SYSCFG_BASE
+#define SYSCFG_BASE ((uintptr_t)&syscfg)
 static FLASH_TypeDef flash;
 #undef RCC_BASE
 #define RCC_BASE ((uintptr_t)&rcc)
@@ -29,6 +32,16 @@ static unsigned check(void) {
     LL_RCC_PLL1P_Enable();
     rcc.CFGR = LL_RCC_SYS_CLKSOURCE_STATUS_PLL1;
     pwr.D3CR = LL_PWR_REGU_VOLTAGE_SCALE1;
+
+    // H743 VOS0 and VOS1 have the same D3CR bits. Only overdrive permits AXI above 225 MHz.
+    CHECK(uni_hal_flash_configure_latency_auto(225000000U) && latency_is(LL_FLASH_LATENCY_3, FLASH_ACR_WRHIGHFREQ_1));
+    CHECK(!uni_hal_flash_configure_latency_auto(225000001U));
+    syscfg.PWRCR = SYSCFG_PWRCR_ODEN;
+    CHECK(uni_hal_flash_configure_latency_auto(230000000U) && latency_is(LL_FLASH_LATENCY_4, FLASH_ACR_WRHIGHFREQ_1));
+    CHECK(uni_hal_flash_configure_latency_auto(240000000U));
+    CHECK(!uni_hal_flash_configure_latency_auto(240000001U));
+    syscfg.PWRCR = 0U;
+    CHECK(!uni_hal_flash_configure_latency_auto(230000000U));
 
     LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_2);
     CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_1));

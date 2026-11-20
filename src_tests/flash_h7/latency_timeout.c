@@ -2,6 +2,9 @@
 #include "../arm/semihost_test.h"
 
 static PWR_TypeDef pwr;
+static SYSCFG_TypeDef syscfg;
+#undef SYSCFG_BASE
+#define SYSCFG_BASE ((uintptr_t)&syscfg)
 static FLASH_TypeDef flash;
 #undef PWR_BASE
 #define PWR_BASE ((uintptr_t)&pwr)
