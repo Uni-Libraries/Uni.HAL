@@ -28,6 +28,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Test Arm toolchain archive verification
+      if: matrix.c_compiler == 'gcc'
+      run: bash src_tests/toolchain/archive_checksum.sh
+
     - name: Add the LLVM 23 package source
       if: matrix.c_compiler == 'clang-23'
       run: |
@@ -102,16 +106,10 @@ jobs:
 
     - name: Install GNU Arm Embedded Toolchain
       shell: bash
-      run: |
-        TOOLCHAIN_URL="https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz"
-        TOOLCHAIN_TAR="arm-gnu-toolchain.tar.xz"
-        TOOLCHAIN_DIR="${{ github.workspace }}/arm-gnu-toolchain"
-        
-        wget -O "${TOOLCHAIN_TAR}" "${TOOLCHAIN_URL}"
-        mkdir -p "${TOOLCHAIN_DIR}"
-        tar -xf "${TOOLCHAIN_TAR}" -C "${TOOLCHAIN_DIR}" --strip-components=1
-        
-        echo "${TOOLCHAIN_DIR}/bin" >> "$GITHUB_PATH"
+      run: >-
+        bash .github/scripts/install-arm-toolchain.sh
+        https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz
+        62a63b981fe391a9cbad7ef51b17e49aeaa3e7b0d029b36ca1e9c3b2a9b78823
 
     - name: Install Cortex-M emulator
       run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
@@ -204,16 +202,10 @@ jobs:
 
     - name: Install LLVM Embedded Toolchain for Arm
       shell: bash
-      run: |
-        TOOLCHAIN_URL="https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/download/release-19.1.5/LLVM-ET-Arm-19.1.5-Linux-x86_64.tar.xz"
-        TOOLCHAIN_TAR="llvm-toolchain.tar.xz"
-        TOOLCHAIN_DIR="${{ github.workspace }}/llvm-toolchain"
-        
-        wget -O "${TOOLCHAIN_TAR}" "${TOOLCHAIN_URL}"
-        mkdir -p "${TOOLCHAIN_DIR}"
-        tar -xf "${TOOLCHAIN_TAR}" -C "${TOOLCHAIN_DIR}" --strip-components=1
-        
-        echo "${TOOLCHAIN_DIR}/bin" >> "$GITHUB_PATH"
+      run: >-
+        bash .github/scripts/install-arm-toolchain.sh
+        https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/download/release-19.1.5/LLVM-ET-Arm-19.1.5-Linux-x86_64.tar.xz
+        34ee877aadc78c5e9f067e603a1bc9745ed93ca7ae5dbfc9b4406508dc153920
 
     - name: Set reusable strings
       id: strings
