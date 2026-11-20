@@ -1,178 +1,117 @@
 #!/usr/bin/env pwsh
 
-# Usage: ./update.ps1                      update every component
-#        ./update.ps1 FreeRTOS-Kernel ...  update only the listed components
-#        (CMSIS-Core, DFP-STM32L4, DFP-STM32H7, USB-STM-Device, FreeRTOS-Kernel, FreeRTOS-FAT)
-param([string[]]$Components)
+# Run without arguments to update all components, or pass one or more component names.
+param([Parameter(Position=0, ValueFromRemainingArguments)][string[]]$Components)
+$ErrorActionPreference = 'Stop'
+$pins = Import-PowerShellDataFile "$PSScriptRoot/upstream.psd1"
 
-#
-# Functions
-#
-
-function Get-CMSIS-Core(){
-    Invoke-WebRequest -Uri "https://codeload.github.com/ARM-software/CMSIS_5/zip/refs/heads/develop" -OutFile "./~temp/cmsis.zip"
-    Expand-Archive -Path "./~temp/cmsis.zip" -DestinationPath "./~temp/cmsis/"
-    Remove-Item -Path "./arm_cmsis_core/include/" -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./arm_cmsis_core/License.txt" -ErrorAction SilentlyContinue
-    Copy-Item -Path "./~temp/cmsis/CMSIS_5-develop/CMSIS/Core/Include/" -Destination "./arm_cmsis_core/include/" -Recurse
-    Copy-Item -Path "./~temp/cmsis/CMSIS_5-develop/LICENSE.txt" -Destination "./arm_cmsis_core/License.txt"
+function Get-Snapshot([string]$Repository) {
+    $pin = $pins[$Repository]
+    if ($pin.Revision -notmatch '^[0-9a-f]{40}$' -or $pin.SHA256 -notmatch '^[0-9a-f]{64}$') {
+        throw "Missing revision or SHA256 for $Repository"
+    }
+    $name = $Repository.Split('/')[-1]
+    $zip = "$downloads/$name.zip"
+    Invoke-WebRequest -Uri "https://codeload.github.com/$Repository/zip/$($pin.Revision)" -OutFile $zip
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash -ne $pin.SHA256) {
+        throw "SHA256 mismatch for $Repository at $($pin.Revision)"
+    }
+    # Extract the GitHub archive directly; Expand-Archive on Unix drops hidden files.
+    [IO.Compression.ZipFile]::ExtractToDirectory($zip, $downloads)
+    return "$downloads/$name-$($pin.Revision)"
 }
 
-
-function Get-DFP-STM32L4(){
-    Remove-Item -Path "./st_stm32l4/include_device"    -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32l4/include_hal"       -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32l4/include_hal/Legacy"-Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32l4/src_device"        -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32l4/src_hal"           -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32l4/src_hal/Legacy"    -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32l4/License.md"     -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32l4/LICENSE.md"     -ErrorAction SilentlyContinue
-    
-    Invoke-WebRequest -Uri "https://codeload.github.com/STMicroelectronics/cmsis_device_l4/zip/refs/heads/master" -OutFile "./~temp/cmsis_device_l4.zip"
-    Invoke-WebRequest -Uri "https://codeload.github.com/STMicroelectronics/stm32l4xx_hal_driver/zip/refs/heads/master" -OutFile "./~temp/stm32l4xx_hal_driver.zip"
-    
-    Expand-Archive -Path "./~temp/cmsis_device_l4.zip" -DestinationPath "./~temp/"
-    Expand-Archive -Path "./~temp/stm32l4xx_hal_driver.zip" -DestinationPath "./~temp/"
-    
-    Copy-Item -Path "./~temp/cmsis-device-l4-master/Include/"   -Destination "./st_stm32l4/include_device/" -Recurse
-    Copy-Item -Path "./~temp/cmsis-device-l4-master/Source/Templates/gcc/" -Destination "./st_stm32l4/src_device/" -Recurse
-    Copy-Item -Path "./~temp/cmsis-device-l4-master/Source/Templates/system_stm32l4xx.c" -Destination "./st_stm32l4/src_device/system_stm32l4xx.c"
-
-    Copy-Item -Path "./~temp/stm32l4xx-hal-driver-master/Inc/"        -Destination "./st_stm32l4/include_hal/"        -Recurse
-    Copy-Item -Path "./~temp/stm32l4xx-hal-driver-master/Src/"        -Destination "./st_stm32l4/src_hal/"            -Recurse
-    Copy-Item -Path "./~temp/stm32l4xx-hal-driver-master/LICENSE.md"   -Destination "./st_stm32l4/" -Recurse
+function Copy-SourceDirectory([string]$Source, [string]$Destination, [string[]]$Patterns) {
+    if (Test-Path -LiteralPath $Destination) {
+        Remove-Item -LiteralPath $Destination -Recurse -Force
+    }
+    if (!$Patterns) {
+        Copy-Item -LiteralPath $Source -Destination $Destination -Recurse
+        return
+    }
+    $null = New-Item -ItemType Directory -Force $Destination
+    foreach ($pattern in $Patterns) {
+        $files = @(Get-ChildItem -File -LiteralPath $Source -Filter $pattern)
+        if (!$files) { throw "Missing $pattern in $Source" }
+        Copy-Item -LiteralPath $files.FullName -Destination $Destination
+    }
 }
 
-
-function Get-DFP-STM32H7(){
-    Remove-Item -Path "./st_stm32h7/include_device" -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32h7/include_hal"    -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32h7/src_device"     -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32h7/src_hal"        -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_stm32h7/License.md" -ErrorAction SilentlyContinue
-
-    Invoke-WebRequest -Uri "https://codeload.github.com/STMicroelectronics/cmsis_device_h7/zip/refs/heads/master"      -OutFile "./~temp/cmsis_device_h7.zip"
-    Invoke-WebRequest -Uri "https://codeload.github.com/STMicroelectronics/stm32h7xx_hal_driver/zip/refs/heads/master" -OutFile "./~temp/stm32h7xx_hal_driver.zip"
-    
-    Expand-Archive -Path "./~temp/cmsis_device_h7.zip" -DestinationPath "./~temp/"
-    Expand-Archive -Path "./~temp/stm32h7xx_hal_driver.zip" -DestinationPath "./~temp/"
-    
-    Copy-Item -Path "./~temp/cmsis-device-h7-master/Include/"                            -Destination "./st_stm32h7/include_device/" -Recurse
-    Copy-Item -Path "./~temp/stm32h7xx-hal-driver-master/Inc/"                           -Destination "./st_stm32h7/include_hal/" -Recurse
-    Copy-Item -Path "./~temp/cmsis-device-h7-master/Source/Templates/gcc/"               -Destination "./st_stm32h7/src_device/" -Recurse
-    Copy-Item -Path "./~temp/cmsis-device-h7-master/Source/Templates/system_stm32h7xx.c" -Destination "./st_stm32h7/src_device/system_stm32h7xx.c"
-    Copy-Item -Path "./~temp/stm32h7xx-hal-driver-master/Src/"                           -Destination "./st_stm32h7/src_hal/" -Recurse
-    Copy-Item -Path "./~temp/stm32h7xx-hal-driver-master/LICENSE.md"                     -Destination "./st_stm32h7/" -Recurse
-
-
-}
-
-function Get-USB-STM-Device() {
-    Remove-Item -Path "./st_usb_device/include_core" -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_usb_device/include_cdc"  -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_usb_device/src_core"     -Recurse -ErrorAction SilentlyContinue
-    Remove-Item -Path "./st_usb_device/src_cdc"      -Recurse -ErrorAction SilentlyContinue
-
-    Remove-Item -Path "./st_usb_device/License.md"  -ErrorAction SilentlyContinue
-
-    Invoke-WebRequest -Uri "https://github.com/STMicroelectronics/stm32_mw_usb_device/archive/refs/heads/master.zip" -OutFile "./~temp/stm32_mw_usb_device.zip"
-
-    Expand-Archive -Path "./~temp/stm32_mw_usb_device.zip" -DestinationPath "./~temp/"
-
-    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Core/Inc/"      -Destination "./st_usb_device/include_core/" -Recurse
-    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Core/Src/"      -Destination "./st_usb_device/src_core/"     -Recurse
-
-    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Class/CDC/Inc/" -Destination "./st_usb_device/include_cdc/"  -Recurse
-    Copy-Item -Path "./~temp/stm32-mw-usb-device-master/Class/CDC/Src/" -Destination "./st_usb_device/src_cdc/"      -Recurse
-
-    Copy-Item   -Path "./~temp/stm32-mw-usb-device-master/LICENSE.md" -Destination "./st_usb_device"
-}
-
-
-function Get-FreeRTOS-Kernel(){
-    Invoke-WebRequest -Uri "https://codeload.github.com/FreeRTOS/FreeRTOS-Kernel/zip/refs/heads/main"      -OutFile "./~temp/freertos_kernel.zip"
-    Expand-Archive -Path "./~temp/freertos_kernel.zip" -DestinationPath "./~temp/"
-
-    Remove-Item -Path "./freertos_kernel/src"      -Recurse -ErrorAction SilentlyContinue
-    New-Item -Path "./freertos_kernel/src/" -ItemType Directory
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/*.c" -Destination "./freertos_kernel/src/" -Recurse
-    
-    Remove-Item -Path "./freertos_kernel/include"      -Recurse -ErrorAction SilentlyContinue
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/include" -Destination "./freertos_kernel/" -Recurse
-    Remove-Item -Path "./freertos_kernel/include/CMakeLists.txt" -ErrorAction SilentlyContinue
-    Remove-Item -Path "./freertos_kernel/include/stdint.readme" -ErrorAction SilentlyContinue
-
-    Remove-Item -Path "./freertos_kernel/src_memmng"      -Recurse -ErrorAction SilentlyContinue
-    New-Item    -Path "./freertos_kernel/src_memmng/" -ItemType Directory
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/MemMang/*.c" -Destination "./freertos_kernel/src_memmng" -Recurse
-
-    Remove-Item -Path "./freertos_kernel/src_port"      -Recurse -ErrorAction SilentlyContinue
-
-    New-Item    -Path "./freertos_kernel/src_port/arm_cm4f/" -ItemType Directory
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CM4F/*.c" -Destination "./freertos_kernel/src_port/arm_cm4f/" -Recurse
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CM4F/*.h" -Destination "./freertos_kernel/src_port/arm_cm4f/" -Recurse
-
-    New-Item    -Path "./freertos_kernel/src_port/arm_ca9/" -ItemType Directory
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CA9/*.c" -Destination "./freertos_kernel/src_port/arm_ca9/" -Recurse
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CA9/*.h" -Destination "./freertos_kernel/src_port/arm_ca9/" -Recurse
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/GCC/ARM_CA9/*.S" -Destination "./freertos_kernel/src_port/arm_ca9/" -Recurse
-
-    New-Item    -Path "./freertos_kernel/src_port/pc_posix/" -ItemType Directory
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/*.c" -Destination "./freertos_kernel/src_port/pc_posix/" -Recurse
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/*.h" -Destination "./freertos_kernel/src_port/pc_posix/" -Recurse
-    New-Item    -Path "./freertos_kernel/src_port/pc_posix/utils/" -ItemType Directory
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/utils/*.c" -Destination "./freertos_kernel/src_port/pc_posix/utils/" -Recurse
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/ThirdParty/GCC/Posix/utils/*.h" -Destination "./freertos_kernel/src_port/pc_posix/utils/" -Recurse
-    New-Item    -Path "./freertos_kernel/src_port/pc_windows/" -ItemType Directory
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/MSVC-MingW/*.c" -Destination "./freertos_kernel/src_port/pc_windows/" -Recurse
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/portable/MSVC-MingW/*.h" -Destination "./freertos_kernel/src_port/pc_windows/" -Recurse
-
-    Copy-Item   -Path "./~temp/FreeRTOS-Kernel-main/LICENSE.md" -Destination "./freertos_kernel"
-}
-
-
-function Get-FreeRTOS-FAT(){
-  Invoke-WebRequest -Uri "https://codeload.github.com/FreeRTOS/Lab-Project-FreeRTOS-FAT/zip/refs/heads/main"      -OutFile "./~temp/freertos_fat.zip"
-  Expand-Archive -Path "./~temp/freertos_fat.zip" -DestinationPath "./~temp/"
-
-  Remove-Item -Path "./freertos_fat/src"                        -Recurse -ErrorAction SilentlyContinue
-  New-Item    -Path "./freertos_fat/src/"                       -ItemType Directory
-  Copy-Item   -Path "./~temp/Lab-Project-FreeRTOS-FAT-main/*.c" -Destination "./freertos_fat/src/" -Recurse
-
-  Remove-Item -Path "./freertos_fat/include/"                            -Recurse -ErrorAction SilentlyContinue
-  New-Item    -Path "./freertos_fat/include/"                           -ItemType Directory
-  Copy-Item   -Path "./~temp/Lab-Project-FreeRTOS-FAT-main/include/*.h" -Destination "./freertos_fat/include/" -Recurse
-}
-
-# Local changes on top of upstream, per component (patches/<component>/*.patch): an update overwrites
-# the files, the patches put the changes back
-function Add-Local-Patches([string]$Component){
-    foreach ($patch in Get-ChildItem -Path "./patches/$Component/*.patch" -ErrorAction SilentlyContinue) {
-        git -C .. apply "3rdparty/patches/$Component/$($patch.Name)"
-        if ($LASTEXITCODE -ne 0) {
-            throw "patch $Component/$($patch.Name) does not apply, update it"
+function Copy-Component([string]$Component, [string]$Destination) {
+    switch ($Component) {
+        'CMSIS-Core' {
+            $source = Get-Snapshot 'ARM-software/CMSIS_5'
+            Copy-SourceDirectory "$source/CMSIS/Core/Include" "$Destination/include"
+            Copy-Item "$source/LICENSE.txt" "$Destination/License.txt" -Force
+        }
+        { $_ -in 'DFP-STM32L4', 'DFP-STM32H7' } {
+            $family = $Component.Substring(9).ToLowerInvariant()
+            $device = Get-Snapshot "STMicroelectronics/cmsis-device-$family"
+            $hal = Get-Snapshot "STMicroelectronics/stm32${family}xx-hal-driver"
+            Copy-SourceDirectory "$device/Include" "$Destination/include_device"
+            Copy-SourceDirectory "$device/Source/Templates/gcc" "$Destination/src_device"
+            Copy-Item "$device/Source/Templates/system_stm32${family}xx.c" "$Destination/src_device"
+            Copy-SourceDirectory "$hal/Inc" "$Destination/include_hal"
+            Copy-SourceDirectory "$hal/Src" "$Destination/src_hal"
+            Copy-Item "$hal/LICENSE.md" "$Destination/LICENSE.md" -Force
+        }
+        'USB-STM-Device' {
+            $source = Get-Snapshot 'STMicroelectronics/stm32-mw-usb-device'
+            Copy-SourceDirectory "$source/Core/Inc" "$Destination/include_core"
+            Copy-SourceDirectory "$source/Core/Src" "$Destination/src_core"
+            Copy-SourceDirectory "$source/Class/CDC/Inc" "$Destination/include_cdc"
+            Copy-SourceDirectory "$source/Class/CDC/Src" "$Destination/src_cdc"
+            Copy-Item "$source/LICENSE.md" "$Destination/LICENSE.md" -Force
+        }
+        'FreeRTOS-Kernel' {
+            $source = Get-Snapshot 'FreeRTOS/FreeRTOS-Kernel'
+            Copy-SourceDirectory $source "$Destination/src" '*.c'
+            Copy-SourceDirectory "$source/include" "$Destination/include"
+            Remove-Item "$Destination/include/CMakeLists.txt", "$Destination/include/stdint.readme"
+            Copy-SourceDirectory "$source/portable/MemMang" "$Destination/src_memmng" '*.c'
+            Copy-SourceDirectory "$source/portable/GCC/ARM_CM4F" "$Destination/src_port/arm_cm4f" @('*.c','*.h')
+            Copy-SourceDirectory "$source/portable/GCC/ARM_CA9" "$Destination/src_port/arm_ca9" @('*.c','*.h','*.S')
+            Copy-SourceDirectory "$source/portable/ThirdParty/GCC/Posix" "$Destination/src_port/pc_posix" @('*.c','*.h')
+            Copy-SourceDirectory "$source/portable/ThirdParty/GCC/Posix/utils" "$Destination/src_port/pc_posix/utils" @('*.c','*.h')
+            Copy-SourceDirectory "$source/portable/MSVC-MingW" "$Destination/src_port/pc_windows" @('*.c','*.h')
+            Copy-Item "$source/LICENSE.md" "$Destination/LICENSE.md" -Force
+        }
+        'FreeRTOS-FAT' {
+            $source = Get-Snapshot 'FreeRTOS/Lab-Project-FreeRTOS-FAT'
+            Copy-SourceDirectory $source "$Destination/src" '*.c'
+            Copy-SourceDirectory "$source/include" "$Destination/include" '*.h'
         }
     }
 }
 
-
-
-#
-# Pipeline
-#
-
-Push-Location $PSScriptRoot
-
-Remove-Item -Path "./~temp/" -Force -Recurse -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path "./~temp/" -ErrorAction SilentlyContinue
-
-$all = @("CMSIS-Core", "DFP-STM32L4", "DFP-STM32H7", "USB-STM-Device", "FreeRTOS-Kernel", "FreeRTOS-FAT")
-if (-not $Components) { $Components = $all }
-foreach ($c in $Components) {
-    if ($all -notcontains $c) { throw "Unknown component '$c', expected one of: $($all -join ', ')" }
-    & "Get-$c"
-    Add-Local-Patches $c
+function Add-LocalPatches([string]$Component, [string]$Tree) {
+    $patchDir = "$PSScriptRoot/patches/$Component"
+    if (Test-Path -LiteralPath $patchDir) {
+        foreach ($patch in Get-ChildItem -File -LiteralPath $patchDir -Filter '*.patch' | Sort-Object Name) {
+            git -C $Tree apply -- $patch.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Cannot apply $($patch.Name) to $Component" }
+        }
+    }
 }
 
-Pop-Location
+$directories = [ordered]@{
+    'CMSIS-Core' = 'arm_cmsis_core'
+    'DFP-STM32L4' = 'st_stm32l4'
+    'DFP-STM32H7' = 'st_stm32h7'
+    'USB-STM-Device' = 'st_usb_device'
+    'FreeRTOS-Kernel' = 'freertos_kernel'
+    'FreeRTOS-FAT' = 'freertos_fat'
+}
+if (!$Components) { $Components = $directories.Keys }
+$Components = @($Components | Select-Object -Unique)
+foreach ($component in $Components) {
+    if (!$directories.Contains($component)) { throw "Unknown component '$component'" }
+}
+
+$downloads = "$PSScriptRoot/~temp/downloads"
+if (Test-Path -LiteralPath $downloads) { Remove-Item -LiteralPath $downloads -Recurse -Force }
+$null = New-Item -ItemType Directory -Force $downloads
+foreach ($component in $Components) {
+    Copy-Component $component "$PSScriptRoot/$($directories[$component])"
+    Add-LocalPatches $component (Split-Path $PSScriptRoot)
+}

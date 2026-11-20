@@ -7,6 +7,12 @@ add_test(NAME rcc_map_mco_outputs
     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_mco_outputs.cmake")
 
 
+find_program(UNI_HAL_PWSH pwsh)
+if(UNI_HAL_PWSH)
+    add_test(NAME vendor_archive_integrity COMMAND "${UNI_HAL_PWSH}" -NoProfile -File
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/archive.ps1")
+endif()
+
 function(uni_hal_add_test test_path)
     string(REPLACE "/" "_" test_name ${test_path})
 
