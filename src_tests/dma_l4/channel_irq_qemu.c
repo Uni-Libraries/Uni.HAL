@@ -32,6 +32,12 @@ static void write_register(volatile uint32_t *reg, uint32_t value)
             }
             return;
         }
+        for (unsigned channel = 0; channel < 7; ++channel) {
+            DMA_Channel_TypeDef *regs = &controllers[module].channel[channel].regs;
+            if (reg == &regs->CNDTR && (regs->CCR & DMA_CCR_EN)) {
+                return; // CNDTR ignores writes while the physical channel is enabled.
+            }
+        }
     }
     *reg = value;
 }
@@ -124,7 +130,9 @@ static unsigned check_channel(unsigned module, unsigned channel)
     CHECK(uni_hal_dma_enable(&ctx, true));
     irq();
     CHECK(!uni_hal_dma_stm32l4_has_transfer_error(&ctx));
+    bool const changed = uni_hal_dma_set_length(&ctx, 9U);
     CHECK(regs->CNDTR == 4 && regs->CCR == (DMA_CCR_CIRC | DMA_CCR_TEIE | DMA_CCR_EN));
+    CHECK(!changed);
     CHECK(dma->ISR == other_flags);
     CHECK(uni_hal_adc_get_rank_raw(&adc, 0) == sample);
     dma->ISR |= (DMA_ISR_GIF1 | DMA_ISR_HTIF1 | DMA_ISR_TCIF1) << shift;
@@ -139,6 +147,7 @@ static unsigned check_channel(unsigned module, unsigned channel)
     dma->ISR |= (DMA_ISR_GIF1 | DMA_ISR_TEIF1) << shift;
     irq();
     CHECK(dma->ISR == other_flags && !uni_hal_adc_is_inited(&adc));
+    CHECK(uni_hal_dma_set_length(&ctx, 9U) && regs->CNDTR == 9U);
     return 0;
 }
 

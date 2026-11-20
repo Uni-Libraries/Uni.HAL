@@ -567,17 +567,18 @@ bool uni_hal_dma_set_address(uni_hal_dma_context_t* ctx, uint32_t addr_from, uin
     return result;
 }
 
-bool uni_hal_dma_set_length(uni_hal_dma_context_t* ctx, uint32_t length)
+bool uni_hal_dma_set_length(uni_hal_dma_context_t *ctx, uint32_t length)
 {
-    bool result = false;
-    if (uni_hal_dma_is_inited(ctx) && length <= UINT16_MAX)
-    {
-        DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
-        uint32_t channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
-
-        LL_DMA_SetDataLength(module, channel, length);
-        result = true;
+    if (!uni_hal_dma_is_inited(ctx) || length > UINT16_MAX) {
+        return false;
     }
-
-    return result;
+    DMA_TypeDef *module = uni_hal_dma_stm32l4_get_module(ctx->config.instance);
+    uint32_t const channel = uni_hal_dma_stm32l4_get_channel(ctx->config.channel);
+    uint32_t const mask = uni_hal_core_irq_pause();
+    bool const writable = !LL_DMA_IsEnabledChannel(module, channel);
+    if (writable) {
+        LL_DMA_SetDataLength(module, channel, length);
+    }
+    uni_hal_core_irq_resume(mask);
+    return writable;
 }

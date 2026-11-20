@@ -107,7 +107,9 @@ bool uni_hal_dma_set_periph_increment(uni_hal_dma_context_t* ctx, uni_hal_dma_in
 
 bool uni_hal_dma_set_address(uni_hal_dma_context_t* ctx, uint32_t addr_from, uint32_t addr_to);
 
-/** Set the STM32L496 DMA transfer count (0..65535 data items). Larger counts are rejected. */
+/** Set the STM32L496 DMA transfer count (0..65535 data items) on a disabled channel.
+ * The call returns false without writing the counter if the channel is enabled or the count exceeds this range.
+ */
 bool uni_hal_dma_set_length(uni_hal_dma_context_t* ctx, uint32_t length);
 
 bool uni_hal_dma_set_request(uni_hal_dma_context_t* ctx);
