@@ -356,16 +356,16 @@ typedef struct
 
 
 /**
- * CAN bit timing, in time quanta
+ * CAN bit timing, in time quanta. Field ranges depend on the controller and bit phase.
  */
 typedef struct {
-    /** clock divider, 1..1024 */
+    /** clock divider */
     uint32_t prescaler;
-    /** bit segment 1 (propagation + phase 1), 1..16 */
+    /** bit segment 1 (propagation + phase 1) */
     uint32_t bs1;
-    /** bit segment 2 (phase 2), 1..8 */
+    /** bit segment 2 (phase 2) */
     uint32_t bs2;
-    /** synchronisation jump width, 1..4 */
+    /** synchronisation jump width */
     uint32_t sjw;
 } uni_hal_can_timing_t;
 
@@ -379,7 +379,7 @@ typedef struct {
  * Compute a bit timing for the bxCAN peripheral
  * @param clock_hz frequency of the CAN clock (APB1)
  * @param bitrate bit rate in bit/s
- * @param timing receives the timing
+ * @param timing receives the bxCAN timing: prescaler 1..1024, bs1 1..16, bs2 1..8, sjw 1
  * @return false when no setting gives exactly this bit rate
  */
 bool uni_hal_can_timing_calc(uint32_t clock_hz, uint32_t bitrate, uni_hal_can_timing_t *timing);

@@ -3,7 +3,7 @@
 //
 
 // uni_hal
-#include "can/uni_hal_can.h"
+#include "can/uni_hal_can_internal.h"
 #include "core/uni_hal_core.h"
 
 
@@ -106,6 +106,7 @@ typedef struct {
     /** largest values the peripheral takes */
     uint32_t prescaler_max;
     uint32_t bs1_max;
+    uint32_t bs2_min;
     uint32_t bs2_max;
     /** wanted sample point in 1/1000 of the bit time */
     uint32_t sample_point;
@@ -140,9 +141,9 @@ static bool _uni_hal_can_timing_search(uint32_t clock_hz, uint32_t bitrate, cons
             bs1 = limits->bs1_max;
         }
         uint32_t bs2 = quanta - 1U - bs1;
-        if (bs2 < 1U) {
-            bs2 = 1U;
-            bs1 = quanta - 2U;
+        if (bs2 < limits->bs2_min) {
+            bs2 = limits->bs2_min;
+            bs1 = quanta - 1U - bs2;
         }
         if (bs2 > limits->bs2_max || bs1 < 1U || bs1 > limits->bs1_max) {
             continue;
@@ -166,9 +167,18 @@ static bool _uni_hal_can_timing_search(uint32_t clock_hz, uint32_t bitrate, cons
 
 
 bool uni_hal_can_timing_calc(uint32_t clock_hz, uint32_t bitrate, uni_hal_can_timing_t *timing) {
-    // within the ranges of bxCAN, which FDCAN covers as well
     static const uni_hal_can_timing_limits_t limits = {
-        .quanta_min = 8U, .quanta_max = 25U, .prescaler_max = 1024U, .bs1_max = 16U, .bs2_max = 8U,
+        .quanta_min = 8U, .quanta_max = 25U, .prescaler_max = 1024U, .bs1_max = 16U, .bs2_min = 1U, .bs2_max = 8U,
+        .sample_point = 875U, .sjw_max = 1U,
+    };
+    return _uni_hal_can_timing_search(clock_hz, bitrate, &limits, timing);
+}
+
+
+bool uni_hal_can_timing_calc_fdcan_nominal(uint32_t clock_hz, uint32_t bitrate, uni_hal_can_timing_t *timing) {
+    static const uni_hal_can_timing_limits_t limits = {
+        // RM0433, FDCAN_NBTP: at least four quanta per bit and NSJW strictly below NTSEG2.
+        .quanta_min = 4U, .quanta_max = 385U, .prescaler_max = 512U, .bs1_max = 256U, .bs2_min = 2U, .bs2_max = 128U,
         .sample_point = 875U, .sjw_max = 1U,
     };
     return _uni_hal_can_timing_search(clock_hz, bitrate, &limits, timing);
@@ -180,7 +190,7 @@ bool uni_hal_can_timing_calc_data(uint32_t clock_hz, uint32_t bitrate, uni_hal_c
     // sample point sits earlier than in the arbitration phase, and the jump width is as wide as
     // the timing allows, to follow the transmitter at these rates.
     static const uni_hal_can_timing_limits_t limits = {
-        .quanta_min = 5U, .quanta_max = 25U, .prescaler_max = 32U, .bs1_max = 32U, .bs2_max = 16U,
+        .quanta_min = 5U, .quanta_max = 25U, .prescaler_max = 32U, .bs1_max = 32U, .bs2_min = 1U, .bs2_max = 16U,
         .sample_point = 800U, .sjw_max = 16U,
     };
     return _uni_hal_can_timing_search(clock_hz, bitrate, &limits, timing);

@@ -594,11 +594,9 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_tx);
 
         // There is no timing to fall back to: the kernel clock is whatever the project selected.
-        // The prescaler field is 9 bits wide.
         uint32_t const clock_hz = uni_hal_rcc_clk_get_freq(ctx->config.instance);
         uni_hal_can_timing_t timing = {0};
-        result = result && ctx->config.bitrate != 0U &&
-                 uni_hal_can_timing_calc(clock_hz, ctx->config.bitrate, &timing) && timing.prescaler <= 512U;
+        result = result && uni_hal_can_timing_calc_fdcan_nominal(clock_hz, ctx->config.bitrate, &timing);
 
         // CAN FD needs the 64-byte message RAM elements the library is then built with. The data
         // phase gets its own timing when frames are to switch the bit rate.
