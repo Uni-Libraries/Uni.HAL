@@ -11,6 +11,7 @@
 
 // uni_hal
 #include "core/uni_hal_core.h"
+#include "rcc/uni_hal_rcc_stm32h7_internal.h"
 #include "io/uni_hal_io_tunnel.h"
 #include "systick/uni_hal_systick.h"
 #include "os/uni_hal_os.h"
@@ -30,6 +31,7 @@
 //
 
 static uni_hal_usart_context_t * g_uni_hal_usart_ctx[UNI_HAL_UART_NUM] = { 0 };
+static bool configuring[UNI_HAL_UART_NUM];
 
 
 
@@ -158,54 +160,29 @@ static bool _uni_hal_uart_nvic(uni_hal_core_periph_e instance, uint32_t priority
 }
 
 
-/**
- * Store given USART context in context storage
- * @param ctx pointer to the USART interface context
- * @return true on success
- */
-static bool _uni_hal_usart_save_ctx(uni_hal_usart_context_t *ctx) {
-    bool result = false;
-
-    if (ctx != nullptr) {
-        switch (ctx->instance) {
-        case UNI_HAL_CORE_PERIPH_UART_1:
-            g_uni_hal_usart_ctx[0] = ctx;
-            result = true;
-            break;
-        case UNI_HAL_CORE_PERIPH_UART_2:
-            g_uni_hal_usart_ctx[1] = ctx;
-            result = true;
-            break;
-        case UNI_HAL_CORE_PERIPH_UART_3:
-            g_uni_hal_usart_ctx[2] = ctx;
-            result = true;
-            break;
-        case UNI_HAL_CORE_PERIPH_UART_4:
-            g_uni_hal_usart_ctx[3] = ctx;
-            result = true;
-            break;
-        case UNI_HAL_CORE_PERIPH_UART_5:
-            g_uni_hal_usart_ctx[4] = ctx;
-            result = true;
-            break;
-        case UNI_HAL_CORE_PERIPH_UART_6:
-            g_uni_hal_usart_ctx[5] = ctx;
-            result = true;
-            break;
-        case UNI_HAL_CORE_PERIPH_UART_7:
-            g_uni_hal_usart_ctx[6] = ctx;
-            result = true;
-            break;
-        case UNI_HAL_CORE_PERIPH_UART_8:
-            g_uni_hal_usart_ctx[7] = ctx;
-            result = true;
-            break;
-        default:
-            break;
+// Reserve the physical port and its clock before GPIO setup and baud-rate calculation.
+static bool claim_clock(const uni_hal_usart_context_t *ctx, unsigned index) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    bool available = !configuring[index];
+    if (available && ctx->clksrc != UNI_HAL_RCC_CLKSRC_UNKNOWN &&
+        ctx->clksrc != uni_hal_rcc_clksrc_get(ctx->instance)) {
+        bool const apb2 = uart_uses_apb2(ctx->instance);
+        for (unsigned i = 0U; i < UNI_HAL_UART_NUM; ++i) {
+            uni_hal_core_periph_e const peer = (uni_hal_core_periph_e)(UNI_HAL_CORE_PERIPH_UART_1 + i);
+            if (i != index && uart_uses_apb2(peer) == apb2 && (configuring[i] || g_uni_hal_usart_ctx[i])) {
+                available = false;
+                break;
+            }
+        }
+        if (available) {
+            available = uni_hal_rcc_clksrc_set(ctx->instance, ctx->clksrc);
         }
     }
-
-    return result;
+    if (available) {
+        configuring[index] = true;
+    }
+    uni_hal_core_irq_resume(mask);
+    return available;
 }
 
 
@@ -414,14 +391,16 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     // the interrupt handler needs the IO context to store what it receives
     if (ctx != nullptr && ctx->pin_rx != nullptr && ctx->pin_tx != nullptr && ctx->io != nullptr &&
         uni_hal_os_irq_priority_valid(ctx->isr_priority)) {
+        unsigned const index = (unsigned)ctx->instance - UNI_HAL_CORE_PERIPH_UART_1;
+        if (index >= UNI_HAL_UART_NUM || !claim_clock(ctx, index)) {
+            return false;
+        }
         ctx->callback = nullptr;
         ctx->callback_cookie = nullptr;
         ctx->in_transmission = false;
         ctx->initialized = false;
 
-        // clock
-        result = ctx->clksrc == UNI_HAL_RCC_CLKSRC_UNKNOWN || uni_hal_rcc_clksrc_set(ctx->instance, ctx->clksrc);
-        result = uni_hal_rcc_clk_set(ctx->instance, true) && result;
+        result = uni_hal_rcc_clk_set(ctx->instance, true);
 
         // pins
         result = uni_hal_gpio_pin_init(ctx->pin_rx) && result;
@@ -443,6 +422,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
             USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;
             USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
             LL_USART_DeInit(handle);
+            g_uni_hal_usart_ctx[index] = nullptr;
             result = LL_USART_Init(handle, &USART_InitStruct) == SUCCESS;
             if (result) {
                 result = uni_hal_io_init(ctx->io);
@@ -466,16 +446,20 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 if (result) {
                     ctx->io->handlers.tx_trigger = _uni_hal_usart_tx_trigger;
                     ctx->io->handlers.tx_trigger_ctx = ctx;
-                    _uni_hal_usart_save_ctx(ctx);
+                    g_uni_hal_usart_ctx[index] = ctx;
                     LL_USART_EnableIT_IDLE(handle);
                     UNI_HAL_USART_EnableIT_RXNE(handle);
                 } else {
+                    LL_USART_Disable(handle);
                     uni_hal_io_deinit(ctx->io);
                 }
             }
         }
 
         ctx->initialized = result;
+        uint32_t const mask = uni_hal_core_irq_pause();
+        configuring[index] = false;
+        uni_hal_core_irq_resume(mask);
     }
 
     return result;

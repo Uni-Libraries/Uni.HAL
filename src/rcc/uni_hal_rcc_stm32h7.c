@@ -26,6 +26,7 @@
 #include "pwr/uni_hal_pwr_stm32.h"
 #include "rcc/uni_hal_rcc.h"
 #include "rcc/uni_hal_rcc_stm32h7.h"
+#include "rcc/uni_hal_rcc_stm32h7_internal.h"
 #include "systick/uni_hal_systick.h"
 #include "systick/uni_hal_systick_stm32.h"
 
@@ -1410,10 +1411,6 @@ static const kernel_clock_source_t uart_clock_sources[2][6] = {
         {UNI_HAL_RCC_CLKSRC_LSE, LL_RCC_USART16_CLKSOURCE_LSE},
     },
 };
-
-static bool uart_uses_apb2(uni_hal_core_periph_e target) {
-    return target == UNI_HAL_CORE_PERIPH_UART_1 || target == UNI_HAL_CORE_PERIPH_UART_6;
-}
 
 uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
     uni_hal_rcc_clksrc_e result = UNI_HAL_RCC_CLKSRC_UNKNOWN;

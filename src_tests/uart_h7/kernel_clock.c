@@ -1,29 +1,14 @@
-// Run the public driver and the ST baud-rate setup against RAM-backed RCC and USART registers.
-#include <stm32h7xx.h>
-static RCC_TypeDef rcc;
-static USART_TypeDef usart1, usart2, usart6;
-#undef RCC_BASE
-#define RCC_BASE ((uintptr_t)&rcc)
-#undef USART1
-#define USART1 (&usart1)
-#undef USART2
-#define USART2 (&usart2)
-#undef USART6
-#define USART6 (&usart6)
-#include "../../3rdparty/st_stm32h7/src_hal/stm32h7xx_ll_rcc.c"
-#include "../../3rdparty/st_stm32h7/src_hal/stm32h7xx_ll_usart.c"
-#include "rcc/uni_hal_rcc_stm32h7.c"
-#define uni_hal_gpio_pin_init(pin) ((pin) != nullptr)
-#include "uart/uni_hal_uart_stm32h7.c"
+#include "clock_model.h"
 #include "../arm/semihost_test.h"
 
 static unsigned check(void) {
+    uint32_t const priority = configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS);
     UNI_HAL_IO_DEFINITION(first, 8, 8);
     UNI_HAL_IO_DEFINITION(second, 8, 8);
     UNI_HAL_IO_DEFINITION(third, 8, 8);
     uni_hal_gpio_pin_context_t pin = {};
     uni_hal_usart_context_t ctx = {.instance = UNI_HAL_CORE_PERIPH_UART_1, .io = &first_ctx,
-        .pin_rx = &pin, .pin_tx = &pin, .baudrate = 125000U, .isr_priority = 5U, .clksrc = UNI_HAL_RCC_CLKSRC_CSI};
+        .pin_rx = &pin, .pin_tx = &pin, .baudrate = 125000U, .isr_priority = priority, .clksrc = UNI_HAL_RCC_CLKSRC_CSI};
     uni_hal_usart_context_t sibling = ctx;
     sibling.instance = UNI_HAL_CORE_PERIPH_UART_6;
     sibling.io = &second_ctx;

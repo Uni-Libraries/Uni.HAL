@@ -64,6 +64,8 @@ typedef struct {
 
     /**
      * STM32H743 kernel clock source. UNKNOWN preserves the current RCC selection.
+     * USART1/6 share a clock, as do ports 2/3/4/5/7/8. Initialization rejects a
+     * change of source while another port in the same group is configured or starting.
      */
     uni_hal_rcc_clksrc_e clksrc;
 
