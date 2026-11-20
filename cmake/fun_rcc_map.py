@@ -904,18 +904,10 @@ def main() -> int:
 
     defined, numeric_defs, _raw_defs = parse_define_items(args.define)
 
-    preprocessed_parts: list[str] = []
-    raw_parts: list[str] = []
-    for path in input_paths:
-        raw_text = path.read_text(encoding="utf-8")
-        raw_parts.append(raw_text)
-        preprocessed_parts.append(preprocess_text(raw_text, defined, numeric_defs))
+    def active_source(path: pathlib.Path) -> str:
+        return strip_comments(preprocess_text(path.read_text(encoding="utf-8"), defined, numeric_defs))
 
-    merged_raw = "\n".join(raw_parts)
-    merged_pp = "\n".join(preprocessed_parts)
-
-    merged_pp = strip_comments(merged_pp)
-    merged_raw = strip_comments(merged_raw)
+    input_text = "\n".join(active_source(path) for path in input_paths)
 
     extra_clock_text_parts: list[str] = []
     i2c_header_text = ""
@@ -923,12 +915,12 @@ def main() -> int:
 
     i2c_header_path = find_project_file_near_inputs(input_paths, "src_unihal/src/i2c/uni_hal_i2c.h")
     if i2c_header_path is not None:
-        i2c_header_text = strip_comments(i2c_header_path.read_text(encoding="utf-8"))
+        i2c_header_text = active_source(i2c_header_path)
 
     if "STM32H7" in defined:
         i2c_driver_path = find_project_file_near_inputs(input_paths, "src_unihal/src/i2c/uni_hal_i2c_stm32h7.c")
         if i2c_driver_path is not None:
-            i2c_driver_text = strip_comments(i2c_driver_path.read_text(encoding="utf-8"))
+            i2c_driver_text = active_source(i2c_driver_path)
 
     i2c_speed_map = parse_i2c_speed_map(i2c_header_text)
     i2c_default_speed_hz: int | None = None
@@ -941,35 +933,35 @@ def main() -> int:
     if "STM32H7" in defined:
         h7_rcc_path = find_project_file_near_inputs(input_paths, "src_unihal/src/rcc/uni_hal_rcc_stm32h7.c")
         if h7_rcc_path is not None:
-            extra_clock_text_parts.append(strip_comments(h7_rcc_path.read_text(encoding="utf-8")))
+            extra_clock_text_parts.append(active_source(h7_rcc_path))
     if "STM32L4" in defined:
         l4_rcc_path = find_project_file_near_inputs(input_paths, "src_unihal/src/rcc/uni_hal_rcc_stm32l4.c")
         if l4_rcc_path is not None:
-            extra_clock_text_parts.append(strip_comments(l4_rcc_path.read_text(encoding="utf-8")))
+            extra_clock_text_parts.append(active_source(l4_rcc_path))
 
-    divider_scan_text = "\n".join([merged_pp, merged_raw, *extra_clock_text_parts])
+    divider_scan_text = "\n".join([input_text, *extra_clock_text_parts])
 
-    hse_enable_values = extract_designated(merged_pp, "hse_enable") or extract_designated(merged_raw, "hse_enable")
-    hse_bypass_values = extract_designated(merged_pp, "hse_bypass") or extract_designated(merged_raw, "hse_bypass")
-    lse_enable_values = extract_designated(merged_pp, "lse_enable") or extract_designated(merged_raw, "lse_enable")
-    csi_enable_values = extract_designated(merged_pp, "csi_enable") or extract_designated(merged_raw, "csi_enable")
+    hse_enable_values = extract_designated(input_text, "hse_enable")
+    hse_bypass_values = extract_designated(input_text, "hse_bypass")
+    lse_enable_values = extract_designated(input_text, "lse_enable")
+    csi_enable_values = extract_designated(input_text, "csi_enable")
 
     hse_enable = pick_first_bool(hse_enable_values)
     hse_bypass = pick_first_bool(hse_bypass_values)
     lse_enable = pick_first_bool(lse_enable_values)
     csi_enable = pick_first_bool(csi_enable_values)
 
-    pll_source_values = collect_group1(r"RCC_PLLSOURCE_([A-Z0-9_]+)", merged_pp)
+    pll_source_values = collect_group1(r"RCC_PLLSOURCE_([A-Z0-9_]+)", input_text)
     if not pll_source_values:
-        pll_source_values = collect_group1(r"LL_RCC_PLLSOURCE_([A-Z0-9_]+)", merged_pp)
+        pll_source_values = collect_group1(r"LL_RCC_PLLSOURCE_([A-Z0-9_]+)", input_text)
     if not pll_source_values:
         pll_source_values = ["HSE" if (hse_enable is True) else "HSI"]
 
-    sys_source_values = collect_group1(r"RCC_SYSCLKSOURCE_([A-Z0-9_]+)", merged_pp)
+    sys_source_values = collect_group1(r"RCC_SYSCLKSOURCE_([A-Z0-9_]+)", input_text)
     if not sys_source_values:
-        sys_source_values = collect_group1(r"RCC_CFGR_SW_([A-Z0-9_]+)", merged_pp)
+        sys_source_values = collect_group1(r"RCC_CFGR_SW_([A-Z0-9_]+)", input_text)
     if not sys_source_values:
-        sys_source_values = collect_group1(r"LL_RCC_SYS_CLKSOURCE_([A-Z0-9_]+)", merged_pp)
+        sys_source_values = collect_group1(r"LL_RCC_SYS_CLKSOURCE_([A-Z0-9_]+)", input_text)
 
     stm32h7_target = "STM32H7" in defined
     default_sys_div = 1
@@ -1039,14 +1031,12 @@ def main() -> int:
     if apb4_div is None:
         apb4_div = default_apb_div
 
-    pll_records = parse_pll_configs(merged_pp)
-    if not pll_records:
-        pll_records = parse_pll_configs(merged_raw)
+    pll_records = parse_pll_configs(input_text)
 
     mco_sources: dict[int, str | None] = {1: None, 2: None}
     mco_divs: dict[int, int] = {1: 1, 2: 1}
 
-    for match in re.finditer(r"\buni_hal_rcc_stm32_mco_enable\s*\(\s*([^,;]+),\s*([^,)]+),\s*([^,)]+)\)", merged_raw):
+    for match in re.finditer(r"\buni_hal_rcc_stm32_mco_enable\s*\(\s*([^,;]+),\s*([^,)]+),\s*([^,)]+)\)", input_text):
         index = parse_int(match.group(1))
         if index not in (0, 1) or (index == 1 and "STM32L4" in defined):
             continue
@@ -1056,7 +1046,7 @@ def main() -> int:
         mco_sources[idx] = src
         mco_divs[idx] = parse_mco_div(div)
 
-    for match in re.finditer(r"__HAL_RCC_MCO([12])_CONFIG\s*\(([^\)]*)\)", merged_raw, flags=re.S):
+    for match in re.finditer(r"__HAL_RCC_MCO([12])_CONFIG\s*\(([^\)]*)\)", input_text, flags=re.S):
         idx = int(match.group(1), 10)
         args_text = match.group(2)
         parts = [p.strip() for p in args_text.split(",")]
@@ -1065,7 +1055,7 @@ def main() -> int:
         if len(parts) >= 2 and parts[1]:
             mco_divs[idx] = parse_mco_div(parts[1])
 
-    for match in re.finditer(r"LL_RCC_ConfigMCO\s*\(([^\)]*)\)", merged_raw, flags=re.S):
+    for match in re.finditer(r"LL_RCC_ConfigMCO\s*\(([^\)]*)\)", input_text, flags=re.S):
         parts = [p.strip() for p in match.group(1).split(",")]
         if not parts:
             continue
@@ -1077,21 +1067,13 @@ def main() -> int:
         if len(parts) >= 2:
             mco_divs[idx] = parse_mco_div(parts[1])
 
-    uart_consumers = parse_uart_consumers(merged_pp)
-    if not uart_consumers:
-        uart_consumers = parse_uart_consumers(merged_raw)
+    uart_consumers = parse_uart_consumers(input_text)
 
-    spi_consumers = parse_spi_consumers(merged_pp)
-    if not spi_consumers:
-        spi_consumers = parse_spi_consumers(merged_raw)
+    spi_consumers = parse_spi_consumers(input_text)
 
-    i2c_consumers = parse_i2c_consumers(merged_pp, i2c_speed_map)
-    if not i2c_consumers:
-        i2c_consumers = parse_i2c_consumers(merged_raw, i2c_speed_map)
+    i2c_consumers = parse_i2c_consumers(input_text, i2c_speed_map)
 
-    adc_consumers = parse_adc_consumers(merged_pp)
-    if not adc_consumers:
-        adc_consumers = parse_adc_consumers(merged_raw)
+    adc_consumers = parse_adc_consumers(input_text)
 
     hse_hz = parse_int(args.hse_hz)
     if hse_hz is None:
@@ -1499,7 +1481,7 @@ def main() -> int:
         lines.append("  }")
         lines.append("")
 
-    periph_pairs = parse_peripherals(merged_pp)
+    periph_pairs = parse_peripherals(input_text)
     if periph_pairs:
         lines.append("  subgraph cluster_peripherals {")
         lines.append('    label="Peripheral clocks (detected enables)";')

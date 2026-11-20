@@ -5,6 +5,9 @@ add_test(NAME toolchain_msvc_compiler_paths
     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/toolchain/msvc_compiler_paths.cmake")
 add_test(NAME rcc_map_mco_outputs
     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_mco_outputs.cmake")
+add_test(NAME rcc_map_inactive_clocks
+    COMMAND "${CMAKE_COMMAND}" "-DCC=${CMAKE_C_COMPILER}" "-DMSVC=${MSVC}"
+        -DFIXTURE=inactive_clocks -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_preprocessed.cmake")
 
 
 find_program(UNI_HAL_PWSH pwsh)
