@@ -53,6 +53,10 @@ All MCU targets and the PC target use the bundled FreeRTOS kernel.
 | `UNI_HAL_RTOS_MINIMAL_STACK_SIZE` | `512` | `configMINIMAL_STACK_SIZE` on all targets, in `StackType_t` words |
 | `UNI_HAL_RTOS_CONFIG_EXTRA` | empty | header included at the end of the generated `FreeRTOSConfig.h` |
 
+Standalone PC builds enable the test suite by default. Set `BUILD_TESTING=OFF`
+to omit it and Catch2. A parent project can enable the suite with
+`include(CTest)` before `add_subdirectory(Uni.HAL)`.
+
 ## What the application has to get right
 
 **STM32 start-up order.** Call `uni_hal_pwr_init()`, then `uni_hal_core_irq_init()`, then

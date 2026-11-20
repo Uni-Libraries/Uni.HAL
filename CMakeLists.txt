@@ -13,6 +13,9 @@ project(uni.hal LANGUAGES C CXX ASM)
 
 set(UNI_HAL_TARGET_MCU "" CACHE STRING "Target MCU: STM32H743, STM32L496, ZYNQ7000 or PC")
 set_property(CACHE UNI_HAL_TARGET_MCU PROPERTY STRINGS STM32H743 STM32L496 ZYNQ7000 PC)
+if(UNI_HAL_TARGET_MCU STREQUAL "PC" AND PROJECT_IS_TOP_LEVEL)
+    option(BUILD_TESTING "Build the Uni.HAL test suite" ON)
+endif()
 option(UNI_HAL_CAN_USE_FD "CAN messages carry up to 64 data bytes (CAN FD); OFF keeps them at 8" OFF)
 option(UNI_HAL_IO_PRINTF_LARGE_FORMAT "uni_hal_io_stdio_*printf: support ll/j/z/t (%llu, %zu) at the cost of code size" OFF)
 if(NOT DEFINED UNI_HAL_HSE_VALUE)
@@ -42,9 +45,6 @@ endif()
 include(cmake/cpm/cpm.cmake)
 include(cmake/cpm/cpm-uni.common.cmake)
 include(cmake/cpm/cpm-nanoprintf.cmake)
-if(UNI_HAL_TARGET_MCU STREQUAL "PC")
-    include(cmake/cpm/cpm-catch2.cmake)
-endif()
 
 
 
@@ -129,8 +129,8 @@ endif()
 
 add_subdirectory(src)
 
-if(UNI_HAL_TARGET_MCU STREQUAL "PC")
-    # must be called in the top-level directory for ctest to find the tests from the build root
+if(UNI_HAL_TARGET_MCU STREQUAL "PC" AND BUILD_TESTING)
+    include(cmake/cpm/cpm-catch2.cmake)
     enable_testing()
     add_subdirectory(src_tests)
 endif()

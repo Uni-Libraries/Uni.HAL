@@ -1,6 +1,13 @@
 enable_testing()
 include(Catch)
 
+add_test(NAME pc_consumer_without_tests COMMAND "${CMAKE_COMMAND}"
+    -S "${CMAKE_CURRENT_SOURCE_DIR}/pc_consumer" -B "${CMAKE_CURRENT_BINARY_DIR}/pc_consumer"
+    -G "${CMAKE_GENERATOR}" -A "${CMAKE_GENERATOR_PLATFORM}" -T "${CMAKE_GENERATOR_TOOLSET}"
+    "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}" "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+    "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}" "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+    "-DCPM_SOURCE_CACHE=${CPM_SOURCE_CACHE}" "-DCPM_uni.common_SOURCE=${uni.common_SOURCE_DIR}"
+    "-DCPM_nanoprintf_SOURCE=${nanoprintf_SOURCE_DIR}" -DUNI_HAL_TARGET_MCU=PC -DBUILD_TESTING=OFF)
 add_test(NAME toolchain_msvc_compiler_paths
     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/toolchain/msvc_compiler_paths.cmake")
 add_test(NAME rcc_map_mco_outputs
