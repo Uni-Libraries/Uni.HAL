@@ -366,26 +366,18 @@ static _uni_hal_tim_capture_t _uni_hal_tim_get_capture(TIM_TypeDef *handle, uni_
         .overflow_count = ctx->status.overflow_count,
     };
 
-    uint32_t period = _uni_hal_tim_get_counter_period(handle);
-
-    if (period > 0U)
+    // CC and update use the same preempt priority, so the software count is stable
+    // in this ISR. If hardware wrapped during the CNT read, sample CNT again.
+    uint32_t now = LL_TIM_GetCounter(handle);
+    if (LL_TIM_IsActiveFlag_UPDATE(handle))
     {
-        uint32_t half_period = period / 2U;
-        uint32_t current_counter = LL_TIM_GetCounter(handle);
-
-        // TIM1 update and capture IRQs must use the same preempt priority: this
-        // helper relies on UIF/overflow_count staying stable while CC IRQ runs.
-        if (LL_TIM_IsActiveFlag_UPDATE(handle))
-        {
-            if (counter < half_period)
-            {
-                result.overflow_count++;
-            }
-        }
-        else if (result.overflow_count > 0U && current_counter < half_period && counter > half_period)
-        {
-            result.overflow_count--;
-        }
+        result.overflow_count++;
+        now = LL_TIM_GetCounter(handle);
+    }
+    // A capture ahead of the current up-counter belongs to the preceding period.
+    if (counter > now)
+    {
+        result.overflow_count--;
     }
 
     return result;
