@@ -22,6 +22,7 @@
 #include "flash/uni_hal_flash.h"
 #include "os/uni_hal_os.h"
 #include "os/uni_hal_os_irq_stm32.h"
+#include "rcc/uni_hal_rcc_stm32h7_flash_clock.h"
 #include "systick/uni_hal_systick.h"
 
 
@@ -149,66 +150,11 @@ static uint32_t _uni_hal_flash_vos_to_index(uint32_t vos_value) {
 }
 
 
-static uint32_t _uni_hal_flash_calc_pll_source_hz(void) {
-    switch (LL_RCC_PLL_GetSource()) {
-        case LL_RCC_PLLSOURCE_HSE:
-            return HSE_VALUE;
-
-        case LL_RCC_PLLSOURCE_CSI:
-            return CSI_VALUE;
-
-        case LL_RCC_PLLSOURCE_HSI: {
-            uint32_t const hsidiv = __HAL_RCC_GET_HSI_DIVIDER();
-            if (hsidiv == RCC_CR_HSIDIV_2) {
-                return HSI_VALUE / 2U;
-            }
-            if (hsidiv == RCC_CR_HSIDIV_4) {
-                return HSI_VALUE / 4U;
-            }
-            if (hsidiv == RCC_CR_HSIDIV_8) {
-                return HSI_VALUE / 8U;
-            }
-            return HSI_VALUE;
-        }
-
-        default:
-            return 0U;
-    }
-}
-
-
-static uint32_t _uni_hal_flash_calc_pll1_p_hz(void) {
-    if (LL_RCC_PLL1P_IsEnabled() == 0U) {
-        return 0U;
-    }
-
-    uint32_t const pll_input_hz = _uni_hal_flash_calc_pll_source_hz();
-    if (pll_input_hz == 0U) {
-        return 0U;
-    }
-
-    uint32_t const pll_m = LL_RCC_PLL1_GetM();
-    uint32_t const pll_p = LL_RCC_PLL1_GetP();
-    uint32_t const pll_n = LL_RCC_PLL1_GetN();
-    if ((pll_m == 0U) || (pll_p == 0U) || (pll_n == 0U)) {
-        return 0U;
-    }
-
-    uint32_t const pll_fracn = LL_RCC_PLL1FRACN_IsEnabled() ? LL_RCC_PLL1_GetFRACN() : 0U;
-    uint64_t const vco_input_hz = ((uint64_t)pll_input_hz) / pll_m;
-    uint64_t const vco_mult_q13 = ((uint64_t)pll_n << 13U) + pll_fracn;
-    uint64_t const vco_hz = (vco_input_hz * vco_mult_q13) >> 13U;
-    uint64_t const pll_p_hz = vco_hz / pll_p;
-
-    return pll_p_hz > (uint64_t)UINT32_MAX ? UINT32_MAX : (uint32_t)pll_p_hz;
-}
-
-
 static uint32_t _uni_hal_flash_calc_sysclk_hz(void) {
     uint32_t const sysclk_src = LL_RCC_GetSysClkSource();
 
     if (sysclk_src == LL_RCC_SYS_CLKSOURCE_STATUS_PLL1) {
-        return _uni_hal_flash_calc_pll1_p_hz();
+        return uni_hal_rcc_pll1p_hz_ceil();
     }
 
     if (sysclk_src == LL_RCC_SYS_CLKSOURCE_STATUS_HSE) {
@@ -220,17 +166,7 @@ static uint32_t _uni_hal_flash_calc_sysclk_hz(void) {
     }
 
     if (sysclk_src == LL_RCC_SYS_CLKSOURCE_STATUS_HSI) {
-        uint32_t const hsidiv = __HAL_RCC_GET_HSI_DIVIDER();
-        if (hsidiv == RCC_CR_HSIDIV_2) {
-            return HSI_VALUE / 2U;
-        }
-        if (hsidiv == RCC_CR_HSIDIV_4) {
-            return HSI_VALUE / 4U;
-        }
-        if (hsidiv == RCC_CR_HSIDIV_8) {
-            return HSI_VALUE / 8U;
-        }
-        return HSI_VALUE;
+        return HSI_VALUE >> (LL_RCC_HSI_GetDivider() >> RCC_CR_HSIDIV_Pos);
     }
 
     return 0U;
@@ -239,12 +175,7 @@ static uint32_t _uni_hal_flash_calc_sysclk_hz(void) {
 
 static uint32_t _uni_hal_flash_calc_axi_clock_hz(void) {
     uint32_t const sysclk_hz = _uni_hal_flash_calc_sysclk_hz();
-    if (sysclk_hz == 0U) {
-        return 0U;
-    }
-
-    uint32_t const cpuclk_hz = LL_RCC_CALC_SYSCLK_FREQ(sysclk_hz, LL_RCC_GetSysPrescaler());
-    return LL_RCC_CALC_HCLK_FREQ(cpuclk_hz, LL_RCC_GetAHBPrescaler());
+    return uni_hal_rcc_axi_hz_ceil(sysclk_hz, LL_RCC_GetSysPrescaler(), LL_RCC_GetAHBPrescaler());
 }
 
 

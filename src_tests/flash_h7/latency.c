@@ -10,6 +10,9 @@ static FLASH_TypeDef flash;
 #define PWR_BASE ((uintptr_t)&pwr)
 #undef FLASH_R_BASE
 #define FLASH_R_BASE ((uintptr_t)&flash)
+// External audio master clock used by the sub-Hz threshold case below.
+#undef HSE_VALUE
+#define HSE_VALUE 45158400U
 #include "flash/uni_hal_flash_stm32h7.c"
 
 static bool latency_is(uint32_t latency, uint32_t write_timing) {
@@ -47,6 +50,35 @@ static unsigned check(void) {
     LL_RCC_PLL1FRACN_Enable();
     CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_0));
     LL_RCC_PLL1FRACN_Disable();
+    CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0));
+
+    // HSI64 / 51 * (223 + 1024/8192) / 2 is exactly 140 MHz.
+    // One more fractional step raises AXI by 76.59 Hz and requires another wait state.
+    LL_RCC_PLL1_SetM(51U);
+    LL_RCC_PLL1_SetN(223U);
+    LL_RCC_PLL1_SetVCOInputRange(LL_RCC_PLLINPUTRANGE_1_2);
+    LL_RCC_PLL1_SetVCOOutputRange(LL_RCC_PLLVCORANGE_MEDIUM);
+    LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_1);
+    LL_RCC_PLL1FRACN_Enable();
+    LL_RCC_PLL1_SetFRACN(1024U);
+    CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0));
+    LL_RCC_PLL1_SetFRACN(1025U);
+    CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_2, FLASH_ACR_WRHIGHFREQ_0));
+
+    // HSE / 37 * (180 + 2084/8192) / 2 / 2 = 55,000,000.338 Hz at VOS2.
+    // Exercise each bus divider separately; either can hide the fractional hertz.
+    rcc.CR |= RCC_CR_HSEON | RCC_CR_HSERDY;
+    LL_RCC_PLL_SetSource(LL_RCC_PLLSOURCE_HSE);
+    LL_RCC_PLL1_SetM(37U);
+    LL_RCC_PLL1_SetN(180U);
+    pwr.D3CR = LL_PWR_REGU_VOLTAGE_SCALE2;
+    LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_2);
+    LL_RCC_PLL1_SetFRACN(2083U);
+    CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_0, 0U));
+    LL_RCC_PLL1_SetFRACN(2084U);
+    CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0));
+    LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_1);
+    LL_RCC_SetSysPrescaler(LL_RCC_SYSCLK_DIV_2);
     CHECK(uni_hal_flash_configure_latency_auto(0U) && latency_is(LL_FLASH_LATENCY_1, FLASH_ACR_WRHIGHFREQ_0));
     return 0;
 }

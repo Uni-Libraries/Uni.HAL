@@ -1,4 +1,8 @@
 // Run the H743 driver, CMSIS clock calculation and ST LL on a Cortex-M7 with registers in SRAM.
+#ifdef TEST_HSE_HZ
+#undef HSE_VALUE
+#define HSE_VALUE TEST_HSE_HZ
+#endif
 #include <stm32h7xx.h>
 #include <stdbool.h>
 
@@ -28,7 +32,7 @@ bool model_css_active, model_flash_allowed = true;
 bool model_css_on_claim, model_css_after_claim;
 unsigned model_clock_reads, model_flash_calls, model_pll_delay;
 bool model_have_dwt, model_late_pll_switch;
-uint32_t model_ms_step, model_dwt_step;
+uint32_t model_ms_step, model_dwt_step, model_flash_hz;
 
 static uint32_t model_hse_ready(void) {
     MODIFY_REG(RCC->CR, RCC_CR_HSERDY, (RCC->CR & RCC_CR_HSEON) ? RCC_CR_HSERDY : 0U);
@@ -108,7 +112,11 @@ static void model_irq_resume(uint32_t mask) {
 #define uni_hal_systick_init model_systick_init
 #include "rcc/uni_hal_rcc_stm32h7.c"
 
-bool uni_hal_flash_configure_latency_auto(uint32_t hz) { ++model_flash_calls; return model_flash_allowed && hz != 0U; }
+bool uni_hal_flash_configure_latency_auto(uint32_t hz) {
+    ++model_flash_calls;
+    model_flash_hz = hz;
+    return model_flash_allowed && hz != 0U;
+}
 bool uni_hal_dwt_init(void) { return false; }
 bool uni_hal_dwt_is_inited(void) { return model_have_dwt; }
 uint32_t uni_hal_dwt_get_tick(void) {

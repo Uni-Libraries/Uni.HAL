@@ -12,7 +12,7 @@ extern bool model_css_active, model_flash_allowed;
 extern bool model_css_on_claim, model_css_after_claim;
 extern unsigned model_clock_reads, model_flash_calls, model_pll_delay;
 extern bool model_have_dwt, model_late_pll_switch;
-extern uint32_t model_ms_step, model_dwt_step;
+extern uint32_t model_ms_step, model_dwt_step, model_flash_hz;
 extern SysTick_Type model_systick;
 extern RCC_TypeDef model_rcc;
 bool model_hsi_enabled(void);

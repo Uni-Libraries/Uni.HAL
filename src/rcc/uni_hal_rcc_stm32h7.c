@@ -27,6 +27,7 @@
 #include "rcc/uni_hal_rcc.h"
 #include "rcc/uni_hal_rcc_rtc_stm32_internal.h"
 #include "rcc/uni_hal_rcc_stm32h7.h"
+#include "rcc/uni_hal_rcc_stm32h7_flash_clock.h"
 #include "rcc/uni_hal_rcc_stm32h7_internal.h"
 #include "systick/uni_hal_systick.h"
 #include "systick/uni_hal_systick_stm32.h"
@@ -558,12 +559,9 @@ static bool _uni_hal_stm_rcc_sysclk(void) {
     uint32_t target_sysclk_hz = 0U;
 
     if (g_uni_hal_rcc_status.pll_inited[0] && LL_RCC_PLL1P_IsEnabled()) {
-        LL_PLL_ClocksTypeDef pll1_clocks = { 0 };
-        LL_RCC_GetPLL1ClockFreq(&pll1_clocks);
-
         clock_source = LL_RCC_SYS_CLKSOURCE_PLL1;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_PLL1;
-        target_sysclk_hz = pll1_clocks.PLL_P_Frequency;
+        target_sysclk_hz = uni_hal_rcc_pll1p_hz_ceil();
     } else if (g_uni_hal_rcc_status.hse_inited) {
         clock_source = LL_RCC_SYS_CLKSOURCE_HSE;
         clock_source_status = LL_RCC_SYS_CLKSOURCE_STATUS_HSE;
@@ -593,12 +591,7 @@ static bool _uni_hal_stm_rcc_sysclk(void) {
         return false;
     }
 
-    uint32_t const target_cpuclk_hz = LL_RCC_CALC_SYSCLK_FREQ(target_sysclk_hz, sys_prescaler);
-    uint32_t const target_axi_hz = LL_RCC_CALC_HCLK_FREQ(target_sysclk_hz, ahb_prescaler);
-    if ((target_cpuclk_hz == 0U) || (target_axi_hz == 0U)) {
-        g_uni_hal_rcc_status.sys_inited = false;
-        return false;
-    }
+    uint32_t const target_axi_hz = uni_hal_rcc_axi_hz_ceil(target_sysclk_hz, sys_prescaler, ahb_prescaler);
 
     prepared_sysclk = 0U;
     if (!uni_hal_flash_configure_latency_auto(target_axi_hz)) {
@@ -667,9 +660,7 @@ static void _uni_hal_rcc_recover_css(void) {
     if (g_uni_hal_rcc_status.hsi_inited &&
         _uni_hal_stm_rcc_switch_sysclk(LL_RCC_SYS_CLKSOURCE_HSI, LL_RCC_SYS_CLKSOURCE_STATUS_HSI, timeout)) {
         if (prepared_sysclk != 0U && _uni_hal_rcc_css_dividers_prepared() && _uni_hal_stm_rcc_pll()) {
-            LL_PLL_ClocksTypeDef pll;
-            LL_RCC_GetPLL1ClockFreq(&pll);
-            if (pll.PLL_P_Frequency == prepared_sysclk) {
+            if (uni_hal_rcc_pll1p_hz_ceil() == prepared_sysclk) {
                 g_uni_hal_rcc_status.inited = _uni_hal_stm_rcc_switch_sysclk(
                     LL_RCC_SYS_CLKSOURCE_PLL1, LL_RCC_SYS_CLKSOURCE_STATUS_PLL1, timeout);
             }
