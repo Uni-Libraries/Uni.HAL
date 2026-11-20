@@ -26,7 +26,7 @@ extern "C" {
  */
 typedef struct {
     /**
-     * Watchdog Instance
+     * Watchdog instance. STM32L496 and STM32H743 support UNI_HAL_CORE_PERIPH_IWDG_1.
      */
     uni_hal_core_periph_e instance;
     

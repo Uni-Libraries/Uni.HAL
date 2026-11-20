@@ -120,8 +120,11 @@ bool uni_hal_iwdg_reload(uni_hal_iwdg_context_t *ctx) {
     bool result = false;
 
     if (uni_hal_iwdg_is_inited(ctx)) {
-        LL_IWDG_ReloadCounter(_uni_hal_iwdg_handle_get(ctx->instance));
-        result = true;
+        IWDG_TypeDef *instance = _uni_hal_iwdg_handle_get(ctx->instance);
+        if (instance != nullptr) {
+            LL_IWDG_ReloadCounter(instance);
+            result = true;
+        }
     }
 
     return result;

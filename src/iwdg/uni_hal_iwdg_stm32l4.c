@@ -35,7 +35,7 @@
 bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx) {
     bool result = false;
 
-    if (ctx != NULL) {
+    if (ctx != nullptr && ctx->instance == UNI_HAL_CORE_PERIPH_IWDG_1) {
 
         uint32_t prescaler = LL_IWDG_PRESCALER_4;
         switch (ctx->watchdog_prescaler) {
@@ -98,7 +98,7 @@ bool uni_hal_iwdg_deinit(uni_hal_iwdg_context_t *ctx) {
 bool uni_hal_iwdg_reload(uni_hal_iwdg_context_t *ctx) {
     bool result = false;
 
-    if (uni_hal_iwdg_is_inited(ctx)) {
+    if (uni_hal_iwdg_is_inited(ctx) && ctx->instance == UNI_HAL_CORE_PERIPH_IWDG_1) {
         LL_IWDG_ReloadCounter(IWDG);
         result = true;
     }
