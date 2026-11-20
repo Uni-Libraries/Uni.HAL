@@ -34,8 +34,9 @@ function(uni_hal_add_executable executable_name)
     add_custom_command(
         TARGET ${executable_name}
         POST_BUILD
-        COMMAND ${CMAKE_OBJCOPY}
-        ARGS -Obinary ${executable_name}.elf ${executable_name}.bin
+        COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:${executable_name}>"
+            "$<PATH:REPLACE_EXTENSION,LAST_ONLY,$<TARGET_FILE:${executable_name}>,.bin>"
+        VERBATIM
     )
 endfunction()
 

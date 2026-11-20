@@ -10,11 +10,12 @@ include(../../uni.hal.cmake)
 uni_hal_add_executable(allocator_regression)
 target_sources(allocator_regression PRIVATE main.c)
 target_compile_options(allocator_regression PRIVATE -fno-builtin)
-set(map_file "${CMAKE_CURRENT_BINARY_DIR}/allocator.map")
+set(map_file "$<TARGET_FILE_DIR:allocator_regression>/allocator.map")
 target_link_options(allocator_regression PRIVATE "LINKER:-Map,${map_file},--cref")
 set_property(TARGET allocator_regression APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/check_providers.cmake")
 add_custom_command(TARGET allocator_regression POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" "-DMAP_FILE=${map_file}" "-DBIN_FILE=${CMAKE_CURRENT_BINARY_DIR}/allocator_regression.bin"
+    COMMAND "${CMAKE_COMMAND}" "-DMAP_FILE=${map_file}"
+        "-DBIN_FILE=$<PATH:REPLACE_EXTENSION,LAST_ONLY,$<TARGET_FILE:allocator_regression>,.bin>"
         "-DPICOLIBC=${UNI_HAL_HAS_PICOLIBC}" "-DMCU=${UNI_HAL_TARGET_MCU}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_providers.cmake"
     VERBATIM)
