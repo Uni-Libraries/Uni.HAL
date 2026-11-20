@@ -24,13 +24,20 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
 endif()
 
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
-    add_executable(can_h743_error_snapshot_qemu error_snapshot_h743.c)
-    target_link_libraries(can_h743_error_snapshot_qemu PRIVATE uni.hal)
-    uni_hal_set_linker_file(can_h743_error_snapshot_qemu "${CMAKE_CURRENT_SOURCE_DIR}/../adc/mps2.ld")
-    add_test(NAME can_h743_error_snapshot COMMAND "${QEMU_SYSTEM_ARM}" -M ${can_machine}
-        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
-        -kernel $<TARGET_FILE:can_h743_error_snapshot_qemu>)
-    set_tests_properties(can_h743_error_snapshot PROPERTIES TIMEOUT 10)
+    set(can_status_cases error_snapshot)
+    if(UNI_HAL_CAN_USE_FD)
+        list(APPEND can_status_cases data_error)
+    endif()
+    foreach(scenario IN LISTS can_status_cases)
+        set(target can_h743_${scenario})
+        add_executable(${target}_qemu ${scenario}_h743.c)
+        target_link_libraries(${target}_qemu PRIVATE uni.hal)
+        uni_hal_set_linker_file(${target}_qemu "${CMAKE_CURRENT_SOURCE_DIR}/../adc/mps2.ld")
+        add_test(NAME ${target} COMMAND "${QEMU_SYSTEM_ARM}" -M ${can_machine}
+            -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+            -kernel $<TARGET_FILE:${target}_qemu>)
+        set_tests_properties(${target} PROPERTIES TIMEOUT 10)
+    endforeach()
 
     add_executable(can_clock_h743_qemu clock_h743.c)
     target_link_libraries(can_clock_h743_qemu PRIVATE uni.hal)

@@ -204,11 +204,16 @@ static uni_hal_can_stm32h7_instance_t *_uni_hal_can_get_instance(uni_hal_core_pe
 
 
 static uint32_t _uni_hal_can_read_psr(uni_hal_can_stm32h7_instance_t *inst, uint32_t *last_error) {
-    // Every read resets LEC to NoChange. Serialize it with IRQ and task readers so a
+    // Every read resets LEC and DLEC to NoChange. Serialize it with IRQ and task readers so a
     // preempting reader cannot lose the error or deliver it twice.
     uint32_t const primask = uni_hal_core_irq_pause();
     uint32_t const psr = inst->can->PSR;
-    uint32_t const lec = psr & FDCAN_PSR_LEC;
+    uint32_t lec = psr & FDCAN_PSR_LEC;
+    // LEC and DLEC use the same encoding. Prefer the nominal-rate error when both
+    // latches have a new error, as the register carries no ordering information.
+    if (lec == 0U || lec == FDCAN_PSR_LEC) {
+        lec = (psr & FDCAN_PSR_DLEC) >> FDCAN_PSR_DLEC_Pos;
+    }
     if (lec != 0U && lec != FDCAN_PSR_LEC) {
         inst->pending_lec = lec;
     }
