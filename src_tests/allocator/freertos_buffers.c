@@ -12,6 +12,12 @@ int uni_hal_test_io_buffers(void) {
     if (!uni_hal_io_init(&io_ctx)) {
         return 10;
     }
+    // A zero-byte read on an empty stream must leave the task's pending notification intact.
+    (void)xTaskNotifyGive(xTaskGetCurrentTaskHandle());
+    if (uni_hal_io_receive_data(&io_ctx, output, 0U, 8U) != 0U ||
+        xTaskNotifyWait(0U, UINT32_MAX, nullptr, 0U) != pdTRUE) {
+        return 18;
+    }
     const size_t active_heap = xPortGetFreeHeapSize();
 #if configSUPPORT_STATIC_ALLOCATION
     if (active_heap != initial_heap) {

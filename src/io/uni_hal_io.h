@@ -285,7 +285,7 @@ bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx);
  * already available, regardless of timeout. Serialize readers of the same RX buffer.
  * @param ctx pointer to the interface context
  * @param data pointer to the data array (must be allocated by the caller)
- * @param data_len number of bytes to receive
+ * @param data_len number of bytes to receive. A zero-length request returns immediately.
  * @param timeout finite receive budget in milliseconds, including UINT32_MAX
  * @return number of bytes which were received
  */

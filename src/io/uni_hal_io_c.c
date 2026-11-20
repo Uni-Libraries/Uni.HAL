@@ -181,7 +181,7 @@ bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
 size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_t data_len, uint32_t timeout) {
     size_t received = 0;
 
-    if (ctx != NULL && ctx->buf_rx.handle != NULL && data != NULL) {
+    if (ctx != NULL && ctx->buf_rx.handle != NULL && data != NULL && data_len != 0U) {
         bool const from_isr = reading_from_isr();
         if (from_isr) {
             timeout = 0U;

@@ -215,6 +215,20 @@ static bool full_timeout(bool search) {
     return true;
 }
 
+static bool empty_request(void) {
+    UNI_HAL_IO_DEFINITION(io, 4, 3);
+    uint8_t byte = 0xAB;
+    CHECK(uni_hal_io_init(&io_ctx));
+    waiting_for_byte = true;
+    last_wait = 0;
+    CHECK(uni_hal_io_receive_data(&io_ctx, &byte, 0U, UINT32_MAX) == 0U);
+    waiting_for_byte = false;
+    CHECK(last_wait == 0U);
+    CHECK(byte == 0xAB);
+    uni_hal_io_deinit(&io_ctx);
+    return true;
+}
+
 int main(void) {
     bool ok = changed_pattern();
     ok = overlapping_fragments() && ok;
@@ -227,5 +241,6 @@ int main(void) {
     ok = final_byte(7) && ok;
     ok = full_timeout(false) && ok;
     ok = full_timeout(true) && ok;
+    ok = empty_request() && ok;
     return ok ? 0 : 1;
 }
