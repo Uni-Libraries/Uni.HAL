@@ -401,10 +401,11 @@ def div_hz(value: int | None, divider: int | None) -> int | None:
     return value // divider
 
 
-def mul_div_hz(value: int | None, mul: int | None, div: int | None) -> int | None:
-    if value is None or mul is None or div is None or div <= 0:
+def pll_vco_hz(source_hz: int | None, pll: PllConfig) -> int | None:
+    if source_hz is None or pll.n is None or pll.m is None or pll.m <= 0 or pll.fracn is None:
         return None
-    return (value * mul) // div
+    # STM32H7 adds the 13-bit FRACN numerator to the integer multiplier.
+    return source_hz * (pll.n * 8192 + pll.fracn) // (pll.m * 8192)
 
 
 def parse_pll_configs(text: str) -> list[PllConfig]:
@@ -418,9 +419,10 @@ def parse_pll_configs(text: str) -> list[PllConfig]:
         p = pick_first_number(extract_designated(body, "p"))
         q = pick_first_number(extract_designated(body, "q"))
         r = pick_first_number(extract_designated(body, "r"))
-        fracn = pick_first_number(extract_designated(body, "fracn"))
+        fraction = extract_designated(body, "fracn")
 
-        if any(v is not None for v in [m, n, p, q, r, fracn]):
+        if any(v is not None for v in [m, n, p, q, r]) or fraction:
+            fracn = pick_first_number(fraction) if fraction else 0
             records.append(PllConfig(idx=idx, m=m, n=n, p=p, q=q, r=r, fracn=fracn))
 
     records.sort(key=lambda r: r.idx)
@@ -1055,7 +1057,7 @@ def main() -> int:
     pll_outputs: dict[str, int | None] = {}
     pll1_p_div: int | None = None
     for pll in pll_records:
-        vco = mul_div_hz(pll_source_hz, pll.n, pll.m)
+        vco = pll_vco_hz(pll_source_hz, pll)
         p_hz = div_hz(vco, pll.p)
         q_hz = div_hz(vco, pll.q)
         r_hz = div_hz(vco, pll.r)
@@ -1174,7 +1176,7 @@ def main() -> int:
 
     if pll_records:
         for pll in pll_records:
-            vco_hz = mul_div_hz(pll_source_hz, pll.n, pll.m)
+            vco_hz = pll_vco_hz(pll_source_hz, pll)
             p_hz = div_hz(vco_hz, pll.p)
             q_hz = div_hz(vco_hz, pll.q)
             r_hz = div_hz(vco_hz, pll.r)
