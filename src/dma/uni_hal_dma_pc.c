@@ -18,12 +18,3 @@ bool uni_hal_dma_init(uni_hal_dma_context_t *ctx){
     }
     return result;
 }
-
-
-bool uni_hal_dma_is_inited(const uni_hal_dma_context_t* ctx) {
-    bool result = false;
-    if (ctx != NULL) {
-        result = ctx->state.initialized;
-    }
-    return result;
-}
