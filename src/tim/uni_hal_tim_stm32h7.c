@@ -55,7 +55,8 @@ bool uni_hal_tim_init(uni_hal_tim_context_t *ctx) {
     }
     ctx->status.inited = false;
     timer_driver_t *timer = find_timer(ctx->config.instance);
-    if (timer == nullptr || ctx->config.channel_count != 0U ||
+    if (timer == nullptr || ctx->config.channel_count != 0U || ctx->config.prescaler > UINT16_MAX ||
+        (!IS_TIM_32B_COUNTER_INSTANCE(timer->handle) && ctx->config.reload_value > UINT16_MAX) ||
         !uni_hal_rcc_clk_set(ctx->config.instance, true)) {
         return false;
     }
