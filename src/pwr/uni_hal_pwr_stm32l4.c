@@ -14,6 +14,7 @@
 #include "pwr/uni_hal_pwr_stm32.h"
 #include "pwr/uni_hal_pwr_stm32l4.h"
 #include "rcc/uni_hal_rcc.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 
 //
 // Globals
@@ -26,7 +27,11 @@ extern uni_hal_pwr_context_t g_uni_hal_pwr_ctx;
 // Private
 //
 
-static void _uni_hal_stm_pwr_voltagescale(void) { LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1); }
+static bool _uni_hal_stm_pwr_voltagescale(void) {
+    LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
+    // ST allows 50 us for VOSF to clear. Use one millisecond of the HAL time base.
+    return uni_hal_stm32_wait_bits(&PWR->SR2, PWR_SR2_VOSF, 0U, 1U);
+}
 
 
 //
@@ -37,7 +42,10 @@ static void _uni_hal_stm_pwr_voltagescale(void) { LL_PWR_SetRegulVoltageScaling(
 bool uni_hal_pwr_init() {
     bool result = uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_SYSCFG, true);
     result = uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_PWR, true) && result;
-    _uni_hal_stm_pwr_voltagescale();
+    if (!result || !_uni_hal_stm_pwr_voltagescale()) {
+        g_uni_hal_pwr_ctx.inited = false;
+        return false;
+    }
 
     LL_PWR_EnableBkUpAccess();
 
@@ -51,7 +59,7 @@ bool uni_hal_pwr_init() {
     LL_PWR_DisableBkUpAccess();
     g_uni_hal_pwr_ctx.inited = true;
 
-    return result;
+    return true;
 }
 
 
