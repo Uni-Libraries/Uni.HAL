@@ -49,5 +49,25 @@ static unsigned check(void) {
     CHECK(controller.NBTP == (FDCAN_NBTP_NBRP | FDCAN_NBTP_NTSEG1 | FDCAN_NBTP_NTSEG2));
     kernel_clock_hz += ctx.config.bitrate;
     CHECK(!uni_hal_can_init(&ctx));
+#if defined(UNI_HAL_CAN_USE_FD)
+    // A prime 31 quanta exposes the data phase's independent segment limits.
+    kernel_clock_hz = 62'000'000U;
+    ctx.config.fd = true;
+    ctx.config.bitrate = 1'000'000U;
+    ctx.config.bitrate_data = 2'000'000U;
+    CHECK(uni_hal_can_init(&ctx));
+    CHECK((controller.CCCR & FDCAN_CCCR_BRSE) != 0U);
+    CHECK(controller.DBTP == ((23U << FDCAN_DBTP_DTSEG1_Pos) | (5U << FDCAN_DBTP_DTSEG2_Pos) |
+                              (5U << FDCAN_DBTP_DSJW_Pos) | FDCAN_DBTP_TDC));
+    CHECK(controller.TDCR == (25U << FDCAN_TDCR_TDCO_Pos));
+
+    // RM0433's shortest fast bit: 20 MHz / (1 + 2 + 1) = 5 Mbit/s.
+    kernel_clock_hz = 20'000'000U;
+    ctx.config.bitrate_data = 5'000'000U;
+    CHECK(uni_hal_can_init(&ctx));
+    CHECK(controller.DBTP == (FDCAN_DBTP_TDC | (1U << FDCAN_DBTP_DTSEG1_Pos)));
+    kernel_clock_hz = 15'000'000U;
+    CHECK(!uni_hal_can_init(&ctx));
+#endif
     return 0U;
 }

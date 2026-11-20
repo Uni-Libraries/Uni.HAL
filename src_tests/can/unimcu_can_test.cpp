@@ -105,8 +105,8 @@ TEST_CASE("can_timing_data_phase", "[hal_can]") {
             const bool found = uni_hal_can_timing_calc_data(clock_hz, bitrate, &timing);
 
             INFO("clock " << clock_hz << " Hz, data bit rate " << bitrate);
-            if (clock_hz / bitrate < 5U) {
-                // fewer than five time quanta per bit: not possible
+            if (clock_hz / bitrate < 4U) {
+                // FDCAN_DBTP requires at least four time quanta per bit.
                 REQUIRE_FALSE(found);
                 continue;
             }
@@ -129,6 +129,29 @@ TEST_CASE("can_timing_data_phase", "[hal_can]") {
             REQUIRE(sample_point <= 850U);
         }
     }
+}
+
+TEST_CASE("can_timing_data_phase_uses_full_dbtp_range", "[hal_can]") {
+    uni_hal_can_timing_t timing{};
+    REQUIRE(uni_hal_can_timing_calc_data(62'000'000U, 2'000'000U, &timing));
+    CHECK(timing.prescaler == 1U);
+    CHECK(timing.bs1 == 24U);
+    CHECK(timing.bs2 == 6U);
+    CHECK(timing.sjw == 6U);
+
+    REQUIRE(uni_hal_can_timing_calc_data(20'000'000U, 5'000'000U, &timing));
+    CHECK(timing.prescaler == 1U);
+    CHECK(timing.bs1 == 2U);
+    CHECK(timing.bs2 == 1U);
+    CHECK_FALSE(uni_hal_can_timing_calc_data(15'000'000U, 5'000'000U, &timing));
+
+    // Maximum DBTP divider: 32 * (1 + 32 + 16) = 1568 kernel clock periods.
+    REQUIRE(uni_hal_can_timing_calc_data(78'400'000U, 50'000U, &timing));
+    CHECK(timing.prescaler == 32U);
+    CHECK(timing.bs1 == 32U);
+    CHECK(timing.bs2 == 16U);
+    CHECK(timing.sjw == 16U);
+    CHECK_FALSE(uni_hal_can_timing_calc_data(78'450'000U, 50'000U, &timing));
 }
 
 TEST_CASE("can_timing_nominal_keeps_narrow_jump_width", "[hal_can]") {
