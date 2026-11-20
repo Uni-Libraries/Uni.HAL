@@ -15,7 +15,7 @@
 #include "os/uni_hal_os.h"
 #include "os/uni_hal_os_irq_stm32.h"
 #include "rcc/uni_hal_rcc.h"
-#include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 
 
 
@@ -257,32 +257,11 @@ static volatile uint32_t *_uni_hal_can_ram(const uni_hal_can_stm32h7_instance_t 
 
 
 /**
- * Wait for bits of a register
- * @param reg register to watch
- * @param mask bits to look at
- * @param set true to wait until all of them are set, false until all are clear
- * @return false when that did not happen within UNI_HAL_CAN_MODE_TIMEOUT_MS
- */
-static bool _uni_hal_can_wait(const volatile uint32_t *reg, uint32_t mask, bool set) {
-    uint32_t const start_ms = uni_hal_systick_get_ms();
-    for (;;) {
-        uint32_t const bits = *reg & mask;
-        if (set ? (bits == mask) : (bits == 0U)) {
-            return true;
-        }
-        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_MODE_TIMEOUT_MS) {
-            return false;
-        }
-    }
-}
-
-
-/**
  * Take the peripheral off the bus while preserving pending transfers
  */
 static bool _uni_hal_can_mode_init(FDCAN_GlobalTypeDef *can) {
     SET_BIT(can->CCCR, FDCAN_CCCR_INIT);
-    return _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_INIT, true);
+    return uni_hal_stm32_wait_bits(&can->CCCR, FDCAN_CCCR_INIT, FDCAN_CCCR_INIT, UNI_HAL_CAN_MODE_TIMEOUT_MS);
 }
 
 
@@ -679,7 +658,8 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         if (result) {
             // Wake the peripheral up and take it off the bus.
             CLEAR_BIT(can->CCCR, FDCAN_CCCR_CSR);
-            result = _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_CSA, false) && _uni_hal_can_mode_init(can);
+            result = uni_hal_stm32_wait_bits(&can->CCCR, FDCAN_CCCR_CSA, 0U, UNI_HAL_CAN_MODE_TIMEOUT_MS) &&
+                     _uni_hal_can_mode_init(can);
         }
         if (result) {
             ctx->status.queue_rx = uni_hal_can_init_rx_queue(&inst->queue_rx);
@@ -819,11 +799,11 @@ bool uni_hal_can_start(uni_hal_can_context_t *ctx) {
         // leave initialisation mode, then wait for the peripheral to have joined the bus: its
         // activity is 'synchronizing' (0) until it has seen 11 recessive bits
         CLEAR_BIT(can->CCCR, FDCAN_CCCR_INIT);
-        result = _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_INIT, false);
+        result = uni_hal_stm32_wait_bits(&can->CCCR, FDCAN_CCCR_INIT, 0U, UNI_HAL_CAN_MODE_TIMEOUT_MS);
         if (result) {
-            uint32_t const start_ms = uni_hal_systick_get_ms();
+            uni_hal_stm32_poll_budget_t budget = uni_hal_stm32_poll_begin(UNI_HAL_CAN_MODE_TIMEOUT_MS);
             while ((_uni_hal_can_read_psr(inst, nullptr) & FDCAN_PSR_ACT) == 0U) {
-                if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_MODE_TIMEOUT_MS) {
+                if (uni_hal_stm32_poll_expired(&budget)) {
                     result = false;
                     break;
                 }
@@ -1086,19 +1066,14 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
             uint32_t const buffer_bit = 1UL << tx_buffer;
 
             // wait until the buffer is done with the frame; in bus-off it never is
-            uint32_t const start_ms = uni_hal_systick_get_ms();
-            bool timed_out = false;
-            while ((can->TXBRP & buffer_bit) != 0U) {
-                if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_TX_TIMEOUT_MS) {
-                    can->TXBCR = buffer_bit;
-                    timed_out = true;
-                    break;
-                }
+            bool const done = uni_hal_stm32_wait_bits(&can->TXBRP, buffer_bit, 0U, UNI_HAL_CAN_TX_TIMEOUT_MS);
+            if (!done) {
+                can->TXBCR = buffer_bit;
             }
 
             // the request also ends when the frame was cancelled: 'transmission occurred' tells
             // whether it went out, and stays set until the buffer gets its next frame
-            result = !timed_out && (can->TXBTO & buffer_bit) != 0U;
+            result = done && (can->TXBTO & buffer_bit) != 0U;
         }
 
         primask = uni_hal_core_irq_pause();

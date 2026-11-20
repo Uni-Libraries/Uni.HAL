@@ -33,6 +33,12 @@ static unsigned pending, fifo_put, callback_count;
 static bool nested_success, complete_on_wait, register_on_completion, first_success;
 static unsigned last_mailbox;
 static bool last_success;
+static bool stalled_tick;
+static unsigned stalled_reads;
+enum { CLOCK_RESCUE_READS = 20000U };
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+static bool hold_init;
+#endif
 #if defined(UNI_HAL_TARGET_MCU_STM32L496)
 static uint32_t registration_ack;
 #endif
@@ -131,6 +137,11 @@ uint32_t test_clock(void) {
         complete_on_wait = false;
         complete(0U, first_success);
     }
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+    if (hold_init) controller.CCCR |= FDCAN_CCCR_INIT;
+#endif
+    // Let a broken waiter finish too, so the test can report which call got stuck.
+    if (stalled_tick && ++stalled_reads <= CLOCK_RESCUE_READS) return now;
     return ++now;
 }
 
@@ -234,12 +245,17 @@ static unsigned check_unreported_completion(void) {
     return 0U;
 }
 
-static unsigned check_timeout(void) {
+static unsigned check_timeout(bool stall) {
     setup(false);
     ctx.status.tx_callback = nullptr;
     pending = 0U;
     refresh_registers();
+    // The same pending frame must be cancelled even if the millisecond counter stalls.
+    stalled_reads = 0U;
+    stalled_tick = stall;
     CHECK(!uni_hal_can_transmit(&ctx, &second));
+    CHECK(stalled_reads <= CLOCK_RESCUE_READS);
+    stalled_tick = false;
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
     CHECK(controller.TXBCR == 1U);
 #else
@@ -253,6 +269,38 @@ static unsigned check_timeout(void) {
     CHECK(uni_hal_can_transmit_nowait(&ctx, &second));
     refresh_registers();
     CHECK(pending == 1U && frame_matches(0U, &second));
+    return 0U;
+}
+
+static unsigned check_stalled_start(void) {
+    setup(false);
+    stalled_reads = 0U;
+    stalled_tick = true;
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+    controller.CCCR = FDCAN_CCCR_INIT;
+    controller.PSR = 1U << FDCAN_PSR_ACT_Pos;
+    hold_init = true;
+#else
+    controller.MCR = CAN_MCR_INRQ;
+    controller.MSR = CAN_MSR_INAK;
+#endif
+    CHECK(!uni_hal_can_start(&ctx));
+    CHECK(stalled_reads <= CLOCK_RESCUE_READS);
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+    CHECK((controller.CCCR & FDCAN_CCCR_INIT) != 0U);
+    hold_init = false;
+    controller.PSR = 0U; // Mode acknowledged, bus still synchronizing.
+    stalled_reads = 0U;
+    CHECK(!uni_hal_can_start(&ctx));
+    CHECK(stalled_reads <= CLOCK_RESCUE_READS);
+    CHECK((controller.CCCR & FDCAN_CCCR_INIT) != 0U);
+    controller.PSR = 1U << FDCAN_PSR_ACT_Pos;
+#else
+    CHECK((controller.MCR & CAN_MCR_INRQ) != 0U);
+    controller.MSR = 0U;
+#endif
+    CHECK(uni_hal_can_start(&ctx));
+    stalled_tick = false;
     return 0U;
 }
 
@@ -313,6 +361,7 @@ __attribute__((used, section(".test_vectors")))
 const uintptr_t vectors[17] = {[0] = (uintptr_t)&_stack_top, [1] = (uintptr_t)run_tests, [16] = (uintptr_t)irq};
 
 void run_tests(void) {
+    SystemCoreClock = 100000U;
     NVIC_EnableIRQ((IRQn_Type)0);
     unsigned failure = check_interrupted_send(false);
     if (!failure) failure = check_interrupted_send(true);
@@ -321,13 +370,15 @@ void run_tests(void) {
     if (!failure) failure = check_callback_registration(true);
     if (!failure) failure = check_callback_registration(false);
     if (!failure) failure = check_unreported_completion();
-    if (!failure) failure = check_timeout();
+    if (!failure) failure = check_timeout(false);
+    if (!failure) failure = check_stalled_start();
+    if (!failure) failure = check_timeout(true);
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
     if (!failure) failure = check_fifo_wrap();
     if (!failure) failure = check_restart(false);
     if (!failure) failure = check_restart(true);
 #endif
-    uint32_t result[] = {0x20026U, failure};
+    uint32_t result[] = {0x20026U, failure == 0U ? 0U : 1U + (failure - 1U) % UINT8_MAX};
     register uint32_t operation __asm__("r0") = 0x20U;
     register void *args __asm__("r1") = result;
     __asm__ volatile ("bkpt 0xab" : "+r"(operation), "+r"(args) :: "memory");

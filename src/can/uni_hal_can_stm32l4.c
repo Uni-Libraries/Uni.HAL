@@ -13,7 +13,7 @@
 #include "os/uni_hal_os.h"
 #include "os/uni_hal_os_irq_stm32.h"
 #include "rcc/uni_hal_rcc.h"
-#include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 
 
 
@@ -159,32 +159,11 @@ static bool _uni_hal_can_interrupt_enable(uni_hal_core_periph_e instance, uint32
 
 
 /**
- * Wait for bits of the master status register
- * @param can CAN instance
- * @param mask bits of CAN_MSR to look at
- * @param set true to wait until all of them are set, false until all are clear
- * @return false when that did not happen within UNI_HAL_CAN_MODE_TIMEOUT_MS
- */
-static bool _uni_hal_can_wait_msr(const CAN_TypeDef *can, uint32_t mask, bool set) {
-    uint32_t const start_ms = uni_hal_systick_get_ms();
-    for (;;) {
-        uint32_t const bits = can->MSR & mask;
-        if (set ? (bits == mask) : (bits == 0U)) {
-            return true;
-        }
-        if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_MODE_TIMEOUT_MS) {
-            return false;
-        }
-    }
-}
-
-
-/**
  * Put the peripheral into initialisation mode, where it takes no part in bus traffic
  */
 static bool _uni_hal_can_mode_init(CAN_TypeDef *can) {
     SET_BIT(can->MCR, CAN_MCR_INRQ);
-    return _uni_hal_can_wait_msr(can, CAN_MSR_INAK, true);
+    return uni_hal_stm32_wait_bits(&can->MSR, CAN_MSR_INAK, CAN_MSR_INAK, UNI_HAL_CAN_MODE_TIMEOUT_MS);
 }
 
 
@@ -526,7 +505,7 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             result = result && _uni_hal_can_mode_init(can);
             if (result) {
                 CLEAR_BIT(can->MCR, CAN_MCR_SLEEP);
-                result = _uni_hal_can_wait_msr(can, CAN_MSR_SLAK, false);
+                result = uni_hal_stm32_wait_bits(&can->MSR, CAN_MSR_SLAK, 0U, UNI_HAL_CAN_MODE_TIMEOUT_MS);
             }
             if (result) {
                 ctx->status.queue_rx = uni_hal_can_init_rx_queue(&g_uni_hal_can_rx_queues[can == CAN1 ? 0U : 1U]);
@@ -595,7 +574,7 @@ bool uni_hal_can_start(uni_hal_can_context_t *ctx) { //-V2009
 
         // leave initialisation mode: the peripheral synchronises to the bus first
         CLEAR_BIT(can->MCR, CAN_MCR_INRQ);
-        result = _uni_hal_can_wait_msr(can, CAN_MSR_INAK, false);
+        result = uni_hal_stm32_wait_bits(&can->MSR, CAN_MSR_INAK, 0U, UNI_HAL_CAN_MODE_TIMEOUT_MS);
         if (!result) {
             // The bus was not idle in time (e.g. stuck dominant). Withdraw the request, so that
             // the peripheral is in a defined state and the start can be tried again later.
@@ -828,20 +807,15 @@ bool uni_hal_can_transmit(uni_hal_can_context_t *ctx, uni_hal_can_msg_t *msg) {
             uint32_t const abrq_mask = CAN_TSR_ABRQ0 << (8U * tx_mailbox);
 
             // wait until the mailbox is done with the frame; in bus-off it never is
-            uint32_t const start_ms = uni_hal_systick_get_ms();
-            bool timed_out = false;
-            while ((can->TSR & tme_mask) == 0U) {
-                if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_TX_TIMEOUT_MS) {
-                    can->TSR = abrq_mask;
-                    timed_out = true;
-                    break;
-                }
+            bool const done = uni_hal_stm32_wait_bits(&can->TSR, tme_mask, tme_mask, UNI_HAL_CAN_TX_TIMEOUT_MS);
+            if (!done) {
+                can->TSR = abrq_mask;
             }
 
             // The request also completes when the frame was lost (error, arbitration): check TXOK.
             // With a transmit callback registered the interrupt may have acknowledged the
             // request already, which clears TXOK; it keeps the outcome in tx_ok for this case.
-            result = !timed_out && ((can->TSR & txok_mask) != 0U || ctx->status.tx_ok[tx_mailbox]);
+            result = done && ((can->TSR & txok_mask) != 0U || ctx->status.tx_ok[tx_mailbox]);
         }
 
         primask = uni_hal_core_irq_pause();
