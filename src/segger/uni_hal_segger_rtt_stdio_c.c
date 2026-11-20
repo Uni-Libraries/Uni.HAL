@@ -54,8 +54,12 @@ bool _uni_hal_segger_rtt_stdio_timer(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_ti
 
             // TX
             while (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
-                SEGGER_RTT_PutChar(ctx_fn->buffer_index_up, data);
-                ctx_io->stats.tx_transmited++;
+                // An IRQ cannot wait for the debugger to drain a blocking up-buffer.
+                if (SEGGER_RTT_PutCharSkip(ctx_fn->buffer_index_up, (char)data)) {
+                    ctx_io->stats.tx_transmited++;
+                } else {
+                    ctx_io->stats.tx_dropped++;
+                }
             }
         }
     }

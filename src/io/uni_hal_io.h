@@ -125,9 +125,12 @@ typedef struct {
     uint32_t rx_overrun;
 
     /**
-     * Number of transmited bytes
+     * Number of transmitted bytes accepted by the transport
      */
     uint32_t tx_transmited;
+
+    /** Bytes dequeued for transmission but discarded by the transport (e.g. RTT up-buffer full). */
+    uint32_t tx_dropped;
 
 } uni_hal_io_stats_t;
 

@@ -11,3 +11,4 @@ function(add_rtt_test name source)
 endfunction()
 
 add_rtt_test(rtt_stdio_init init.c)
+add_rtt_test(rtt_stdio_tx transmit.c)
