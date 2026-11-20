@@ -10,6 +10,7 @@
 extern int __real_main(void);
 extern int uni_hal_test_io_buffers(void);
 extern int uni_hal_test_cpp_io_definition(void);
+extern int uni_hal_test_tunnel_irq(void);
 extern void SysTick_Handler(void);
 extern volatile uint32_t g_uni_hal_systick_counter;
 
@@ -109,6 +110,9 @@ static void run_in_task(void *unused) {
     }
     if (result == 0) {
         result = uni_hal_test_cpp_io_definition();
+    }
+    if (result == 0) {
+        result = uni_hal_test_tunnel_irq();
     }
     exit_qemu(result);
 }

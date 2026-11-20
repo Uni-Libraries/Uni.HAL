@@ -140,3 +140,30 @@ TEST_CASE("IO tunnel disconnect releases both endpoints and permits reconnection
     REQUIRE(uni_hal_io_buffer_pop_isr(&third.io_ctx.buf_tx, &byte, 1, &third.woken) == 1);
     REQUIRE(byte == 0x5A);
 }
+
+TEST_CASE("IO tunnel forwards a whole block once or leaves room for a retry", "[hal_io]") {
+    for (bool transparent : {false, true}) {
+        Io source, peer;
+        uni_hal_io_tunnel_context_t tunnel{};
+        REQUIRE(uni_hal_io_tunnel_init(&tunnel, &source.io_ctx, &peer.io_ctx, transparent));
+        uint8_t queued[] = {0xBA, 0xAD};
+        uint8_t block[] = {1, 2, 3, 4, 5};
+        uint8_t output[sizeof(block)]{};
+        REQUIRE(uni_hal_io_transmit_data(&peer.io_ctx, queued, sizeof(queued)) == sizeof(queued));
+        unsigned triggers = 0;
+        peer.io_ctx.handlers.tx_trigger_ctx = &triggers;
+        peer.io_ctx.handlers.tx_trigger = [](void *, void *ctx) { ++*static_cast<unsigned *>(ctx); };
+
+        REQUIRE(uni_hal_io_tunnel_transmit(&tunnel, &source.io_ctx, block, sizeof(block)) == UNI_HAL_IO_TUNNEL_FAIL);
+        REQUIRE(uni_hal_io_tunnel_transmit(&tunnel, &source.io_ctx, block, 0) == UNI_HAL_IO_TUNNEL_FAIL);
+        REQUIRE(triggers == 0);
+        REQUIRE(uni_hal_io_buffer_pop_isr(&peer.io_ctx.buf_tx, output, sizeof(output), &peer.woken) == sizeof(queued));
+        REQUIRE(std::memcmp(output, queued, sizeof(queued)) == 0);
+
+        const auto expected = transparent ? UNI_HAL_IO_TUNNEL_TRANSPARENT : UNI_HAL_IO_TUNNEL_OK;
+        REQUIRE(uni_hal_io_tunnel_transmit(&tunnel, &source.io_ctx, block, sizeof(block)) == expected);
+        REQUIRE(triggers == 1);
+        REQUIRE(uni_hal_io_buffer_pop_isr(&peer.io_ctx.buf_tx, output, sizeof(output), &peer.woken) == sizeof(block));
+        REQUIRE(std::memcmp(output, block, sizeof(block)) == 0);
+    }
+}

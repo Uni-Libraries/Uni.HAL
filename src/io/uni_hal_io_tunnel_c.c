@@ -3,6 +3,7 @@
 //
 
 #include "uni_hal_io_tunnel.h"
+#include "uni_hal_io_internal.h"
 
 #include "core/uni_hal_core.h"
 
@@ -76,12 +77,9 @@ uni_hal_io_tunnel_transmit_result_t uni_hal_io_tunnel_transmit(uni_hal_io_tunnel
             io_to = ctx->io_first;
         }
 
-        // send to other io
-        result = uni_hal_io_transmit_data(io_to, data, data_len) ? UNI_HAL_IO_TUNNEL_OK : UNI_HAL_IO_TUNNEL_FAIL;
-
-        // check for transparent
-        if (result == UNI_HAL_IO_TUNNEL_OK && ctx->transparent) {
-            result = UNI_HAL_IO_TUNNEL_TRANSPARENT;
+        bool const transparent = ctx->transparent;
+        if (uni_hal_io_transmit_internal(io_to, data, data_len, true)) {
+            result = transparent ? UNI_HAL_IO_TUNNEL_TRANSPARENT : UNI_HAL_IO_TUNNEL_OK;
         }
     }
 

@@ -82,7 +82,8 @@ bool uni_hal_io_tunnel_is_inited(const uni_hal_io_tunnel_context_t *ctx);
  * @param io_from originating IO context
  * @param data data to transmit
  * @param data_len length of data to transmit
- * @return one of ::uni_hal_io_tunnel_transmit_result_t values
+ * @return OK or TRANSPARENT after the entire block is queued; FAIL queues no bytes.
+ *         A zero length, an invalid endpoint or insufficient space returns FAIL.
  */
 uni_hal_io_tunnel_transmit_result_t uni_hal_io_tunnel_transmit(uni_hal_io_tunnel_context_t *ctx,
                                                              uni_hal_io_context_t *io_from, uint8_t *data,

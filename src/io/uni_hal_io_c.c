@@ -7,7 +7,7 @@
 #include <string.h>
 
 // uni_hal
-#include "io/uni_hal_io.h"
+#include "io/uni_hal_io_internal.h"
 #include "systick/uni_hal_systick.h"
 
 
@@ -54,35 +54,9 @@ static size_t _uni_hal_io_buf_read(uni_hal_io_buffer_t *buf, uint8_t *data, size
     return xStreamBufferReceive(buf->handle, data, data_len, ticks_to_wait);
 }
 
-/**
- * Store bytes in a buffer, any context
- */
-static size_t _uni_hal_io_buf_write(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len) {
-    size_t result;
-
-    // A stream buffer supports a single writer. Several tasks and interrupts write here
-    // (stdio output for one), so each write runs in a critical section with no block time.
-#if defined(UNI_HAL_TARGET_MCU_PC)
-    taskENTER_CRITICAL();
-    result = xStreamBufferSend(buf->handle, data, data_len, 0U);
-    taskEXIT_CRITICAL();
-#else
-    if (xPortIsInsideInterrupt()) {
-        BaseType_t woken = pdFALSE;
-        UBaseType_t const saved_mask = taskENTER_CRITICAL_FROM_ISR();
-        result = xStreamBufferSendFromISR(buf->handle, data, data_len, &woken);
-        taskEXIT_CRITICAL_FROM_ISR(saved_mask);
-        if (woken) {
-            portYIELD_FROM_ISR(pdTRUE);
-        }
-    } else {
-        taskENTER_CRITICAL();
-        result = xStreamBufferSend(buf->handle, data, data_len, 0U);
-        taskEXIT_CRITICAL();
-    }
-#endif
-
-    return result;
+// A one-byte write already has whole-block semantics in a FreeRTOS stream buffer.
+static bool can_write(StreamBufferHandle_t buffer, size_t size, bool require_full) {
+    return !require_full || size == 1U || size <= xStreamBufferSpacesAvailable(buffer);
 }
 
 
@@ -289,18 +263,43 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
 // Functions/Transmit
 //
 
-size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, uint32_t data_len) {
-    size_t result = 0;
+size_t uni_hal_io_transmit_internal(uni_hal_io_context_t *ctx, const uint8_t *data, size_t data_len, bool require_full) {
+    if (!ctx || !ctx->buf_tx.handle || !data || !data_len) {
+        return 0U;
+    }
+    StreamBufferHandle_t const buffer = ctx->buf_tx.handle;
+    size_t sent = 0U;
 
-    if (ctx != NULL && ctx->buf_tx.handle != NULL && data != NULL) {
-        // push to buffer
-        result = _uni_hal_io_buf_write(&ctx->buf_tx, data, data_len);
-
-        // call TX trigger hook
-        if (result != 0U && ctx->handlers.tx_trigger != NULL) {
-            ctx->handlers.tx_trigger(ctx, ctx->handlers.tx_trigger_ctx);
+    // Stream buffers support one writer. Check capacity and enqueue under the same
+    // lock as every other TX writer, with zero wait time in both task and IRQ context.
+#if !defined(UNI_HAL_TARGET_MCU_PC)
+    if (xPortIsInsideInterrupt()) {
+        BaseType_t woken = pdFALSE;
+        UBaseType_t const saved_mask = taskENTER_CRITICAL_FROM_ISR();
+        if (can_write(buffer, data_len, require_full)) {
+            sent = xStreamBufferSendFromISR(buffer, data, data_len, &woken);
         }
+        taskEXIT_CRITICAL_FROM_ISR(saved_mask);
+        if (woken) {
+            portYIELD_FROM_ISR(pdTRUE);
+        }
+    } else
+#endif
+    {
+        taskENTER_CRITICAL();
+        if (can_write(buffer, data_len, require_full)) {
+            sent = xStreamBufferSend(buffer, data, data_len, 0U);
+        }
+        taskEXIT_CRITICAL();
     }
 
-    return result;
+    if (sent && ctx->handlers.tx_trigger) {
+        ctx->handlers.tx_trigger(ctx, ctx->handlers.tx_trigger_ctx);
+    }
+    return sent;
+}
+
+
+size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, uint32_t data_len) {
+    return uni_hal_io_transmit_internal(ctx, data, data_len, false);
 }
