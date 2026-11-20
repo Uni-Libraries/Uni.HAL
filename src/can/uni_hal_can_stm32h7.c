@@ -146,6 +146,12 @@ _Static_assert(2U * UNI_HAL_CAN_RAM_BLOCK_WORDS <= UNI_HAL_CAN_RAM_WORDS, "the b
 // Context Storage
 //
 
+typedef enum {
+    FDCAN_STOPPED,     // shared clock available to the sibling
+    FDCAN_CONFIGURED,  // holds the clock, including while initialization is in progress
+    FDCAN_STARTED,     // holds the clock and can recover automatically from bus-off
+} fdcan_state_t;
+
 typedef struct {
     FDCAN_GlobalTypeDef *can;
 
@@ -156,6 +162,10 @@ typedef struct {
 
     uni_hal_can_context_t *ctx;
     QueueHandle_t queue_rx;
+
+    // A stopped controller keeps its bit timing and needs the same kernel clock on restart.
+    uni_hal_rcc_clksrc_e clock_source;
+    volatile fdcan_state_t state;
 
     /** TX buffers that hold a frame whose completion has not been reported yet */
     volatile uint32_t tx_inflight;
@@ -186,6 +196,24 @@ static uni_hal_can_stm32h7_instance_t *_uni_hal_can_get_instance(uni_hal_core_pe
     }
 
     return result;
+}
+
+
+static bool _uni_hal_can_claim_clock(uni_hal_can_stm32h7_instance_t *inst, uni_hal_core_periph_e instance,
+                                     uni_hal_rcc_clksrc_e source, fdcan_state_t state) {
+    const uni_hal_can_stm32h7_instance_t *peer =
+        inst == &g_uni_hal_can_instance[0] ? &g_uni_hal_can_instance[1] : &g_uni_hal_can_instance[0];
+    // Reserve before GPIO setup, timing calculation or bus synchronization can be preempted.
+    uint32_t const primask = uni_hal_core_irq_pause();
+    uni_hal_rcc_clksrc_e const selected = uni_hal_rcc_clksrc_get(instance);
+    bool const keep = source == UNI_HAL_RCC_CLKSRC_UNKNOWN || source == selected;
+    bool const claimed = keep || (peer->state == FDCAN_STOPPED && uni_hal_rcc_clksrc_set(instance, source));
+    if (claimed) {
+        inst->clock_source = keep ? selected : source;
+        inst->state = state;
+    }
+    uni_hal_core_irq_resume(primask);
+    return claimed;
 }
 
 
@@ -228,6 +256,17 @@ static bool _uni_hal_can_wait(const volatile uint32_t *reg, uint32_t mask, bool 
 static bool _uni_hal_can_mode_init(FDCAN_GlobalTypeDef *can) {
     SET_BIT(can->CCCR, FDCAN_CCCR_INIT);
     return _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_INIT, true);
+}
+
+
+static bool _uni_hal_can_stop(uni_hal_can_stm32h7_instance_t *inst) {
+    // A pending bus-off IRQ must not restart this controller after we release its clock.
+    if (inst->state == FDCAN_STARTED) {
+        inst->state = FDCAN_CONFIGURED;
+    }
+    bool const stopped = _uni_hal_can_mode_init(inst->can);
+    inst->state = stopped ? FDCAN_STOPPED : FDCAN_STARTED;
+    return stopped;
 }
 
 
@@ -498,7 +537,7 @@ static BaseType_t _uni_hal_can_irq_error(const uni_hal_can_stm32h7_instance_t *i
         // FDCAN stops in bus-off with INIT set and waits for the software. Clearing INIT starts
         // the recovery sequence of 129 x 11 recessive bits, which is what bxCAN does on its own
         // with ABOM set.
-        if (ctx != nullptr && ctx->config.auto_bus_off) {
+        if (inst->state == FDCAN_STARTED && ctx != nullptr && ctx->config.auto_bus_off) {
             CLEAR_BIT(can->CCCR, FDCAN_CCCR_INIT);
         }
     }
@@ -571,21 +610,23 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
     if (ctx == nullptr) {
         return false;
     }
-    ctx->status = (uni_hal_can_status_t){0};
     bool result = false;
     uni_hal_can_stm32h7_instance_t *inst = _uni_hal_can_get_instance(ctx->config.instance);
 
+    // Reconfiguration resets the FIFOs. A running controller must be stopped first.
+    if (inst != nullptr && (inst->state == FDCAN_STARTED ||
+                            !_uni_hal_can_claim_clock(inst, ctx->config.instance, ctx->config.clock_source, FDCAN_CONFIGURED))) {
+        if (inst->ctx != ctx) {
+            ctx->status = (uni_hal_can_status_t){0};
+        }
+        return false;
+    }
+    ctx->status = (uni_hal_can_status_t){0};
     if (inst != nullptr) {
         FDCAN_GlobalTypeDef *can = inst->can;
         inst->ctx = ctx;
         inst->tx_inflight = 0U;
-        result = true;
-
-        // both instances share one kernel clock; UNKNOWN keeps the source that is selected
-        if (ctx->config.clock_source != UNI_HAL_RCC_CLKSRC_UNKNOWN) {
-            result = result && uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source);
-        }
-        result = result && uni_hal_rcc_clk_set(ctx->config.instance, true);
+        result = uni_hal_rcc_clk_set(ctx->config.instance, true);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_rx);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_tx);
 
@@ -729,6 +770,9 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         }
 
         ctx->status.inited = result;
+        if (!result) {
+            inst->state = FDCAN_STOPPED;
+        }
     }
 
     return result;
@@ -737,7 +781,11 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
 bool uni_hal_can_start(uni_hal_can_context_t *ctx) {
     bool result = false;
     if (uni_hal_can_is_inited(ctx)) {
-        FDCAN_GlobalTypeDef *can = _uni_hal_can_get_instance(ctx->config.instance)->can;
+        uni_hal_can_stm32h7_instance_t *inst = _uni_hal_can_get_instance(ctx->config.instance);
+        if (!_uni_hal_can_claim_clock(inst, ctx->config.instance, inst->clock_source, FDCAN_STARTED)) {
+            return false;
+        }
+        FDCAN_GlobalTypeDef *can = inst->can;
 
         // leave initialisation mode, then wait for the peripheral to have joined the bus: its
         // activity is 'synchronizing' (0) until it has seen 11 recessive bits
@@ -756,7 +804,7 @@ bool uni_hal_can_start(uni_hal_can_context_t *ctx) {
         if (!result) {
             // The bus was not idle in time (e.g. stuck dominant). Go back to initialisation
             // mode, so that the peripheral is in a defined state and the start can be retried.
-            (void)_uni_hal_can_mode_init(can);
+            (void)_uni_hal_can_stop(inst);
         }
     }
 
@@ -766,7 +814,8 @@ bool uni_hal_can_start(uni_hal_can_context_t *ctx) {
 bool uni_hal_can_stop(uni_hal_can_context_t *ctx) {
     bool result = false;
     if (uni_hal_can_is_inited(ctx)) {
-        result = _uni_hal_can_mode_init(_uni_hal_can_get_instance(ctx->config.instance)->can);
+        uni_hal_can_stm32h7_instance_t *inst = _uni_hal_can_get_instance(ctx->config.instance);
+        result = _uni_hal_can_stop(inst);
     }
 
     return result;

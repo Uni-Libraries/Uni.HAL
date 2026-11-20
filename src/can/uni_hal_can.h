@@ -132,7 +132,9 @@ typedef struct
     /**
      * Kernel clock of the peripheral, STM32H7 only: UNI_HAL_RCC_CLKSRC_HSE, _PLL1Q or _PLL2Q.
      * Both FDCAN instances share it. UNI_HAL_RCC_CLKSRC_UNKNOWN (0) keeps the source that is
-     * selected, which is HSE after reset. The bxCAN of the STM32L4 always runs from APB1.
+     * selected, which is HSE after reset. Stop the sibling controller before selecting another
+     * source. Restarting needs the source used for its configured timing. The bxCAN of the
+     * STM32L4 always runs from APB1.
      */
     uni_hal_rcc_clksrc_e clock_source;
 
