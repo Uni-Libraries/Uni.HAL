@@ -18,7 +18,7 @@
 
 // Uni.HAL
 #include "core/uni_hal_core.h"
-#include "dwt/uni_hal_dwt.h"
+#include "dwt/uni_hal_dwt_stm32_wait.h"
 #include "flash/uni_hal_flash.h"
 #include "os/uni_hal_os.h"
 #include "os/uni_hal_os_irq_stm32.h"
@@ -49,15 +49,6 @@ enum {
     // same budget as FLASH_TIMEOUT_VALUE of the ST HAL blocking erase
     UNI_HAL_FLASH_ERASE_TIMEOUT_MS = 50000U,
 };
-
-
-typedef struct {
-    bool dwt_ready;
-    uint32_t start_tick;
-    uint32_t timeout_tick;
-    uint32_t start_ms;
-    uint32_t timeout_ms;
-} uni_hal_flash_wait_timeout_t;
 
 
 typedef struct {
@@ -139,48 +130,6 @@ void FLASH_IRQHandler(void) {
 //
 // Private
 //
-
-static void _uni_hal_flash_wait_timeout_begin(uni_hal_flash_wait_timeout_t* timeout_ctx, uint32_t timeout_ms) {
-    if (timeout_ctx == nullptr) {
-        return;
-    }
-
-    timeout_ctx->dwt_ready = uni_hal_dwt_is_inited();
-    timeout_ctx->start_tick = 0U;
-    timeout_ctx->timeout_tick = 0U;
-    timeout_ctx->start_ms = uni_hal_systick_get_ms();
-    timeout_ctx->timeout_ms = timeout_ms;
-
-    if (timeout_ctx->dwt_ready) {
-        timeout_ctx->start_tick = uni_hal_dwt_get_tick();
-        timeout_ctx->timeout_tick = uni_hal_dwt_timeout_ms_to_tick(timeout_ms);
-    }
-}
-
-
-static bool _uni_hal_flash_wait_timeout_expired(const uni_hal_flash_wait_timeout_t* timeout_ctx) {
-    if (timeout_ctx == nullptr) {
-        return true;
-    }
-
-    if (timeout_ctx->timeout_ms == 0U) {
-        return true;
-    }
-
-    if (timeout_ctx->dwt_ready) {
-        if (timeout_ctx->timeout_tick == 0U) {
-            uint32_t elapsed_ms = uni_hal_systick_get_ms() - timeout_ctx->start_ms;
-            return elapsed_ms >= timeout_ctx->timeout_ms;
-        }
-
-        uint32_t elapsed_tick = uni_hal_dwt_compare(timeout_ctx->start_tick, uni_hal_dwt_get_tick());
-        return elapsed_tick >= timeout_ctx->timeout_tick;
-    }
-
-    uint32_t elapsed_ms = uni_hal_systick_get_ms() - timeout_ctx->start_ms;
-    return elapsed_ms >= timeout_ctx->timeout_ms;
-}
-
 
 static uint32_t _uni_hal_flash_vos_to_index(uint32_t vos_value) {
     if (vos_value == LL_PWR_REGU_VOLTAGE_SCALE0) {
@@ -376,11 +325,9 @@ static bool _uni_hal_flash_apply_latency(uint32_t latency, uint32_t wrhighfreq) 
     MODIFY_REG(FLASH->ACR, FLASH_ACR_WRHIGHFREQ, wrhighfreq);
     LL_FLASH_SetLatency(latency);
 
-    uni_hal_flash_wait_timeout_t timeout_ctx = { 0 };
-    _uni_hal_flash_wait_timeout_begin(&timeout_ctx, UNI_HAL_FLASH_LATENCY_TIMEOUT_MS);
-
+    uni_hal_stm32_clock_timeout_t timeout = uni_hal_stm32_clock_timeout_begin(UNI_HAL_FLASH_LATENCY_TIMEOUT_MS);
     while (LL_FLASH_GetLatency() != latency) {
-        if (_uni_hal_flash_wait_timeout_expired(&timeout_ctx)) {
+        if (uni_hal_stm32_clock_timeout_expired(&timeout)) {
             return false;
         }
     }

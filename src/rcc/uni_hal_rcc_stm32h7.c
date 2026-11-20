@@ -20,7 +20,7 @@
 #include <uni_common.h>
 
 // uni_hal
-#include "dwt/uni_hal_dwt.h"
+#include "dwt/uni_hal_dwt_stm32_wait.h"
 #include "flash/uni_hal_flash.h"
 #include "gpio/uni_hal_gpio.h"
 #include "pwr/uni_hal_pwr_stm32.h"
@@ -30,7 +30,6 @@
 #include "rcc/uni_hal_rcc_stm32h7_internal.h"
 #include "systick/uni_hal_systick.h"
 #include "systick/uni_hal_systick_stm32.h"
-#include "systick/uni_hal_systick_stm32_wait.h"
 
 
 
@@ -136,24 +135,10 @@ static bool _uni_hal_stm_rcc_wait_ready(uint32_t (*get_state)(void), uint32_t ex
         return false;
     }
 
-    uni_hal_stm32_poll_budget_t budget = uni_hal_stm32_poll_begin(timeout_ms);
-    bool const use_dwt = SystemCoreClock != 0U && uni_hal_dwt_is_inited();
-    uint32_t previous_cycle = use_dwt ? uni_hal_dwt_get_tick() : 0U;
-    uint64_t cycles_left = ((uint64_t)timeout_ms * SystemCoreClock + 999U) / 1000U;
+    uni_hal_stm32_clock_timeout_t timeout = uni_hal_stm32_clock_timeout_begin(timeout_ms);
     while (get_state() != expected) {
-        if (g_uni_hal_rcc_status.css_recovery_pending || uni_hal_stm32_poll_expired(&budget)) {
+        if (g_uni_hal_rcc_status.css_recovery_pending || uni_hal_stm32_clock_timeout_expired(&timeout)) {
             return false;
-        }
-        // CYCCNT still measures real time with SysTick masked. Count successive
-        // deltas because a configured oscillator timeout may span several wraps.
-        if (use_dwt) {
-            uint32_t const cycle = uni_hal_dwt_get_tick();
-            uint32_t const elapsed = uni_hal_dwt_compare(previous_cycle, cycle);
-            if (elapsed >= cycles_left) {
-                return false;
-            }
-            cycles_left -= elapsed;
-            previous_cycle = cycle;
         }
     }
     return true;
