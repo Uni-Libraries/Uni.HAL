@@ -386,10 +386,16 @@ static bool _uni_hal_stm_rcc_sysclk(bool recovery) {
         return false;
     }
 
+    uint32_t const timeout = g_uni_hal_rcc_config->timeout.pll;
     LL_RCC_SetSysClkSource(source);
-    if (!_uni_hal_rcc_wait(LL_RCC_GetSysClkSource, expected, g_uni_hal_rcc_config->timeout.pll, recovery)) {
-        // Cancel an unacknowledged request so the clock cannot switch after we return.
-        LL_RCC_SetSysClkSource(LL_RCC_GetSysClkSource() >> RCC_CFGR_SWS_Pos);
+    if (!_uni_hal_rcc_wait(LL_RCC_GetSysClkSource, expected, timeout, recovery)) {
+        uint32_t const active = LL_RCC_GetSysClkSource();
+        LL_RCC_SetSysClkSource(active >> RCC_CFGR_SWS_Pos);
+        // SWS can change between its read and the cancellation write. Wait for
+        // the rollback before rescaling SysTick, or keep the newly active clock.
+        if (!_uni_hal_rcc_wait(LL_RCC_GetSysClkSource, active, timeout, recovery)) {
+            LL_RCC_SetSysClkSource(LL_RCC_GetSysClkSource() >> RCC_CFGR_SWS_Pos);
+        }
         _uni_hal_rcc_update_timebase();
         return false;
     }

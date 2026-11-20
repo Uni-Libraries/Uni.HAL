@@ -12,6 +12,10 @@ void rcc_test_select_msi24(void);
 void rcc_test_divide_ahb_by_four(void);
 bool rcc_test_msi_selected(void);
 extern bool rcc_test_pll_locks, rcc_test_can_switch, rcc_test_fault_on_switch;
+extern bool rcc_test_late_pll;
+extern uint32_t rcc_test_msi_delay;
+void rcc_test_complete_switch(void);
+uint32_t rcc_test_hclk(void);
 extern bool rcc_test_flash_accepts, rcc_test_flash_can_lower;
 extern uint32_t rcc_test_tick_reads, rcc_test_tick_inits, SystemCoreClock;
 void rcc_test_reset(void);
@@ -217,6 +221,40 @@ TEST_CASE("L496 clock initialization reports failures and handles an interrupted
         REQUIRE(rcc_test_m() == 4);
         REQUIRE(SystemCoreClock == 80'000'000);
     }
+}
+
+TEST_CASE("L496 keeps SYSCLK and SysTick consistent after a late PLL switch") {
+    rcc_test_reset();
+    configure();
+    uint32_t expected_hz = 4'000'000U;
+    SECTION("MSI acknowledges the rollback after the startup deadline") {
+        rcc_test_msi_delay = 4U;
+        rcc_test_can_switch = false;
+        rcc_test_late_pll = true;
+        REQUIRE_FALSE(uni_hal_rcc_init());
+    }
+    SECTION("MSI never acknowledges the rollback during CSS recovery") {
+        REQUIRE(uni_hal_rcc_init());
+        rcc_test_can_switch = false;
+        rcc_test_late_pll = true;
+        auto tick_reads = rcc_test_tick_reads;
+        rcc_test_fail_hse();
+        REQUIRE(rcc_test_tick_reads == tick_reads);
+        expected_hz = 80'000'000U;
+    }
+    REQUIRE_FALSE(rcc_test_late_pll);
+    REQUIRE_FALSE(uni_hal_rcc_is_inited());
+    REQUIRE_FALSE(uni_hal_rcc_stm32l4_status_get().sys_inited);
+    // Let the hardware execute any remaining request after the driver returned.
+    rcc_test_complete_switch();
+    REQUIRE(rcc_test_hclk() == SystemCoreClock);
+    REQUIRE(SystemCoreClock == expected_hz);
+    REQUIRE(SysTick->LOAD + 1U == expected_hz / 1000U);
+
+    rcc_test_can_switch = true;
+    REQUIRE(uni_hal_rcc_init());
+    REQUIRE(uni_hal_rcc_clk_get_freq(UNI_HAL_CORE_PERIPH_SYSCLK) == SystemCoreClock);
+    REQUIRE(SysTick->LOAD + 1U == SystemCoreClock / 1000U);
 }
 
 TEST_CASE("L496 programs and validates the requested main PLL outputs") {

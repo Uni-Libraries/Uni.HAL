@@ -30,6 +30,8 @@ rcc_test_systick_t rcc_test_systick;
 bool rcc_test_pll_locks;
 bool rcc_test_hsi48_locks;
 bool rcc_test_can_switch;
+bool rcc_test_late_pll;
+uint32_t rcc_test_msi_delay;
 bool rcc_test_fault_on_switch;
 void rcc_test_fail_hse(void);
 bool rcc_test_flash_accepts;
@@ -46,7 +48,32 @@ static uint32_t pll_ready(void) {
     return LL_RCC_PLL_IsReady();
 }
 
+void rcc_test_complete_switch(void) {
+    uint32_t pending = rcc.CFGR & RCC_CFGR_SW;
+    MODIFY_REG(rcc.CFGR, RCC_CFGR_SWS, pending << RCC_CFGR_SWS_Pos);
+}
+
+uint32_t rcc_test_hclk(void) {
+    LL_RCC_ClocksTypeDef clocks;
+    LL_RCC_GetSystemClocksFreq(&clocks);
+    return clocks.HCLK_Frequency;
+}
+
+static uint32_t clock_status(void) {
+    if (rcc_test_msi_delay && (rcc.CFGR & RCC_CFGR_SW) == LL_RCC_SYS_CLKSOURCE_MSI &&
+        LL_RCC_GetSysClkSource() == LL_RCC_SYS_CLKSOURCE_STATUS_PLL && --rcc_test_msi_delay == 0U) {
+        rcc_test_complete_switch();
+    }
+    return LL_RCC_GetSysClkSource();
+}
+
 static void switch_clock(uint32_t source) {
+    if (rcc_test_late_pll && (rcc.CFGR & RCC_CFGR_SW) == LL_RCC_SYS_CLKSOURCE_PLL &&
+        source == LL_RCC_SYS_CLKSOURCE_MSI) {
+        // The previous request takes effect just before the cancellation write.
+        rcc_test_complete_switch();
+        rcc_test_late_pll = false;
+    }
     LL_RCC_SetSysClkSource(source);
     if (rcc_test_fault_on_switch) {
         rcc_test_fault_on_switch = false;
@@ -54,7 +81,7 @@ static void switch_clock(uint32_t source) {
         return;
     }
     if (rcc_test_can_switch) {
-        MODIFY_REG(rcc.CFGR, RCC_CFGR_SWS, source << RCC_CFGR_SWS_Pos);
+        rcc_test_complete_switch();
     }
 }
 
@@ -74,6 +101,7 @@ static void start_hsi48(void) {
 #define LL_RCC_HSI48_Enable start_hsi48
 #define LL_RCC_PLL_IsReady pll_ready
 #define LL_RCC_SetSysClkSource switch_clock
+#define LL_RCC_GetSysClkSource clock_status
 #define LL_FLASH_SetLatency write_flash_latency
 // This vendor helper uses a literal 32-bit MMIO address. I2C mux selection is outside this fixture.
 #define LL_RCC_SetI2CClockSource(source) ((void)(source))
@@ -153,6 +181,8 @@ void rcc_test_reset(void) {
     rcc_test_fault_on_switch = false;
     rcc_test_pll_locks = true;
     rcc_test_can_switch = true;
+    rcc_test_late_pll = false;
+    rcc_test_msi_delay = 0U;
     rcc_test_flash_accepts = true;
     rcc_test_flash_can_lower = true;
     rcc_test_tick_reads = 0;
