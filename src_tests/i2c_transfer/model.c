@@ -84,8 +84,12 @@ uint32_t NVIC_GetPriority(int irq) { assert(irq == SysTick_IRQn); return 15U; }
 uint32_t __get_IPSR(void) { return in_irq; }
 
 bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *c) { return c && c->state.initialized; }
-bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *pin) { (void)pin; return true; }
-bool uni_hal_gpio_pin_is_inited(const uni_hal_gpio_pin_context_t *pin) { (void)pin; return true; }
+bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *pin) {
+    if (!pin) { return false; }
+    pin->inited = true;
+    return true;
+}
+bool uni_hal_gpio_pin_is_inited(const uni_hal_gpio_pin_context_t *pin) { return pin && pin->inited; }
 bool uni_hal_rcc_clk_set(uni_hal_core_periph_e instance, bool enable) { (void)instance; return enable; }
 uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e instance) { (void)instance; return 0; }
 uint32_t uni_hal_i2c_timing_calc(uint32_t hz, uni_hal_i2c_speed_e speed) { (void)hz; (void)speed; return 0; }
@@ -267,6 +271,12 @@ static void exercise(operation_t op)
 
 int main(void)
 {
+    uni_hal_i2c_context_t incomplete = ctx;
+    incomplete.config.pin_sck = NULL;
+    assert(!uni_hal_i2c_init(&incomplete) && !incomplete.state.initialized && !pins[1].inited);
+    incomplete = ctx;
+    incomplete.config.pin_sda = NULL;
+    assert(!uni_hal_i2c_init(&incomplete) && !incomplete.state.initialized && !pins[0].inited);
     assert(uni_hal_i2c_init(&ctx));
     exercise(uni_hal_i2c_mem_read);
     exercise(uni_hal_i2c_mem_write);

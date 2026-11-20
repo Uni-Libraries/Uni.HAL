@@ -120,7 +120,7 @@ static void release_bus(i2c_bus_t *bus) {
 
 bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
     i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : NULL;
-    if (!bus || bus->owner || ctx->state.initialized) {
+    if (!bus || bus->owner || ctx->state.initialized || !ctx->config.pin_sck || !ctx->config.pin_sda) {
         return false;
     }
 

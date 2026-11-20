@@ -168,7 +168,7 @@ typedef struct {
 
 
 /**
- * Initializes I2C interface.
+ * Initialize the I2C interface. On STM32, supply both SCL and SDA pin contexts.
  * Serialize init, deinit, reset and recovery for the same physical bus, and stop transfers
  * before reconfiguring it. Recovery temporarily takes both pins away from the peripheral.
  * @param ctx pointer to interface context

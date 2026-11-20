@@ -351,7 +351,7 @@ void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef *hi2c)
 bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
     bool result = false;
 
-    if (ctx != NULL && !uni_hal_i2c_is_inited(ctx))
+    if (ctx && ctx->config.pin_sck && ctx->config.pin_sda && !uni_hal_i2c_is_inited(ctx))
     {
         I2C_TypeDef *handle = _uni_hal_i2c_get_handle(ctx->config.instance);
         I2C_HandleTypeDef *handle_hal = _uni_hal_i2c_get_handle_hal(ctx->config.instance);

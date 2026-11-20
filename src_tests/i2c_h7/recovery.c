@@ -110,6 +110,14 @@ int main(void) {
     uni_hal_i2c_context_t other = ctx;
     uni_hal_i2c_context_t invalid = {0};
 
+    uni_hal_i2c_context_t incomplete = ctx;
+    incomplete.config.pin_sck = NULL;
+    assert(!uni_hal_i2c_init(&incomplete) && !incomplete.state.initialized && !sda.inited);
+    incomplete = ctx;
+    incomplete.config.pin_sda = NULL;
+    assert(!uni_hal_i2c_init(&incomplete) && !incomplete.state.initialized && !scl.inited);
+    assert(hal_inits == 0U);
+
     assert(!uni_hal_i2c_deinit(NULL));
     assert(!uni_hal_i2c_deinit(&invalid));
     assert(uni_hal_i2c_recover(&ctx));
