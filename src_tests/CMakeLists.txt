@@ -8,6 +8,13 @@ add_test(NAME rcc_map_mco_outputs
 add_test(NAME rcc_map_inactive_clocks
     COMMAND "${CMAKE_COMMAND}" "-DCC=${CMAKE_C_COMPILER}" "-DMSVC=${MSVC}"
         -DFIXTURE=inactive_clocks -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_preprocessed.cmake")
+add_test(NAME rcc_map_unsupported_condition
+    COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_unsupported_condition.cmake")
+foreach(hse IN ITEMS 8000000 4000000 2000000)
+    add_test(NAME rcc_map_hse_${hse}
+        COMMAND "${CMAKE_COMMAND}" "-DCC=${CMAKE_C_COMPILER}" "-DMSVC=${MSVC}"
+            -DFIXTURE=hse_conditions "-DHSE=${hse}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_preprocessed.cmake")
+endforeach()
 
 
 find_program(UNI_HAL_PWSH pwsh)

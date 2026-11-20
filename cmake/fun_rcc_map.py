@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import operator
 import pathlib
 import re
 import shutil
@@ -100,216 +101,143 @@ def pick_first_text(values: list[str], default: str = "?") -> str:
     return default
 
 
-def parse_define_items(items: list[str]) -> tuple[set[str], dict[str, int], dict[str, str]]:
-    present: set[str] = set()
-    numeric: dict[str, int] = {}
-    raw: dict[str, str] = {}
-
+def parse_define_items(items: list[str]) -> dict[str, str]:
+    definitions: dict[str, str] = {}
     for item in items:
-        define = item.strip()
-        if not define:
-            continue
+        name, equals, value = item.partition("=")
+        name = name.strip()
+        if re.fullmatch(PP_NAME, name):
+            definitions[name] = value.strip() if equals else "1"
+    return definitions
 
-        if "=" in define:
-            name, value = define.split("=", 1)
-            name = name.strip()
-            value = value.strip()
-        else:
-            name = define
-            value = "1"
 
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-            continue
+class ConditionalError(ValueError):
+    pass
 
-        present.add(name)
-        raw[name] = value
 
-        number = parse_int(value)
-        if number is None:
-            bool_value = parse_bool(value)
-            if bool_value is not None:
-                number = 1 if bool_value else 0
+PP_NAME = r"[A-Za-z_][A-Za-z0-9_]*"
+PP_TOKEN = re.compile(rf"{PP_NAME}|[0-9][0-9A-Za-z]*|&&|\|\||==|!=|<=|>=|\S")
+PP_BINARY = {
+    "||": (1, lambda a, b: bool(a or b)), "&&": (2, lambda a, b: bool(a and b)),
+    "==": (3, operator.eq), "!=": (3, operator.ne),
+    "<": (4, operator.lt), "<=": (4, operator.le), ">": (4, operator.gt), ">=": (4, operator.ge),
+}
+
+
+def pp_tokens(expr: str, macros: dict[str, str | None], expanding: frozenset[str] = frozenset()):
+    tokens = iter(PP_TOKEN.findall(expr))
+    for token in tokens:
+        if token == "defined":
+            name = next(tokens, "")
+            if name == "(":
+                name = next(tokens, "")
+                if next(tokens, "") != ")":
+                    raise ConditionalError("expected ')' after defined")
+            if not re.fullmatch(PP_NAME, name):
+                raise ConditionalError("expected a macro name after defined")
+            yield str(int(name in macros))
+        elif re.fullmatch(PP_NAME, token):
+            # Like the preprocessor, replace remaining identifiers with zero.
+            replacement = macros.get(token)
+            if replacement is None or token in expanding:
+                yield "0"
             else:
-                number = 1
-
-        numeric[name] = number
-
-    return present, numeric, raw
-
-
-def strip_outer_parens(expr: str) -> str:
-    text = expr.strip()
-    while text.startswith("(") and text.endswith(")"):
-        depth = 0
-        valid = True
-        for index, char in enumerate(text):
-            if char == "(":
-                depth += 1
-            elif char == ")":
-                depth -= 1
-                if depth < 0:
-                    valid = False
-                    break
-            if depth == 0 and index != len(text) - 1:
-                valid = False
-                break
-        if not valid or depth != 0:
-            break
-        text = text[1:-1].strip()
-    return text
-
-
-def split_top_level(expr: str, op: str) -> list[str]:
-    parts: list[str] = []
-    depth = 0
-    start = 0
-    i = 0
-    while i < len(expr):
-        char = expr[i]
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth = max(depth - 1, 0)
-        elif depth == 0 and expr.startswith(op, i):
-            parts.append(expr[start:i])
-            i += len(op)
-            start = i
-            continue
-        i += 1
-    parts.append(expr[start:])
-    return parts
-
-
-def eval_pp_atomic(expr: str, defined: set[str], numeric_defs: dict[str, int]) -> bool:
-    text = strip_outer_parens(expr)
-
-    negate = False
-    while text.startswith("!"):
-        negate = not negate
-        text = strip_outer_parens(text[1:].strip())
-
-    value = False
-
-    match = re.fullmatch(r"defined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", text)
-    if match:
-        value = match.group(1) in defined
-    else:
-        match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*([=!]=)\s*([A-Za-z_][A-Za-z0-9_]*|0[xX][0-9A-Fa-f]+|[0-9]+)", text)
-        if match:
-            lhs_name = match.group(1)
-            op = match.group(2)
-            rhs_token = match.group(3)
-
-            lhs = numeric_defs.get(lhs_name, 0)
-            rhs = parse_int(rhs_token)
-            if rhs is None:
-                rhs = numeric_defs.get(rhs_token, 0)
-
-            if op == "==":
-                value = lhs == rhs
-            else:
-                value = lhs != rhs
+                yield from pp_tokens(replacement, macros, expanding | {token})
         else:
-            number = parse_int(text)
-            if number is not None:
-                value = number != 0
-            elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text):
-                value = numeric_defs.get(text, 0) != 0
-
-    return (not value) if negate else value
+            yield token
 
 
-def eval_pp_expr(expr: str, defined: set[str], numeric_defs: dict[str, int]) -> bool:
-    text = strip_outer_parens(expr.strip())
-    if not text:
-        return False
+def eval_pp_expr(expr: str, macros: dict[str, str | None]) -> bool:
+    tokens = iter(pp_tokens(expr, macros))
+    token = next(tokens, "")
 
-    or_parts = split_top_level(text, "||")
-    if len(or_parts) > 1:
-        return any(eval_pp_expr(part, defined, numeric_defs) for part in or_parts)
+    def parse(min_precedence: int) -> int:
+        nonlocal token
+        operand, token = token, next(tokens, "")
+        if operand == "!":
+            value = int(not parse(5))
+        elif operand == "(":
+            value = parse(1)
+            if token != ")":
+                raise ConditionalError("expected ')'")
+            token = next(tokens, "")
+        else:
+            match = re.fullmatch(r"(0[xX][0-9A-Fa-f]+|0[bB][01]+|0[0-7]*|[1-9][0-9]*)(?:[uU](?:ll?|LL?)?|(?:ll?|LL?)[uU]?)?", operand)
+            if not match:
+                raise ConditionalError(f"unsupported operand '{operand}'")
+            literal = match.group(1)
+            value = int(literal, 8 if re.fullmatch(r"0[0-7]*", literal) else 0)
 
-    and_parts = split_top_level(text, "&&")
-    if len(and_parts) > 1:
-        return all(eval_pp_expr(part, defined, numeric_defs) for part in and_parts)
+        while token in PP_BINARY and PP_BINARY[token][0] >= min_precedence:
+            precedence, operation = PP_BINARY[token]
+            token = next(tokens, "")
+            value = int(operation(value, parse(precedence + 1)))
+        return value
 
-    return eval_pp_atomic(text, defined, numeric_defs)
+    result = parse(1)
+    if token:
+        raise ConditionalError(f"unsupported token '{token}'")
+    return bool(result)
 
 
-def preprocess_text(text: str, defined: set[str], numeric_defs: dict[str, int]) -> str:
-    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+def preprocess_text(text: str, definitions: dict[str, str], path: pathlib.Path) -> str:
+    macros: dict[str, str | None] = dict(definitions)
+    lines = strip_comments(text.replace("\\\n", "")).splitlines()
     out: list[str] = []
-
-    stack: list[dict[str, bool]] = []
-    current_active = True
+    stack: list[tuple[bool, bool]] = []
+    active = True
 
     for line in lines:
-        stripped = line.lstrip()
-
-        match_if = re.match(r"#\s*if\s+(.*)$", stripped)
-        match_ifdef = re.match(r"#\s*ifdef\s+([A-Za-z_][A-Za-z0-9_]*)$", stripped)
-        match_ifndef = re.match(r"#\s*ifndef\s+([A-Za-z_][A-Za-z0-9_]*)$", stripped)
-        match_elif = re.match(r"#\s*elif\s+(.*)$", stripped)
-        match_else = re.match(r"#\s*else\b", stripped)
-        match_endif = re.match(r"#\s*endif\b", stripped)
-
-        if match_if:
-            parent_active = current_active
-            cond = eval_pp_expr(match_if.group(1), defined, numeric_defs) if parent_active else False
-            stack.append({"parent_active": parent_active, "taken": cond})
-            current_active = parent_active and cond
+        directive = re.match(r"\s*#\s*(\w+)\b(.*)", line)
+        if not directive:
+            if active:
+                out.append(line)
             continue
 
-        if match_ifdef:
-            parent_active = current_active
-            cond = match_ifdef.group(1) in defined if parent_active else False
-            stack.append({"parent_active": parent_active, "taken": cond})
-            current_active = parent_active and cond
-            continue
-
-        if match_ifndef:
-            parent_active = current_active
-            cond = (match_ifndef.group(1) not in defined) if parent_active else False
-            stack.append({"parent_active": parent_active, "taken": cond})
-            current_active = parent_active and cond
-            continue
-
-        if match_elif:
-            if not stack:
-                continue
-            frame = stack[-1]
-            if not frame["parent_active"] or frame["taken"]:
-                current_active = False
+        name, rest = directive.group(1), directive.group(2).strip()
+        if (name.startswith("elif") or name in ("else", "endif")) and not stack:
+            raise ConditionalError(f"{path}: unexpected #{name}")
+        if name in ("if", "ifdef", "ifndef", "elif", "elifdef", "elifndef"):
+            if name.startswith("elif"):
+                parent, taken = stack.pop()
             else:
-                cond = eval_pp_expr(match_elif.group(1), defined, numeric_defs)
-                current_active = frame["parent_active"] and cond
-                if cond:
-                    frame["taken"] = True
-            continue
-
-        if match_else:
-            if not stack:
-                continue
-            frame = stack[-1]
-            current_active = frame["parent_active"] and (not frame["taken"])
-            frame["taken"] = True
-            continue
-
-        if match_endif:
-            if stack:
-                frame = stack.pop()
-                current_active = frame["parent_active"]
-            continue
-
-        if current_active:
+                parent, taken = active, False
+            active = parent and not taken
+            if active:
+                if name.endswith("ndef"):
+                    active = rest not in macros
+                elif name.endswith("def"):
+                    active = rest in macros
+                else:
+                    try:
+                        active = eval_pp_expr(rest, macros)
+                    except ConditionalError as exc:
+                        raise ConditionalError(f"{path}: #{name} {rest}: {exc}") from exc
+            stack.append((parent, taken or active))
+        elif name == "else":
+            parent, taken = stack[-1]
+            active = parent and not taken
+            stack[-1] = parent, True
+        elif name == "endif":
+            active, _ = stack.pop()
+        elif active:
+            if name == "define":
+                macro = re.match(rf"({PP_NAME})(.*)", rest)
+                if macro:
+                    key, value = macro.groups()
+                    macros[key] = None if value.startswith("(") else value.strip()
+            elif name == "undef":
+                macros.pop(rest, None)
             out.append(line)
-
+    if stack:
+        raise ConditionalError(f"{path}: missing #endif")
     return "\n".join(out)
 
 
 def strip_comments(text: str) -> str:
-    no_block = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
-    no_line = re.sub(r"//[^\n]*", "", no_block)
-    return no_line
+    # Keep quoted literals intact. A comment may contain a directive-looking line.
+    pattern = r'''"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|/\*.*?\*/|//[^\n]*'''
+    return re.sub(pattern, lambda m: " " if m[0].startswith("/") else m[0], text, flags=re.S)
 
 
 def collect_group1(pattern: str, text: str, flags: int = 0) -> list[str]:
@@ -865,7 +793,11 @@ def detect_divider(text: str, patterns: list[str]) -> int | None:
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Generate RCC map DOT/PNG/SVG")
+    parser = argparse.ArgumentParser(
+        description="Generate RCC map DOT/PNG/SVG",
+        epilog="Conditions use --define and macros declared in each input file. Headers are not expanded. "
+               "Supported #if expressions use integer constants, defined, !, comparisons, &&, || and parentheses.",
+    )
     parser.add_argument("--target-name", required=True)
     parser.add_argument("--primary-input", default="")
     parser.add_argument("--input-file", action="append", default=[])
@@ -902,10 +834,11 @@ def main() -> int:
             print(f"RCC map generator: input file does not exist: {path}", file=sys.stderr)
             return 2
 
-    defined, numeric_defs, _raw_defs = parse_define_items(args.define)
+    definitions = parse_define_items(args.define)
+    numeric_defs = {name: parse_int(value) for name, value in definitions.items()}
 
     def active_source(path: pathlib.Path) -> str:
-        return strip_comments(preprocess_text(path.read_text(encoding="utf-8"), defined, numeric_defs))
+        return preprocess_text(path.read_text(encoding="utf-8"), definitions, path)
 
     input_text = "\n".join(active_source(path) for path in input_paths)
 
@@ -917,7 +850,7 @@ def main() -> int:
     if i2c_header_path is not None:
         i2c_header_text = active_source(i2c_header_path)
 
-    if "STM32H7" in defined:
+    if "STM32H7" in definitions:
         i2c_driver_path = find_project_file_near_inputs(input_paths, "src_unihal/src/i2c/uni_hal_i2c_stm32h7.c")
         if i2c_driver_path is not None:
             i2c_driver_text = active_source(i2c_driver_path)
@@ -930,11 +863,11 @@ def main() -> int:
 
     i2c_default_clksrc_token = detect_i2c_default_clksrc_token(i2c_driver_text)
 
-    if "STM32H7" in defined:
+    if "STM32H7" in definitions:
         h7_rcc_path = find_project_file_near_inputs(input_paths, "src_unihal/src/rcc/uni_hal_rcc_stm32h7.c")
         if h7_rcc_path is not None:
             extra_clock_text_parts.append(active_source(h7_rcc_path))
-    if "STM32L4" in defined:
+    if "STM32L4" in definitions:
         l4_rcc_path = find_project_file_near_inputs(input_paths, "src_unihal/src/rcc/uni_hal_rcc_stm32l4.c")
         if l4_rcc_path is not None:
             extra_clock_text_parts.append(active_source(l4_rcc_path))
@@ -963,7 +896,7 @@ def main() -> int:
     if not sys_source_values:
         sys_source_values = collect_group1(r"LL_RCC_SYS_CLKSOURCE_([A-Z0-9_]+)", input_text)
 
-    stm32h7_target = "STM32H7" in defined
+    stm32h7_target = "STM32H7" in definitions
     default_sys_div = 1
     default_hclk_div = 2 if stm32h7_target else 1
     default_apb_div = 2 if stm32h7_target else 1
@@ -1038,7 +971,7 @@ def main() -> int:
 
     for match in re.finditer(r"\buni_hal_rcc_stm32_mco_enable\s*\(\s*([^,;]+),\s*([^,)]+),\s*([^,)]+)\)", input_text):
         index = parse_int(match.group(1))
-        if index not in (0, 1) or (index == 1 and "STM32L4" in defined):
+        if index not in (0, 1) or (index == 1 and "STM32L4" in definitions):
             continue
         idx = index + 1  # The HAL uses zero-based indices for MCO1 and MCO2.
         src = match.group(2).strip()
@@ -1548,4 +1481,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        sys.exit(main())
+    except ConditionalError as exc:
+        sys.exit(f"RCC map generator: {exc}")
