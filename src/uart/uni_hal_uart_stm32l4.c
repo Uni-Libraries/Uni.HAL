@@ -406,6 +406,8 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                     _uni_hal_usart_save_ctx(ctx);
                     (void)_uni_hal_usart_irq_rx_enable(ctx, true);
                 } else {
+                    // Both USART and LPUART require UE clear before LL init can be retried.
+                    LL_USART_Disable(handle);
                     uni_hal_io_deinit(ctx->io);
                 }
             }

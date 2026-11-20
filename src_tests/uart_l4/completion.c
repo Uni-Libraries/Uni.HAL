@@ -1,6 +1,8 @@
 // Exercise the L496 driver vector and FreeRTOS stream buffers with a USART register bank in RAM.
 #include <stm32l4xx_ll_lpuart.h>
+#include <stm32l4xx_ll_rcc.h>
 #include <stm32l4xx_ll_usart.h>
+#include "systick/uni_hal_systick.h"
 #include "uart/uni_hal_uart.h"
 
 static USART_TypeDef uart;
@@ -32,8 +34,16 @@ static void clear_tc(USART_TypeDef *dev) {
 #define LL_LPUART_TransmitData8 send_byte
 #define LL_USART_ClearFlag_TC clear_tc
 #define LL_LPUART_ClearFlag_TC clear_tc
-#define LL_USART_Init(dev, cfg) ((void)(dev), (void)(cfg), SUCCESS)
-#define LL_LPUART_Init(dev, cfg) ((void)(dev), (void)(cfg), SUCCESS)
+// Use the vendor init, including its check that UE is clear before configuring BRR.
+#ifdef TEST_LPUART
+#define LL_RCC_GetLPUARTClockFreq(source) ((void)(source), 16000000U)
+#include "../../3rdparty/st_stm32l4/src_hal/stm32l4xx_ll_lpuart.c"
+#else
+#define LL_RCC_GetUSARTClockFreq(source) ((void)(source), 16000000U)
+#include "../../3rdparty/st_stm32l4/src_hal/stm32l4xx_ll_usart.c"
+#endif
+static uint32_t now_ms;
+#define uni_hal_systick_get_ms() (now_ms++)
 #define uni_hal_rcc_clk_set(instance, enabled) ((void)(instance), (enabled))
 #define uni_hal_rcc_clksrc_set(instance, source) ((void)(instance), (void)(source))
 #define uni_hal_gpio_pin_init(pin) ((pin) != nullptr)
@@ -132,8 +142,14 @@ static unsigned check(void) {
     uni_hal_gpio_pin_context_t pin = {};
     uni_hal_usart_context_t ctx = {.instance = TEST_INSTANCE, .io = &io_ctx,
                                    .pin_tx = &pin, .pin_rx = &pin, .baudrate = 115200U};
+    // First startup misses the receiver acknowledgement. Retry after the clock recovers.
+    uart.ISR = USART_ISR_TEACK;
+    CHECK(!uni_hal_usart_init(&ctx));
+    CHECK(!ctx.initialized && !io_ctx.buf_rx.handle && !io_ctx.buf_tx.handle);
+    bool const disabled_after_timeout = !LL_USART_IsEnabled(&uart);
     uart.ISR = USART_ISR_REACK | USART_ISR_TEACK | USART_ISR_TXE;
     CHECK(uni_hal_usart_init(&ctx));
+    CHECK(disabled_after_timeout);
     io_ctx.handlers.tx_start = start;
     io_ctx.handlers.tx_end = end;
     CHECK(uni_hal_usart_set_callback(&ctx, complete, nullptr));
