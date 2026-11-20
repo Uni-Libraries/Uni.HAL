@@ -44,6 +44,9 @@ typedef enum {
  */
 void uni_hal_flash_init(void);
 
+/** Configure STM32H743 Flash timing for the supplied AXI clock in Hz.
+ * Pass zero to derive it from the active system clock, D1 core divider and AHB divider.
+ */
 bool uni_hal_flash_configure_latency_auto(uint32_t axi_clock_hz);
 
 size_t uni_hal_flash_get_size(void);

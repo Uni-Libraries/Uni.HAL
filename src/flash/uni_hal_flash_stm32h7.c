@@ -288,7 +288,8 @@ static uint32_t _uni_hal_flash_calc_axi_clock_hz(void) {
         return 0U;
     }
 
-    return LL_RCC_CALC_HCLK_FREQ(sysclk_hz, LL_RCC_GetAHBPrescaler());
+    uint32_t const cpuclk_hz = LL_RCC_CALC_SYSCLK_FREQ(sysclk_hz, LL_RCC_GetSysPrescaler());
+    return LL_RCC_CALC_HCLK_FREQ(cpuclk_hz, LL_RCC_GetAHBPrescaler());
 }
 
 
