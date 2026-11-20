@@ -16,6 +16,7 @@ endfunction()
 
 add_adc_model_test(adc_configuration bounds.c)
 add_adc_model_test(adc_startup_timeout startup_timeout.c)
+add_adc_model_test(adc_stalled_tick stalled_tick.c)
 add_adc_model_test(adc_kernel_clock_readback kernel_clock_readback.c)
 add_adc_model_test(adc_shared_kernel_clock shared_kernel_clock.c)
 target_compile_definitions(adc_shared_kernel_clock_qemu PRIVATE UNI_HAL_TEST_ADC_REAL_RCC)
