@@ -1776,18 +1776,6 @@ uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get(void) {
 uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e clock_source, uint32_t clock_divider) {
     uint32_t result = 0U;
     if (mco_index < 2 && clock_divider >= 1 && clock_divider <= 15) {
-        // configure pin
-        uni_hal_gpio_pin_context_t pin = {
-                .gpio_bank = mco_index == 0 ? UNI_HAL_CORE_PERIPH_GPIO_A : UNI_HAL_CORE_PERIPH_GPIO_C,
-                .gpio_pin = mco_index == 0 ? UNI_HAL_GPIO_PIN_8 : UNI_HAL_GPIO_PIN_9,
-                .gpio_speed = UNI_HAL_GPIO_SPEED_3,
-                .gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP,
-                .alternate = UNI_HAL_GPIO_ALTERNATE_0,
-        };
-        if (!uni_hal_gpio_pin_init(&pin)) {
-            return 0U;
-        }
-
         uint32_t source = UINT32_MAX;
         uint32_t prescaler = UINT32_MAX;
         switch (clock_source) {
@@ -1875,10 +1863,23 @@ uint32_t uni_hal_rcc_stm32_mco_enable(uint32_t mco_index, uni_hal_rcc_clksrc_e c
                 break;
         }
 
-        if (source != UINT32_MAX && prescaler != UINT32_MAX) {
-            LL_RCC_ConfigMCO(source, prescaler);
-            result = 1U;
+        if (source == UINT32_MAX || prescaler == UINT32_MAX) {
+            return 0U;
         }
+
+        uni_hal_gpio_pin_context_t pin = {
+            .gpio_bank = mco_index == 0 ? UNI_HAL_CORE_PERIPH_GPIO_A : UNI_HAL_CORE_PERIPH_GPIO_C,
+            .gpio_pin = mco_index == 0 ? UNI_HAL_GPIO_PIN_8 : UNI_HAL_GPIO_PIN_9,
+            .gpio_speed = UNI_HAL_GPIO_SPEED_3,
+            .gpio_type = UNI_HAL_GPIO_TYPE_ALTERNATE_PP,
+            .alternate = UNI_HAL_GPIO_ALTERNATE_0,
+        };
+        if (!uni_hal_gpio_pin_init(&pin)) {
+            return 0U;
+        }
+
+        LL_RCC_ConfigMCO(source, prescaler);
+        result = 1U;
     }
     return result;
 }

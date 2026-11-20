@@ -7,15 +7,7 @@ static RCC_TypeDef rcc;
 #include "rcc/uni_hal_rcc_stm32.h"
 #include "../arm/semihost_test.h"
 
-static bool gpio_ok = true;
-static unsigned gpio_calls;
-static uni_hal_gpio_pin_context_t gpio_pin;
-
-bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *pin) {
-    ++gpio_calls;
-    gpio_pin = *pin;
-    return gpio_ok;
-}
+#include "gpio_fixture.h"
 
 static unsigned check(void) {
     const uint32_t initial = RCC_CFGR_STOPWUCK | LL_RCC_MCO1SOURCE_MSI | LL_RCC_MCO1_DIV_2;
