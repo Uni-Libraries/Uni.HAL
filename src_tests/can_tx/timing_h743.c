@@ -35,6 +35,7 @@ static unsigned check(void) {
     uni_hal_can_timing_t bxcan;
     CHECK(!uni_hal_can_timing_calc(kernel_clock_hz, ctx.config.bitrate, &bxcan));
     CHECK(uni_hal_can_init(&ctx));
+    CHECK((controller.CCCR & (FDCAN_CCCR_INIT | FDCAN_CCCR_CCE)) == (FDCAN_CCCR_INIT | FDCAN_CCCR_CCE));
     // 37 time quanta, sample after 32 of them (nearest to 87.5%).
     CHECK(controller.NBTP == ((30U << FDCAN_NBTP_NTSEG1_Pos) | (4U << FDCAN_NBTP_NTSEG2_Pos)));
 

@@ -39,6 +39,14 @@ static uint32_t registration_ack;
 
 static void refresh_registers(void) {
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
+    if ((controller.CCCR & FDCAN_CCCR_INIT) == 0U) {
+        controller.CCCR &= ~FDCAN_CCCR_CCE;
+    } else if ((controller.CCCR & FDCAN_CCCR_CCE) != 0U) {
+        // M_CAN configuration enable resets the TX FIFO and transmission status.
+        pending = 0U;
+        fifo_put = 0U;
+        controller.TXBTO = 0U;
+    }
     if (controller.TXBAR != 0U) {
         pending |= controller.TXBAR;
         controller.TXBTO &= ~controller.TXBAR;
@@ -249,6 +257,31 @@ static unsigned check_timeout(void) {
 }
 
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
+static unsigned check_restart(bool fifo) {
+    setup(fifo);
+    pending = 0U;
+    g_uni_hal_can_instance[0].tx_inflight = 0U;
+    refresh_registers();
+    for (unsigned i = 0; i < 3U; ++i) {
+        CHECK(uni_hal_can_transmit_nowait(&ctx, &second));
+        refresh_registers();
+    }
+    CHECK(pending == 7U);
+    CHECK(uni_hal_can_stop(&ctx));
+    refresh_registers();
+    CHECK(!uni_hal_can_transmit_nowait(&ctx, &second));
+    // The first start times out waiting for bus idle. Retry once the bus synchronizes.
+    CHECK(!uni_hal_can_start(&ctx));
+    refresh_registers();
+    controller.PSR = 1U << FDCAN_PSR_ACT_Pos;
+    CHECK(uni_hal_can_start(&ctx));
+    CHECK(pending == 7U && uni_hal_can_transmit_free(&ctx) == 0U);
+    complete(0U, true);
+    CHECK(callback_count == 1U && last_mailbox == 0U && last_success);
+    CHECK(nested_success && pending == 7U);
+    return 0U;
+}
+
 static unsigned check_fifo_wrap(void) {
     setup(true);
     pending = 0U;
@@ -291,6 +324,8 @@ void run_tests(void) {
     if (!failure) failure = check_timeout();
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
     if (!failure) failure = check_fifo_wrap();
+    if (!failure) failure = check_restart(false);
+    if (!failure) failure = check_restart(true);
 #endif
     uint32_t result[] = {0x20026U, failure};
     register uint32_t operation __asm__("r0") = 0x20U;

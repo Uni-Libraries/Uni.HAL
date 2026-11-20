@@ -223,15 +223,11 @@ static bool _uni_hal_can_wait(const volatile uint32_t *reg, uint32_t mask, bool 
 
 
 /**
- * Take the peripheral off the bus and open its configuration for writing
+ * Take the peripheral off the bus while preserving pending transfers
  */
 static bool _uni_hal_can_mode_init(FDCAN_GlobalTypeDef *can) {
     SET_BIT(can->CCCR, FDCAN_CCCR_INIT);
-    bool const result = _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_INIT, true);
-    if (result) {
-        SET_BIT(can->CCCR, FDCAN_CCCR_CCE);
-    }
-    return result;
+    return _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_INIT, true);
 }
 
 
@@ -611,7 +607,7 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         }
 
         if (result) {
-            // wake the peripheral up, then open the configuration
+            // Wake the peripheral up and take it off the bus.
             CLEAR_BIT(can->CCCR, FDCAN_CCCR_CSR);
             result = _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_CSA, false) && _uni_hal_can_mode_init(can);
         }
@@ -621,6 +617,9 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         }
 
         if (result) {
+            // Setting CCE resets the hardware FIFOs and TX status (RM0433).
+            // Enable it only when writing the configuration registers.
+            SET_BIT(can->CCCR, FDCAN_CCCR_CCE);
             // Operating mode. Bus monitoring (MON) makes the node silent; loop back is a test
             // mode, where LBCK feeds the transmitter back into the receiver. With MON on top
             // the TX pin stays recessive as well.

@@ -140,6 +140,8 @@ on the registers; neither uses the ST HAL. Set `bitrate` in the configuration: t
 computed from the CAN clock and the initialisation fails when the clock cannot give the rate
 exactly. Acceptance filters are written in the bxCAN register layout on both families.
 The receive interrupt delivers accepted frames to a FreeRTOS queue.
+On STM32H743, stopping and restarting FDCAN preserves pending TX requests.
+Use `uni_hal_can_transmit_abort()` to request cancellation.
 
 CAN FD exists on the STM32H7 only. Build with `-DUNI_HAL_CAN_USE_FD=ON`, set `fd` in the
 configuration and, for frames that switch the bit rate, `bitrate_data`. A message then holds up
