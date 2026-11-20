@@ -34,8 +34,16 @@ static void write_register(volatile uint32_t *reg, uint32_t value)
         }
         for (unsigned channel = 0; channel < 7; ++channel) {
             DMA_Channel_TypeDef *regs = &controllers[module].channel[channel].regs;
-            if (reg == &regs->CNDTR && (regs->CCR & DMA_CCR_EN)) {
-                return; // CNDTR ignores writes while the physical channel is enabled.
+            if (regs->CCR & DMA_CCR_EN) {
+                if (reg == &regs->CNDTR || reg == &regs->CPAR || reg == &regs->CMAR) {
+                    return;
+                }
+                if (reg == &regs->CCR) {
+                    // RM0351: these fields are read-only while enabled. CIRC is still writable.
+                    uint32_t const locked = DMA_CCR_DIR | DMA_CCR_MEM2MEM | DMA_CCR_PL | DMA_CCR_MSIZE |
+                                            DMA_CCR_PSIZE | DMA_CCR_MINC | DMA_CCR_PINC;
+                    value = (value & ~locked) | (regs->CCR & locked);
+                }
             }
         }
     }
@@ -43,6 +51,8 @@ static void write_register(volatile uint32_t *reg, uint32_t value)
 }
 #undef WRITE_REG
 #define WRITE_REG(reg, value) write_register(&(reg), (value))
+#undef MODIFY_REG
+#define MODIFY_REG(reg, clear, set) WRITE_REG(reg, (READ_REG(reg) & ~(clear)) | (set))
 #include "dma/uni_hal_dma_stm32l4.c"
 #include "adc/uni_hal_adc.h"
 
@@ -63,6 +73,39 @@ bool __wrap_uni_hal_rcc_clk_set(uni_hal_core_periph_e periph, bool enabled)
 }
 
 #define CHECK(expr) do { if (!(expr)) return __LINE__; } while (0)
+
+static unsigned check_configuration(uni_hal_dma_context_t *ctx, DMA_Channel_TypeDef *regs)
+{
+    uint32_t const source = 0x20001000U, destination = 0x40000000U;
+    regs->CCR = DMA_CCR_TEIE;
+    CHECK(uni_hal_dma_set_address(ctx, source, destination));
+    CHECK(regs->CPAR == source && regs->CMAR == destination);
+    CHECK(uni_hal_dma_enable(ctx, true));
+    CHECK(!uni_hal_dma_set_address(ctx, destination, source));
+    CHECK(!uni_hal_dma_set_direction(ctx, UNI_HAL_DMA_DIRECTION_M2P));
+    CHECK(!uni_hal_dma_set_mode(ctx, UNI_HAL_DMA_MODE_CIRCULAR));
+    CHECK(!uni_hal_dma_set_priority(ctx, UNI_HAL_DMA_PRIORITY_HIGH));
+    CHECK(!uni_hal_dma_set_memory_align(ctx, UNI_HAL_DMA_ALIGNMENT_U32));
+    CHECK(!uni_hal_dma_set_periph_align(ctx, UNI_HAL_DMA_ALIGNMENT_U16));
+    CHECK(!uni_hal_dma_set_memory_increment(ctx, UNI_HAL_DMA_INCREMENT_YES));
+    CHECK(!uni_hal_dma_set_periph_increment(ctx, UNI_HAL_DMA_INCREMENT_YES));
+    CHECK(regs->CPAR == source && regs->CMAR == destination);
+    CHECK(regs->CCR == (DMA_CCR_TEIE | DMA_CCR_EN));
+
+    CHECK(uni_hal_dma_enable(ctx, false));
+    CHECK(uni_hal_dma_set_direction(ctx, UNI_HAL_DMA_DIRECTION_M2P));
+    CHECK(uni_hal_dma_set_mode(ctx, UNI_HAL_DMA_MODE_CIRCULAR));
+    CHECK(uni_hal_dma_set_priority(ctx, UNI_HAL_DMA_PRIORITY_HIGH));
+    CHECK(uni_hal_dma_set_memory_align(ctx, UNI_HAL_DMA_ALIGNMENT_U32));
+    CHECK(uni_hal_dma_set_periph_align(ctx, UNI_HAL_DMA_ALIGNMENT_U16));
+    CHECK(uni_hal_dma_set_memory_increment(ctx, UNI_HAL_DMA_INCREMENT_YES));
+    CHECK(uni_hal_dma_set_periph_increment(ctx, UNI_HAL_DMA_INCREMENT_YES));
+    CHECK(regs->CCR == (DMA_CCR_TEIE | DMA_CCR_DIR | DMA_CCR_CIRC | DMA_CCR_PL_1 | DMA_CCR_MSIZE_1 |
+                        DMA_CCR_PSIZE_0 | DMA_CCR_MINC | DMA_CCR_PINC));
+    CHECK(uni_hal_dma_set_address(ctx, source, destination));
+    CHECK(regs->CMAR == source && regs->CPAR == destination);
+    return 0;
+}
 
 static unsigned check_channel(unsigned module, unsigned channel)
 {
@@ -148,7 +191,7 @@ static unsigned check_channel(unsigned module, unsigned channel)
     irq();
     CHECK(dma->ISR == other_flags && !uni_hal_adc_is_inited(&adc));
     CHECK(uni_hal_dma_set_length(&ctx, 9U) && regs->CNDTR == 9U);
-    return 0;
+    return check_configuration(&ctx, regs);
 }
 
 int main(void)

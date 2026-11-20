@@ -89,6 +89,10 @@ bool uni_hal_dma_enable(uni_hal_dma_context_t* ctx, bool val);
 // Functions/Set
 //
 
+/** On STM32L496, disable the channel before changing its direction, mode, priority,
+ * data widths, increments, addresses or transfer count. These setters return false
+ * and leave the active transfer intact when the channel is enabled.
+ */
 bool uni_hal_dma_set_direction(uni_hal_dma_context_t* ctx, uni_hal_dma_direction_e val);
 
 bool uni_hal_dma_set_fifo_mode(uni_hal_dma_context_t* ctx, bool val);
