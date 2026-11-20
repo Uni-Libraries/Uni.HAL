@@ -170,6 +170,9 @@ typedef struct {
 
     /** TX buffers that hold a frame whose completion has not been reported yet */
     volatile uint32_t tx_inflight;
+
+    /** Last error consumed by a status register read since the previous public snapshot. */
+    uint32_t pending_lec;
 } uni_hal_can_stm32h7_instance_t;
 
 static uni_hal_can_stm32h7_instance_t g_uni_hal_can_instance[] = {
@@ -197,6 +200,24 @@ static uni_hal_can_stm32h7_instance_t *_uni_hal_can_get_instance(uni_hal_core_pe
     }
 
     return result;
+}
+
+
+static uint32_t _uni_hal_can_read_psr(uni_hal_can_stm32h7_instance_t *inst, uint32_t *last_error) {
+    // Every read resets LEC to NoChange. Serialize it with IRQ and task readers so a
+    // preempting reader cannot lose the error or deliver it twice.
+    uint32_t const primask = uni_hal_core_irq_pause();
+    uint32_t const psr = inst->can->PSR;
+    uint32_t const lec = psr & FDCAN_PSR_LEC;
+    if (lec != 0U && lec != FDCAN_PSR_LEC) {
+        inst->pending_lec = lec;
+    }
+    if (last_error != nullptr) {
+        *last_error = inst->pending_lec;
+        inst->pending_lec = 0U;
+    }
+    uni_hal_core_irq_resume(primask);
+    return psr;
 }
 
 
@@ -518,12 +539,12 @@ static BaseType_t _uni_hal_can_irq_tx(uni_hal_can_stm32h7_instance_t *inst) {
  * @param flags the status change flags of the interrupt register that are set
  * @return not 0 when a task of higher priority became ready
  */
-static BaseType_t _uni_hal_can_irq_error(const uni_hal_can_stm32h7_instance_t *inst, uint32_t flags) {
+static BaseType_t _uni_hal_can_irq_error(uni_hal_can_stm32h7_instance_t *inst, uint32_t flags) {
     FDCAN_GlobalTypeDef *can = inst->can;
     uni_hal_can_context_t *ctx = inst->ctx;
 
     // the flags tell that a state changed, the protocol status tells which way
-    uint32_t const psr = can->PSR;
+    uint32_t const psr = _uni_hal_can_read_psr(inst, nullptr);
 
     uint32_t errors = UNI_HAL_CAN_ERROR_NONE;
     if ((flags & FDCAN_IR_EW) != 0U && (psr & FDCAN_PSR_EW) != 0U) {
@@ -628,6 +649,7 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
         FDCAN_GlobalTypeDef *can = inst->can;
         inst->ctx = ctx;
         inst->tx_inflight = 0U;
+        inst->pending_lec = 0U;
         result = uni_hal_rcc_clk_set(ctx->config.instance, true);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_rx);
         result = result && uni_hal_gpio_pin_init(ctx->config.pin_tx);
@@ -795,7 +817,7 @@ bool uni_hal_can_start(uni_hal_can_context_t *ctx) {
         result = _uni_hal_can_wait(&can->CCCR, FDCAN_CCCR_INIT, false);
         if (result) {
             uint32_t const start_ms = uni_hal_systick_get_ms();
-            while ((can->PSR & FDCAN_PSR_ACT) == 0U) {
+            while ((_uni_hal_can_read_psr(inst, nullptr) & FDCAN_PSR_ACT) == 0U) {
                 if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_CAN_MODE_TIMEOUT_MS) {
                     result = false;
                     break;
@@ -916,10 +938,10 @@ bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bu
     bool result = false;
 
     if (uni_hal_can_is_inited(ctx) && status != nullptr) {
-        FDCAN_GlobalTypeDef *can = _uni_hal_can_get_instance(ctx->config.instance)->can;
-
-        // reading the protocol status resets its last error code to 'nothing new'
-        uint32_t const psr = can->PSR;
+        uni_hal_can_stm32h7_instance_t *inst = _uni_hal_can_get_instance(ctx->config.instance);
+        FDCAN_GlobalTypeDef *can = inst->can;
+        uint32_t last_error;
+        uint32_t const psr = _uni_hal_can_read_psr(inst, &last_error);
         uint32_t const ecr = can->ECR;
 
         if ((psr & FDCAN_PSR_BO) != 0U) {
@@ -941,7 +963,7 @@ bool uni_hal_can_bus_status_get(const uni_hal_can_context_t *ctx, uni_hal_can_bu
         status->tx_error_count = (uint8_t)((ecr & FDCAN_ECR_TEC) >> FDCAN_ECR_TEC_Pos);
         // the receive error counter has 7 bits and a separate flag for 'error passive level reached'
         status->rx_error_count = ((ecr & FDCAN_ECR_RP) != 0U) ? 128U : (uint8_t)((ecr & FDCAN_ECR_REC) >> FDCAN_ECR_REC_Pos);
-        status->last_error = _uni_hal_can_bus_error(psr & FDCAN_PSR_LEC);
+        status->last_error = _uni_hal_can_bus_error(last_error);
 
         result = true;
     }
