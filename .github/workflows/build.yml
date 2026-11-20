@@ -142,6 +142,16 @@ jobs:
     - name: Run the STM32 firmware regressions in QEMU
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
+    - name: Check the Debug allocator providers
+      if: matrix.mcu == 'STM32L496' && matrix.static_allocation == 'ON' && matrix.tick_hz == 1000
+      shell: bash
+      run: |
+        build_dir="$RUNNER_TEMP/allocator-debug"
+        cmake -S src_tests/allocator -B "$build_dir" -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchain.cmake" \
+          -DUNI_HAL_TARGET_MCU=STM32L496 -DUNI_HAL_HSE_VALUE=8000000
+        cmake --build "$build_dir" --target allocator_regression
+
   build-arm-clang:
     name: arm/clang (${{ matrix.mcu }}) on ubuntu-latest
     runs-on: ubuntu-latest
