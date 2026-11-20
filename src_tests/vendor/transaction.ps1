@@ -15,14 +15,16 @@ function Assert-OldTree {
 try {
     $null = New-Item -ItemType Directory "$coreDir/include", $usbDir
     Set-Content "$coreDir/include/old.h" 'old'
-    Set-Content "$coreDir/CMakeLists.txt" 'project build recipe'
     Set-Content "$usbDir/untouched" 'old USB tree'
     Copy-Item "$vendor/update.ps1" $fixtureVendor
+    . "$PSScriptRoot/staged_fixture.ps1"
+    New-StagedBuildFixture $root
+    $recipeHash = (Get-FileHash "$coreDir/CMakeLists.txt").Hash
 
     $corePin = (Import-PowerShellDataFile "$vendor/upstream.psd1")['ARM-software/CMSIS_5']
     $snapshot = "$root/CMSIS_5-$($corePin.Revision)"
     $null = New-Item -ItemType Directory "$snapshot/CMSIS/Core/Include"
-    Set-Content "$snapshot/CMSIS/Core/Include/new.h" 'new'
+    Set-Content "$snapshot/CMSIS/Core/Include/new.h" '#define SOURCE_OK 1'
     Set-Content "$snapshot/LICENSE.txt" 'license'
     $fixtureArchive = "$root/cmsis.zip"
     Compress-Archive $snapshot $fixtureArchive
@@ -83,9 +85,20 @@ try {
     }
     Assert-OldTree
 
+    # Archives and patches are valid. Only compiling the candidate exposes this error.
+    Set-Content "$root/check.c" '#include "new.h"', '#error intentional staged build failure'
+    try {
+        & "$fixtureVendor/update.ps1" CMSIS-Core
+        throw 'An unbuildable candidate was published'
+    } catch {
+        if ($_.Exception.Message -notlike 'Staged vendor build failed*') { throw }
+    }
+    Assert-OldTree
+
+    Set-Content "$root/check.c" '#include "new.h"', 'int verified = SOURCE_OK;'
     & "$fixtureVendor/update.ps1" CMSIS-Core
     if (!(Test-Path "$coreDir/include/new.h") -or (Test-Path "$coreDir/include/old.h") -or
-        (Get-Content "$coreDir/CMakeLists.txt") -ne 'project build recipe') {
+        (Get-FileHash "$coreDir/CMakeLists.txt").Hash -ne $recipeHash) {
         throw 'Retry did not replace vendor sources while preserving local files'
     }
 } finally {

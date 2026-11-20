@@ -8,6 +8,8 @@ try {
     $null = New-Item -ItemType Directory "$dir/arm_cmsis_core/include"
     Set-Content "$dir/arm_cmsis_core/include/old.h" 'old'
     Copy-Item "$vendor/update.ps1" $dir
+    . "$PSScriptRoot/staged_fixture.ps1"
+    New-StagedBuildFixture $root
     $pins = Import-PowerShellDataFile "$vendor/upstream.psd1"
     foreach ($entry in $pins.Values) {
         if ($entry.Revision -notmatch '^[0-9a-f]{40}$' -or $entry.SHA256 -notmatch '^[0-9a-f]{64}$') {
@@ -18,7 +20,7 @@ try {
     $pin = $pins[$repo]
     $snapshot = "$root/CMSIS_5-$($pin.Revision)"
     $null = New-Item -ItemType Directory "$snapshot/CMSIS/Core/Include"
-    Set-Content "$snapshot/CMSIS/Core/Include/example.h" 'fixture'
+    Set-Content "$snapshot/CMSIS/Core/Include/example.h" '#define SOURCE_OK 1'
     Set-Content "$snapshot/LICENSE.txt" 'license'
     $fixtureArchive = "$root/upstream.zip"
     Compress-Archive $snapshot $fixtureArchive
@@ -33,6 +35,7 @@ try {
         }
         Copy-Item $fixtureArchive $OutFile
     }
+    Set-Content "$root/check.c" '#include "example.h"', 'int verified = SOURCE_OK;'
     & "$dir/update.ps1" CMSIS-Core
     if (!(Test-Path "$dir/arm_cmsis_core/include/example.h") -or (Test-Path "$dir/arm_cmsis_core/include/old.h")) {
         throw 'Pinned source was not installed as the replacement tree'

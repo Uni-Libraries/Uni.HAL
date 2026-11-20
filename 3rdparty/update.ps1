@@ -1,6 +1,8 @@
 #!/usr/bin/env pwsh
 
 # Run without arguments to update all components, or pass one or more component names.
+# The staging build uses CMake and Ninja, a native C compiler for the PC port and
+# arm-none-eabi-gcc on PATH for the embedded ports. CMAKE_BUILD_PARALLEL_LEVEL applies.
 # The next run restores any interrupted publication before downloading new archives.
 param([Parameter(Position=0, ValueFromRemainingArguments)][string[]]$Components)
 $ErrorActionPreference = 'Stop'
@@ -99,6 +101,28 @@ function Add-LocalPatches([string]$Component, [string]$Tree) {
     }
 }
 
+function Build-StagedComponents {
+    $targets = [ordered]@{
+        PC = @('FreeRTOS-Kernel')
+        ZYNQ7000 = @('FreeRTOS-Kernel')
+        STM32H743 = @('CMSIS-Core', 'DFP-STM32H7', 'FreeRTOS-Kernel', 'USB-STM-Device')
+        STM32L496 = @('CMSIS-Core', 'DFP-STM32L4', 'FreeRTOS-Kernel', 'FreeRTOS-FAT')
+    }
+    foreach ($target in $targets.Keys) {
+        if (!($Components | Where-Object { $_ -in $targets[$target] })) { continue }
+        $build = "$active/build-$target"
+        $options = @("-DSTAGED_VENDOR_DIR=$staging/3rdparty", "-DUNI_HAL_TARGET_MCU=$target",
+                     '-DCMAKE_BUILD_TYPE=Release')
+        if ($target -ne 'PC') {
+            $options += "-DCMAKE_TOOLCHAIN_FILE=$PSScriptRoot/../cmake/toolchain.cmake"
+        }
+        cmake -S "$PSScriptRoot/verify" -B $build -G Ninja @options
+        if ($LASTEXITCODE -ne 0) { throw "Staged vendor configure failed for $target" }
+        cmake --build $build --config Release
+        if ($LASTEXITCODE -ne 0) { throw "Staged vendor build failed for $target" }
+    }
+}
+
 $directories = [ordered]@{
     'CMSIS-Core' = 'arm_cmsis_core'
     'DFP-STM32L4' = 'st_stm32l4'
@@ -152,6 +176,8 @@ try {
         Copy-Component $component $destination
         Add-LocalPatches $component $staging
     }
+
+    Build-StagedComponents
 
     foreach ($component in $Components) {
         $name = $directories[$component]
