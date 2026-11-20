@@ -83,6 +83,23 @@ static i2c_bus_t *get_bus(uni_hal_core_periph_e instance) {
     return &buses[instance - UNI_HAL_CORE_PERIPH_I2C_1];
 }
 
+static bool claim_init(i2c_bus_t *bus, uni_hal_i2c_context_t *ctx) {
+    // Reserve the current selection before GPIO or HAL setup can be preempted by a sibling.
+    uint32_t const mask = uni_hal_core_irq_pause();
+    bool claimed = !bus->owner;
+    uni_hal_rcc_clksrc_e const source = ctx->config.clock_source;
+    if (claimed && source != UNI_HAL_RCC_CLKSRC_UNKNOWN) {
+        bool const shared_in_use = bus->instance != I2C4 && (buses[0].owner || buses[1].owner || buses[2].owner);
+        claimed = shared_in_use ? uni_hal_rcc_clksrc_get(ctx->config.instance) == source
+                                : uni_hal_rcc_clksrc_set(ctx->config.instance, source);
+    }
+    if (claimed) {
+        bus->owner = ctx;
+    }
+    uni_hal_core_irq_resume(mask);
+    return claimed;
+}
+
 static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uint32_t timeout) {
     if (!timeout || !polling_allowed() || !uni_hal_i2c_is_inited(ctx)) {
         return NULL;
@@ -120,18 +137,14 @@ static void release_bus(i2c_bus_t *bus) {
 
 bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
     i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : NULL;
-    if (!bus || bus->owner || ctx->state.initialized || !ctx->config.pin_sck || !ctx->config.pin_sda) {
+    if (!bus || ctx->state.initialized || !ctx->config.pin_sck || !ctx->config.pin_sda || !claim_init(bus, ctx)) {
         return false;
     }
 
-    uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source);
-    if (!uni_hal_rcc_clk_set(ctx->config.instance, true)) {
-        return false;
-    }
-    if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sck) && !uni_hal_gpio_pin_init(ctx->config.pin_sck)) {
-        return false;
-    }
-    if (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sda) && !uni_hal_gpio_pin_init(ctx->config.pin_sda)) {
+    if (!uni_hal_rcc_clk_set(ctx->config.instance, true) ||
+        (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sck) && !uni_hal_gpio_pin_init(ctx->config.pin_sck)) ||
+        (!uni_hal_gpio_pin_is_inited(ctx->config.pin_sda) && !uni_hal_gpio_pin_init(ctx->config.pin_sda))) {
+        bus->owner = NULL;
         return false;
     }
 
@@ -139,6 +152,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
     hal->Init.Timing = ctx->config.timing != 0U ? ctx->config.timing
             : uni_hal_i2c_timing_calc(uni_hal_rcc_clk_get_freq(ctx->config.instance), ctx->config.speed);
     if (hal->Init.Timing == 0U) {
+        bus->owner = NULL;
         return false;
     }
     hal->Init.OwnAddress1 = 0;
@@ -149,7 +163,6 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
     hal->Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
     hal->Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
 
-    bus->owner = ctx;
     hal->Instance = bus->instance;
     if (HAL_I2C_Init(hal) != HAL_OK ||
         HAL_I2CEx_ConfigAnalogFilter(hal, I2C_ANALOGFILTER_ENABLE) != HAL_OK ||

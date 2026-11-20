@@ -1372,10 +1372,43 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
 // Clock Source
 //
 
+typedef struct {
+    uni_hal_rcc_clksrc_e source;
+    uint32_t selector;
+} i2c_clock_source_t;
+
+static const i2c_clock_source_t i2c_clock_sources[2][4] = {
+    {
+        {UNI_HAL_RCC_CLKSRC_PCLK1, LL_RCC_I2C123_CLKSOURCE_PCLK1},
+        {UNI_HAL_RCC_CLKSRC_PLL3R, LL_RCC_I2C123_CLKSOURCE_PLL3R},
+        {UNI_HAL_RCC_CLKSRC_HSI, LL_RCC_I2C123_CLKSOURCE_HSI},
+        {UNI_HAL_RCC_CLKSRC_CSI, LL_RCC_I2C123_CLKSOURCE_CSI},
+    },
+    {
+        {UNI_HAL_RCC_CLKSRC_PCLK4, LL_RCC_I2C4_CLKSOURCE_PCLK4},
+        {UNI_HAL_RCC_CLKSRC_PLL3R, LL_RCC_I2C4_CLKSOURCE_PLL3R},
+        {UNI_HAL_RCC_CLKSRC_HSI, LL_RCC_I2C4_CLKSOURCE_HSI},
+        {UNI_HAL_RCC_CLKSRC_CSI, LL_RCC_I2C4_CLKSOURCE_CSI},
+    },
+};
+
 uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
     uni_hal_rcc_clksrc_e result = UNI_HAL_RCC_CLKSRC_UNKNOWN;
     if (uni_hal_rcc_is_inited()) {
         switch (target) {
+        case UNI_HAL_CORE_PERIPH_I2C_1:
+        case UNI_HAL_CORE_PERIPH_I2C_2:
+        case UNI_HAL_CORE_PERIPH_I2C_3:
+        case UNI_HAL_CORE_PERIPH_I2C_4: {
+            bool const i2c4 = target == UNI_HAL_CORE_PERIPH_I2C_4;
+            uint32_t const mux = LL_RCC_GetI2CClockSource(i2c4 ? LL_RCC_I2C4_CLKSOURCE : LL_RCC_I2C123_CLKSOURCE);
+            for (unsigned i = 0; i < 4U; ++i) {
+                if (i2c_clock_sources[i2c4][i].selector == mux) {
+                    return i2c_clock_sources[i2c4][i].source;
+                }
+            }
+            break;
+        }
         case UNI_HAL_CORE_PERIPH_RNG:
             switch(LL_RCC_GetRNGClockSource(LL_RCC_RNG_CLKSOURCE)) {
                 case LL_RCC_RNG_CLKSOURCE_HSI48:
@@ -1479,51 +1512,14 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
             }
             case UNI_HAL_CORE_PERIPH_I2C_1:
             case UNI_HAL_CORE_PERIPH_I2C_2:
-            case UNI_HAL_CORE_PERIPH_I2C_3: {
-                result = true;
-                uint32_t src = 0;
-                switch (source) {
-                    case UNI_HAL_RCC_CLKSRC_PCLK1:
-                        src = LL_RCC_I2C123_CLKSOURCE_PCLK1;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_PLL3R:
-                        src = LL_RCC_I2C123_CLKSOURCE_PLL3R;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_HSI:
-                        src = LL_RCC_I2C123_CLKSOURCE_HSI;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_CSI:
-                        src = LL_RCC_I2C123_CLKSOURCE_CSI;
-                        break;
-                    default:
-                        result = false;
-                }
-                if (result) {
-                    LL_RCC_SetI2CClockSource(src);
-                }
-                break;
-            }
+            case UNI_HAL_CORE_PERIPH_I2C_3:
             case UNI_HAL_CORE_PERIPH_I2C_4: {
-                result = true;
-                uint32_t src = 0;
-                switch (source) {
-                    case UNI_HAL_RCC_CLKSRC_PCLK4:
-                        src = LL_RCC_I2C4_CLKSOURCE_PCLK4;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_PLL3R:
-                        src = LL_RCC_I2C4_CLKSOURCE_PLL3R;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_HSI:
-                        src = LL_RCC_I2C4_CLKSOURCE_HSI;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_CSI:
-                        src = LL_RCC_I2C4_CLKSOURCE_CSI;
-                        break;
-                    default:
-                        result = false;
-                }
-                if (result) {
-                    LL_RCC_SetI2CClockSource(src);
+                const i2c_clock_source_t *choices = i2c_clock_sources[target == UNI_HAL_CORE_PERIPH_I2C_4];
+                for (unsigned i = 0; i < 4U; ++i) {
+                    if (choices[i].source == source) {
+                        LL_RCC_SetI2CClockSource(choices[i].selector);
+                        return true;
+                    }
                 }
                 break;
             }

@@ -108,7 +108,8 @@ uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target);
 
 
 /**
- * Set clock source for the peripheral
+ * Set clock source for the peripheral. On STM32H743, deinitialize I2C1..3 before
+ * directly changing their shared clock so their programmed timings stay valid.
  * @param ctx RCC context
  * @param target Peripheral target
  * @param source Clock source

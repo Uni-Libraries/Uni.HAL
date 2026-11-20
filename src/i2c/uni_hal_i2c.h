@@ -78,6 +78,8 @@ typedef struct uni_hal_i2c_config_t {
 
     /**
      * I2C kernel clock source. On STM32L496, select PCLK1, SYSCLK or HSI.
+     * On STM32H743, I2C1..3 share PCLK1/PLL3R/HSI/CSI and I2C4 uses PCLK4/PLL3R/HSI/CSI.
+     * A conflicting source fails initialization while a sibling uses the shared clock.
      * UNKNOWN preserves the existing selection (PCLK1 after L496 RCC initialization).
      */
     uni_hal_rcc_clksrc_e clock_source;
