@@ -34,8 +34,10 @@ for other targets.
   ADC, CAN, I²C, SPI or STM32-style RCC driver. RTT-to-stdio needs a HAL timer.
 - **PC** provides host time in milliseconds and real FreeRTOS I/O buffers.
   Peripheral entries are host stand-ins. For example, Flash reports zero
-  capacity, SPI transfers return failure, and CRC, RNG and I²C do not model
-  hardware results. Use controlled driver models to test peripheral behaviour.
+  capacity, SPI transfers return failure, and CRC and I²C do not model
+  hardware results. RNG reads the operating system's random source and
+  reports failure if it cannot fill the requested buffer. Discard the buffer on failure, as it may be partially
+  filled. Use controlled driver models to test peripheral behaviour.
 
 ## Link contract
 

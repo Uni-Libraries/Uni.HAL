@@ -1,0 +1,5 @@
+foreach(backend IN ITEMS system model)
+    add_executable(rng_pc_${backend} ${backend}.c)
+    target_link_libraries(rng_pc_${backend} PRIVATE uni.hal)
+    add_test(NAME rng_pc_${backend} COMMAND rng_pc_${backend})
+endforeach()
