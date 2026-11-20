@@ -332,3 +332,23 @@ TEST_CASE("L496 RCC supplies a working shared kernel clock to the default RNG") 
     REQUIRE(uni_hal_rng_is_inited(&rng));
     REQUIRE(uni_hal_rng_get_32u(&rng) == 0x6429DC01U);
 }
+
+TEST_CASE("L496 disabling an APB1 UART preserves neighboring UART and timer clocks") {
+    uni_hal_core_periph_e const ports[] = {UNI_HAL_CORE_PERIPH_UART_2, UNI_HAL_CORE_PERIPH_UART_3,
+                                          UNI_HAL_CORE_PERIPH_UART_4, UNI_HAL_CORE_PERIPH_UART_5};
+    for (auto port : ports) {
+        CAPTURE(port);
+        rcc_test_reset();
+        REQUIRE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_TIM_16, true));
+        REQUIRE(uni_hal_rcc_clk_set(UNI_HAL_CORE_PERIPH_TIM_17, true));
+        for (auto other : ports) {
+            REQUIRE(uni_hal_rcc_clk_set(other, true));
+        }
+        REQUIRE(uni_hal_rcc_clk_set(port, false));
+        for (auto other : ports) {
+            CHECK(uni_hal_rcc_clk_get(other) == (other != port));
+        }
+        CHECK(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_TIM_16));
+        CHECK(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_TIM_17));
+    }
+}

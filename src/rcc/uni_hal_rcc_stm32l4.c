@@ -1076,25 +1076,25 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) {
             case UNI_HAL_CORE_PERIPH_UART_2:
                 state
                     ? LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2)
-                    : LL_APB2_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_USART2);
+                    : LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_USART2);
             result = true;
             break;
             case UNI_HAL_CORE_PERIPH_UART_3:
                 state
                     ? LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART3)
-                    : LL_APB2_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_USART3);
+                    : LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_USART3);
             result = true;
             break;
             case UNI_HAL_CORE_PERIPH_UART_4:
                 state
                     ? LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART4)
-                    : LL_APB2_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_UART4);
+                    : LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_UART4);
             result = true;
             break;
             case UNI_HAL_CORE_PERIPH_UART_5:
                 state
                     ? LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART5)
-                    : LL_APB2_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_UART5);
+                    : LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_UART5);
             result = true;
             break;
             case UNI_HAL_CORE_PERIPH_TIM_9:
