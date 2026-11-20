@@ -14,17 +14,18 @@ static SPI_TypeDef regs[3];
 // Supply slave clocks after a simulated pause longer than the master timeout.
 static unsigned delayed_txe_polls;
 static uint32_t tick;
-static uint32_t model_txe(SPI_TypeDef *spi) {
+static uint32_t model_status(SPI_TypeDef *spi) {
     if (delayed_txe_polls) {
         ++tick;
         if (--delayed_txe_polls == 0U) {
             spi->SR |= SPI_SR_TXE | SPI_SR_RXNE;
         }
     }
-    return LL_SPI_IsActiveFlag_TXE(spi);
+    return spi->SR;
 }
 
-#define LL_SPI_IsActiveFlag_TXE model_txe
+#undef LL_SPI_ReadReg
+#define LL_SPI_ReadReg(instance, reg) model_status(instance)
 #define uni_hal_rcc_clk_set model_clock_set
 #define LL_RCC_GetSystemClocksFreq model_clock_freq
 #include "spi/uni_hal_spi_stm32l4.c"

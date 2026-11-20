@@ -1,4 +1,4 @@
-foreach(scenario IN ITEMS config completion)
+foreach(scenario IN ITEMS config completion overrun)
     set(target spi_l496_${scenario})
     add_executable(${target}_qemu ${scenario}_qemu.c)
     target_link_libraries(${target}_qemu PRIVATE uni.hal)

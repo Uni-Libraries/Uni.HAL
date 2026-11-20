@@ -8,14 +8,24 @@ static SPI_TypeDef spi;
 
 // Model an external clock delivering a byte on the second RXNE poll.
 static unsigned rx_polls;
-static uint32_t model_rxne(SPI_TypeDef *instance) {
-    if (++rx_polls % 2U == 0U) {
-        instance->DR ^= UINT8_MAX;
-        return 1U;
-    }
-    return 0U;
+static bool awaiting_rx;
+static void transmit(SPI_TypeDef *instance, uint8_t byte) {
+    LL_SPI_TransmitData8(instance, byte);
+    instance->SR &= ~SPI_SR_RXNE;
+    awaiting_rx = true;
 }
-#define LL_SPI_IsActiveFlag_RXNE(instance) model_rxne(instance)
+
+static uint32_t model_status(SPI_TypeDef *instance) {
+    if (awaiting_rx && ++rx_polls % 2U == 0U) {
+        instance->DR ^= UINT8_MAX;
+        instance->SR |= SPI_SR_RXNE;
+        awaiting_rx = false;
+    }
+    return instance->SR;
+}
+#undef LL_SPI_ReadReg
+#define LL_SPI_ReadReg(instance, reg) model_status(instance)
+#define LL_SPI_TransmitData8 transmit
 #include "spi/uni_hal_spi_stm32l4.c"
 
 static uint32_t elapsed_ms;

@@ -179,57 +179,65 @@ bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint3
     return uni_hal_spi_transmitreceive(ctx, data, NULL, len);
 }
 
+static bool wait_for_flag(SPI_TypeDef *instance, uint32_t flag, bool set, bool master) {
+    uint32_t const start_ms = master ? uni_hal_systick_get_ms() : 0U;
+    for (;;) {
+        // Snapshot OVR together with TXE/RXNE/BSY. Reading DR and then SR clears OVR.
+        uint32_t const status = LL_SPI_ReadReg(instance, SR);
+        if (status & SPI_SR_OVR) {
+            return false;
+        }
+        if (((status & flag) != 0U) == set) {
+            return true;
+        }
+        if (master && uni_hal_systick_get_ms() - start_ms > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+            return false;
+        }
+    }
+}
+
 bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_data, uint8_t *rx_data, uint32_t len) {
-    bool result = false;
-    uint8_t data_rx = 0U;
+    if (!uni_hal_spi_is_inited(ctx)) {
+        return false;
+    }
+    SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+    if (!instance) {
+        return false;
+    }
+    _uni_hal_spi_clear_flags(ctx->config.instance);
+    LL_SPI_SetRxFIFOThreshold(instance, LL_SPI_RX_FIFO_TH_QUARTER);
+    LL_SPI_Enable(instance);
 
-    if (uni_hal_spi_is_inited(ctx)) {
-        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-        if (instance != NULL) {
-            _uni_hal_spi_clear_flags(ctx->config.instance);
-
-            LL_SPI_SetRxFIFOThreshold(instance, LL_SPI_RX_FIFO_TH_QUARTER);
-            LL_SPI_Enable(instance);
-
-            bool const is_master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
-            bool stalled = false;
-
-            for (size_t idx = 0; idx < len && !stalled; idx++) {
-                uint32_t start_ms = uni_hal_systick_get_ms();
-                while (!stalled && !LL_SPI_IsActiveFlag_TXE(instance)) {
-                    stalled = is_master && (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
-                }
-                if (stalled) {
-                    break;
-                }
-                LL_SPI_TransmitData8(instance, tx_data ? tx_data[idx] : 0U);
-
-                start_ms = uni_hal_systick_get_ms();
-                while (!stalled && !LL_SPI_IsActiveFlag_RXNE(instance)) {
-                    stalled = is_master && (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
-                }
-                if (stalled) {
-                    break;
-                }
-                data_rx = LL_SPI_ReceiveData8(instance);
-                if (rx_data) {
-                    rx_data[idx] = data_rx;
-                }
-            }
-
-            // ES0335 2.22.2: BSY can stay set in slave mode. The final RXNE above
-            // already signals completion of the last byte in full-duplex mode.
-            if (is_master) {
-                uint32_t const start_ms = uni_hal_systick_get_ms();
-                while (!stalled && LL_SPI_IsActiveFlag_BSY(instance)) {
-                    stalled = (uni_hal_systick_get_ms() - start_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS;
-                }
-            }
-
-            LL_SPI_Disable(instance);
-            result = !stalled;
+    bool const master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
+    bool success = true;
+    for (size_t idx = 0; idx < len; ++idx) {
+        if (!wait_for_flag(instance, SPI_SR_TXE, true, master)) {
+            success = false;
+            break;
+        }
+        LL_SPI_TransmitData8(instance, tx_data ? tx_data[idx] : 0U);
+        if (!wait_for_flag(instance, SPI_SR_RXNE, true, master)) {
+            success = false;
+            break;
+        }
+        uint8_t const byte = LL_SPI_ReceiveData8(instance);
+        if (rx_data) {
+            rx_data[idx] = byte;
         }
     }
 
-    return result;
+    // ES0335 2.22.2: the last RXNE completes a full-duplex slave frame even if BSY stays high.
+    if (success && master) {
+        success = wait_for_flag(instance, SPI_SR_BSY, false, master);
+    }
+    LL_SPI_Disable(instance);
+    if (LL_SPI_IsActiveFlag_OVR(instance)) {
+        success = false;
+        LL_SPI_ClearFlag_OVR(instance);
+    }
+    // Unread frames survive SPE=0 (RM0351, SPI disabling procedure).
+    while (LL_SPI_GetRxFIFOLevel(instance) != LL_SPI_RX_FIFO_EMPTY) {
+        (void)LL_SPI_ReceiveData8(instance);
+    }
+    return success;
 }

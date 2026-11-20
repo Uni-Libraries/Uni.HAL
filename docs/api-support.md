@@ -28,7 +28,8 @@ for other targets.
   SCK, MISO and MOSI GPIO configurations, plus an alternate-function NSS pin
   for hardware chip select. With software NSS, the application controls external
   chip select. A supplied NSS GPIO is initialized using its configuration.
-  SPI initialization rejects CRC and DMA requests. The SPI abort entry point
+  A receive FIFO overrun fails the blocking transfer. Unread frames are discarded
+  before the next transfer. SPI initialization rejects CRC and DMA requests. The SPI abort entry point
   returns false because transfers are blocking. The Flash driver is absent.
 - **Zynq-7000** provides CPU0/GIC startup, the system time base, PS UART, PS
   reset and basic SEGGER RTT. Generic timing calculators, context queries and
