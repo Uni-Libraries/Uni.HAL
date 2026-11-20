@@ -1055,15 +1055,11 @@ def main() -> int:
             pll_source_node = "src_hsi"
 
     pll_outputs: dict[str, int | None] = {}
-    pll1_p_div: int | None = None
     for pll in pll_records:
         vco = pll_vco_hz(pll_source_hz, pll)
         p_hz = div_hz(vco, pll.p)
         q_hz = div_hz(vco, pll.q)
         r_hz = div_hz(vco, pll.r)
-
-        if pll.idx == 1:
-            pll1_p_div = pll.p
 
         if pll.p and pll.p > 0:
             pll_outputs[f"PLL{pll.idx}P"] = p_hz
@@ -1074,29 +1070,23 @@ def main() -> int:
 
     freqs.update(pll_outputs)
 
-    sys_source_node = "src_hsi"
-    sys_source_hz: int | None = None
+    if "PLL1P" in pll_outputs:
+        sys_source = "PLL1P"
+    elif stm32h7_target and hse_enable:
+        sys_source = "HSE"
+    elif stm32h7_target and csi_enable:
+        sys_source = "CSI"
+    else:
+        sys_source = "HSI"
+
     for token in sys_source_values:
-        freq_id = token_to_freq_id(token)
-        if freq_id is None:
-            continue
-        candidate = freqs.get(freq_id)
-        if candidate is not None:
-            sys_source_hz = candidate
-            node = freq_id_to_node(freq_id)
-            if node:
-                sys_source_node = node
+        source = "PLL1P" if stm32h7_target and token in ("PLL", "PLL1") else token_to_freq_id(token)
+        if source is not None:
+            sys_source = source
             break
 
-    if sys_source_hz is None:
-        if freqs.get("PLL1P") is not None:
-            sys_source_hz = freqs["PLL1P"]
-            sys_source_node = "pll1_p"
-        else:
-            sys_source_hz = freqs.get("HSI")
-            sys_source_node = "src_hsi"
-
-    sysclk_hz = sys_source_hz
+    sys_source_node = freq_id_to_node(sys_source)
+    sysclk_hz = freqs.get(sys_source)
     hclk_hz = div_hz(div_hz(sysclk_hz, sys_div), hclk_div)
     pclk1_hz = div_hz(hclk_hz, apb1_div)
     pclk2_hz = div_hz(hclk_hz, apb2_div)
