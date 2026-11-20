@@ -199,7 +199,8 @@ bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *d
         // Reading the sub-second or the time register freezes the higher registers until the
         // date register is read: in this order the three values belong to the same instant.
         uint32_t const subsecond = LL_RTC_TIME_GetSubSecond(RTC);
-        uint32_t const time = LL_RTC_TIME_Get(RTC);
+        // Keep the AM/PM flag and BCD hour from the same register read.
+        uint32_t const time = READ_REG(RTC->TR);
         uint32_t const date = LL_RTC_DATE_Get(RTC);
 
         // the sub-second counter runs down from the synchronous prescaler to 0 within a second
@@ -210,7 +211,12 @@ bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *d
         }
         datetime->milliseconds = (uint16_t)((milliseconds < 1000U) ? milliseconds : 999U);
 
-        datetime->hours = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_HOUR(time));
+        uint32_t const hour_bcd = (time & (RTC_TR_HT | RTC_TR_HU)) >> RTC_TR_HU_Pos;
+        uint8_t hour = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(hour_bcd);
+        if (LL_RTC_GetHourFormat(RTC) == LL_RTC_HOURFORMAT_AMPM) {
+            hour = (uint8_t)((hour % 12U) + ((time & RTC_TR_PM) ? 12U : 0U));
+        }
+        datetime->hours = hour;
         datetime->minutes = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_MINUTE(time));
         datetime->seconds = (uint8_t)__LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_SECOND(time));
         datetime->year = (uint16_t)(UNI_HAL_RTC_YEAR_BASE + __LL_RTC_CONVERT_BCD2BIN(__LL_RTC_GET_YEAR(date)));
@@ -241,6 +247,14 @@ bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *d
             .Minutes = datetime->minutes,
             .Seconds = datetime->seconds,
         };
+
+        if (LL_RTC_GetHourFormat(RTC) == LL_RTC_HOURFORMAT_AMPM) {
+            time.TimeFormat = datetime->hours >= 12U ? LL_RTC_TIME_FORMAT_PM : LL_RTC_TIME_FORMAT_AM_OR_24;
+            time.Hours = datetime->hours % 12U;
+            if (time.Hours == 0U) {
+                time.Hours = 12U;
+            }
+        }
 
         result = LL_RTC_DATE_Init(RTC, LL_RTC_FORMAT_BIN, &date) == SUCCESS;
         result = result && LL_RTC_TIME_Init(RTC, LL_RTC_FORMAT_BIN, &time) == SUCCESS;

@@ -44,7 +44,7 @@ typedef struct {
     uint8_t day;
     /** 1 (Monday)..7 (Sunday) */
     uint8_t weekday;
-    /** 0..23 */
+    /** 0..23, including when the retained hardware calendar uses AM/PM */
     uint8_t hours;
     /** 0..59 */
     uint8_t minutes;
