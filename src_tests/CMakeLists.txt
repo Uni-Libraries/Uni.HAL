@@ -9,6 +9,8 @@ add_test(NAME rcc_map_pll_fraction
     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_pll_fraction.cmake")
 add_test(NAME rcc_map_h743_sysclk
     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_h743_sysclk.cmake")
+add_test(NAME rcc_map_h743_pll_reference
+    COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_h743_pll_reference.cmake")
 add_test(NAME rcc_map_inactive_clocks
     COMMAND "${CMAKE_COMMAND}" "-DCC=${CMAKE_C_COMPILER}" "-DMSVC=${MSVC}"
         -DFIXTURE=inactive_clocks -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_preprocessed.cmake")

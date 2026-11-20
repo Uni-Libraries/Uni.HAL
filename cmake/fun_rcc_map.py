@@ -401,6 +401,13 @@ def div_hz(value: int | None, divider: int | None) -> int | None:
     return value // divider
 
 
+def h743_pll_m(configured_m: int | None, source_hz: int | None, hse_hz: int) -> int | None:
+    if configured_m is None or source_hz is None or hse_hz <= 0:
+        return None
+    divider, remainder = divmod(configured_m * source_hz, hse_hz)
+    return divider if remainder == 0 and 1 <= divider <= 63 else 0
+
+
 def pll_vco_hz(source_hz: int | None, pll: PllConfig) -> int | None:
     if source_hz is None or pll.n is None or pll.m is None or pll.m <= 0 or pll.fracn is None:
         return None
@@ -886,11 +893,25 @@ def main() -> int:
     lse_enable = pick_first_bool(lse_enable_values)
     csi_enable = pick_first_bool(csi_enable_values)
 
+    stm32h7_target = "STM32H7" in definitions
     pll_source_values = collect_group1(r"RCC_PLLSOURCE_([A-Z0-9_]+)", input_text)
     if not pll_source_values:
         pll_source_values = collect_group1(r"LL_RCC_PLLSOURCE_([A-Z0-9_]+)", input_text)
+    # The HAL accepts M relative to HSE_VALUE. An explicit low-level PLL setup
+    # describes hardware dividers directly.
+    hal_h743_pll = (stm32h7_target and not pll_source_values
+                    and re.search(r"\buni_hal_rcc_stm32h7_config_(?:t|set)\b", input_text) is not None
+                    and not re.search(r"\bLL_RCC_PLL[123]_SetM\s*\(", input_text))
     if not pll_source_values:
-        pll_source_values = ["HSE" if (hse_enable is True) else "HSI"]
+        internal_source = "CSI" if hal_h743_pll and csi_enable else "HSI"
+        pll_source_values = ["HSE" if hse_enable else internal_source]
+
+    hsi_divider = 1
+    if hal_h743_pll:
+        requests = collect_group1(r"\bLL_RCC_HSI_SetDivider\s*\(\s*([^)]*)\)", input_text)
+        if requests:
+            match = re.fullmatch(r"(?:LL_RCC_HSI_DIV|RCC_HSI_DIV|RCC_CR_HSIDIV_)([1248])", requests[0])
+            hsi_divider = int(match.group(1)) if match else None
 
     sys_source_values = collect_group1(r"RCC_SYSCLKSOURCE_([A-Z0-9_]+)", input_text)
     if not sys_source_values:
@@ -898,7 +919,6 @@ def main() -> int:
     if not sys_source_values:
         sys_source_values = collect_group1(r"LL_RCC_SYS_CLKSOURCE_([A-Z0-9_]+)", input_text)
 
-    stm32h7_target = "STM32H7" in definitions
     default_sys_div = 1
     default_hclk_div = 2 if stm32h7_target else 1
     default_apb_div = 2 if stm32h7_target else 1
@@ -1054,6 +1074,15 @@ def main() -> int:
             pll_source_hz = freqs["HSI"]
             pll_source_node = "src_hsi"
 
+    if hal_h743_pll:
+        if pll_source_node == "src_hsi":
+            pll_source_hz = div_hz(pll_source_hz, hsi_divider)
+        for pll in pll_records:
+            pll.m = h743_pll_m(pll.m, pll_source_hz, hse_hz)
+        if any(pll.m == 0 and (pll.p or pll.q or pll.r) for pll in pll_records):
+            # When a requested M cannot be represented, startup stops all PLLs.
+            pll_source_hz = None
+
     pll_outputs: dict[str, int | None] = {}
     for pll in pll_records:
         vco = pll_vco_hz(pll_source_hz, pll)
@@ -1086,7 +1115,8 @@ def main() -> int:
             break
 
     sys_source_node = freq_id_to_node(sys_source)
-    sysclk_hz = freqs.get(sys_source)
+    sys_source_div = hsi_divider if sys_source == "HSI" else 1
+    sysclk_hz = div_hz(freqs.get(sys_source), sys_source_div)
     hclk_hz = div_hz(div_hz(sysclk_hz, sys_div), hclk_div)
     pclk1_hz = div_hz(hclk_hz, apb1_div)
     pclk2_hz = div_hz(hclk_hz, apb2_div)
@@ -1194,8 +1224,10 @@ def main() -> int:
                 lines.append(f'    "{node}" [label="{esc_label(label)}", shape=oval, fillcolor="#bbf7d0", color="#16a34a"];')
                 lines.append(f'  "pll{pll.idx}" -> "{node}" [label="/{pll.r}", color="#16a34a"];')
 
-            src_div = pll.m if (pll.m is not None and pll.m > 0) else 1
+            src_div = pll.m or ("?" if hal_h743_pll else 1)
             src_label = f"/{src_div}"
+            if pll_source_node == "src_hsi" and hsi_divider != 1:
+                src_label = f"/{hsi_divider or '?'} {src_label}"
             lines.append(f'  "{pll_source_node}" -> "pll{pll.idx}" [label="{esc_label(src_label)}"];')
     else:
         lines.append('    "pll_none" [label="PLL config not detected", shape=note, fillcolor="#f8fafc", color="#94a3b8"];')
@@ -1243,7 +1275,7 @@ def main() -> int:
         lines.append("  }")
         lines.append("")
 
-    lines.append(f'  "{sys_source_node}" -> "bus_sysclk" [label="/1", penwidth=1.2];')
+    lines.append(f'  "{sys_source_node}" -> "bus_sysclk" [label="/{sys_source_div or "?"}", penwidth=1.2];')
 
     sysclk_node_label = f"SYSCLK\n{format_hz(sysclk_hz)}"
     hclk_node_label = f"HCLK\n{format_hz(hclk_hz)}"
