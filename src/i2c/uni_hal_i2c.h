@@ -111,7 +111,9 @@ typedef struct uni_hal_i2c_config_t {
     bool irq_enable;
 
     /**
-     * IRQ priority
+     * Unshifted NVIC pre-emption priority. STM32L496 interrupt transfers require a
+     * FreeRTOS syscall-safe priority (4..15 with the default configuration) and no
+     * subpriority bits. Initialization rejects unsupported interrupt settings.
      */
     uint32_t irq_priority;
 

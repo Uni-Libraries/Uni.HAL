@@ -31,6 +31,7 @@ static bool sample_wake_tick;
 static bool scheduler_running;
 static bool in_irq;
 static bool peripheral_enabled, event_irq_enabled, error_irq_enabled, fail_reset, fail_deinit;
+static uint32_t irq_priority;
 static unsigned hal_deinits, output_pin_inits;
 static SemaphoreHandle_t active_event;
 static uint32_t event_creation_ms;
@@ -84,6 +85,7 @@ uint32_t uni_hal_core_irq_pause(void) {
 void uni_hal_core_irq_resume(uint32_t mask) { irq_mask = mask; }
 uint32_t __get_PRIMASK(void) { return irq_mask; }
 uint32_t __get_BASEPRI(void) { return 0; }
+uint32_t NVIC_GetPriorityGrouping(void) { return 3U; }
 uint32_t NVIC_GetPriority(int irq) { assert(irq == SysTick_IRQn); return 15U; }
 uint32_t __get_IPSR(void) { return in_irq; }
 
@@ -109,7 +111,8 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e instance, uni_hal_rcc_clksrc_e
 bool uni_hal_rcc_clk_set(uni_hal_core_periph_e instance, bool enable) { (void)instance; return enable; }
 uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e instance) { (void)instance; return 0; }
 bool uni_hal_core_irq_enable(uni_hal_core_irq_e irq, uint32_t priority, uint32_t sub) {
-    (void)priority; (void)sub;
+    (void)sub;
+    irq_priority = priority;
     assert(irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ1 || irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ2);
     if (irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ1) { event_irq_enabled = true; } else { error_irq_enabled = true; }
     return true;
@@ -148,6 +151,7 @@ void vSemaphoreDelete(SemaphoreHandle_t event) {
     active_event = NULL;
 }
 BaseType_t xSemaphoreGiveFromISR(SemaphoreHandle_t event, BaseType_t *woken) {
+    assert((irq_priority << (8U - __NVIC_PRIO_BITS)) >= configMAX_SYSCALL_INTERRUPT_PRIORITY);
     assert(event == active_event && in_irq && !event->count);
     event->count = 1;
     *woken = pdTRUE;
@@ -314,6 +318,12 @@ int main(void)
     incomplete = ctx;
     incomplete.config.pin_sda = NULL;
     assert(!uni_hal_i2c_init(&incomplete) && !incomplete.state.initialized && !pins[0].inited);
+    // Priority zero and priorities above the syscall ceiling could preempt kernel critical sections.
+    assert(!uni_hal_i2c_init(&ctx));
+    ctx.config.irq_priority = (configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS)) - 1U;
+    assert(!uni_hal_i2c_init(&ctx));
+    assert(!ctx.state.initialized && !pins[0].inited && !peripheral_enabled);
+    ++ctx.config.irq_priority;
     // A bootloader left I2C1 and its NVIC vectors running. Our handle starts empty.
     peripheral_enabled = event_irq_enabled = error_irq_enabled = true;
     assert(!hi2c1.Instance && uni_hal_i2c_recover(&ctx));

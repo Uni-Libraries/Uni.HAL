@@ -324,6 +324,13 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
 
     if (ctx && ctx->config.pin_sck && ctx->config.pin_sda && !uni_hal_i2c_is_inited(ctx))
     {
+        // Both IRQs can give a FreeRTOS semaphore. CMSIS otherwise masks excess priority bits.
+        if (ctx->config.irq_enable &&
+            (ctx->config.irq_priority >= (1U << __NVIC_PRIO_BITS) ||
+             ctx->config.irq_priority < (configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS)) ||
+             NVIC_GetPriorityGrouping() > 7U - __NVIC_PRIO_BITS)) {
+            return false;
+        }
         I2C_TypeDef *handle = _uni_hal_i2c_get_handle(ctx->config.instance);
         I2C_HandleTypeDef *handle_hal = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
         i2c_bus_t *bus = get_bus(ctx->config.instance);

@@ -91,6 +91,15 @@ if(UNI_HAL_TEST_ALLOCATOR_QEMU)
         -kernel $<TARGET_FILE:i2c_h743_tasks_qemu>)
     set_tests_properties(i2c_h743_bus_ownership PROPERTIES TIMEOUT 10)
 
+    uni_hal_add_executable(i2c_l496_priority_qemu)
+    target_sources(i2c_l496_priority_qemu PRIVATE ../i2c_transfer/priority_qemu.c ../i2c_timeout/tasks_qemu.c)
+    target_link_options(i2c_l496_priority_qemu PRIVATE
+        "LINKER:--defsym,_estack=0x20020000" "LINKER:--wrap=uni_hal_rcc_clk_set")
+    add_test(NAME i2c_l496_irq_priority COMMAND "${QEMU_SYSTEM_ARM}" -M netduinoplus2
+        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+        -kernel $<TARGET_FILE:i2c_l496_priority_qemu>)
+    set_tests_properties(i2c_l496_irq_priority PROPERTIES TIMEOUT 10)
+
     add_subdirectory(../rtt rtt)
 
     uni_hal_add_executable(dma_l4_qemu)
