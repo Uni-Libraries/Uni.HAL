@@ -21,6 +21,7 @@
 #endif
 
 // Uni.HAL
+#include "core/uni_hal_core.h"
 #include "rtc/uni_hal_rtc_calendar.h"
 #include "systick/uni_hal_systick.h"
 
@@ -50,12 +51,13 @@ enum {
 //
 
 static void _uni_hal_rtc_bus_clock_enable(void) {
+    uint32_t const mask = uni_hal_core_irq_pause();
 #if defined(UNI_HAL_TARGET_MCU_STM32L496)
-    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
-    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_RTCAPB);
+    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR | LL_APB1_GRP1_PERIPH_RTCAPB);
 #else
     LL_APB4_GRP1_EnableClock(LL_APB4_GRP1_PERIPH_RTCAPB);
 #endif
+    uni_hal_core_irq_resume(mask);
 }
 
 

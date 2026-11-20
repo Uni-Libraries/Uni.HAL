@@ -814,6 +814,8 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) {
     if (target == UNI_HAL_CORE_PERIPH_RTC) {
         result = set_rtc_clock_enabled(state);
     } else {
+        // The LL bus helpers update enable bits by read-modify-write.
+        uint32_t const mask = uni_hal_core_irq_pause();
         switch (target) {
             case UNI_HAL_CORE_PERIPH_ADC_1:
             case UNI_HAL_CORE_PERIPH_ADC_2:
@@ -1088,9 +1090,10 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) {
             default:
                 break;
         }
+        uni_hal_core_irq_resume(mask);
     }
 
-    return  result;
+    return result;
 }
 
 uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {

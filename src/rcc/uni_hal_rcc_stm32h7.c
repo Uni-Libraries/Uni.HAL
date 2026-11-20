@@ -1057,7 +1057,9 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) { //-V2008
         return set_rtc_clock_enabled(state);
     }
 
-    bool result = false;
+    // Keep the LL read-modify-write and the gate readback together.
+    uint32_t const mask = uni_hal_core_irq_pause();
+    bool result = true;
 
     // ETH can be partially clocked. A false readback still leaves gates to clear.
     if (target == UNI_HAL_CORE_PERIPH_ETH_1) {
@@ -1066,11 +1068,7 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) { //-V2008
         } else {
             LL_AHB1_GRP1_DisableClock(eth1_clock_mask);
         }
-        return true;
-    }
-
-    result = true;
-    if (state != uni_hal_rcc_clk_get(target)) {
+    } else if (state != uni_hal_rcc_clk_get(target)) {
         result = false;
         switch (target) {
             case UNI_HAL_CORE_PERIPH_ADC_1:
@@ -1325,6 +1323,7 @@ bool uni_hal_rcc_clk_set(uni_hal_core_periph_e target, bool state) { //-V2008
         }
     }
 
+    uni_hal_core_irq_resume(mask);
     return result;
 }
 
