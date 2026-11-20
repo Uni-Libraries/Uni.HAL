@@ -1,9 +1,11 @@
 #include "model.h"
 
-TIM_TypeDef model_tim1;
+TIM_TypeDef model_tim1, model_tim2;
 static TIM_TypeDef model_tim16;
 #undef TIM1
 #define TIM1 (&model_tim1)
+#undef TIM2
+#define TIM2 (&model_tim2)
 #undef TIM16
 #define TIM16 (&model_tim16)
 
@@ -21,7 +23,7 @@ static uint32_t sample_counter(const TIM_TypeDef *timer) {
 unsigned clock_calls;
 static bool model_clock(uni_hal_core_periph_e periph, bool enabled) {
     ++clock_calls;
-    return (periph == UNI_HAL_CORE_PERIPH_TIM_1 || periph == UNI_HAL_CORE_PERIPH_TIM_16) && enabled;
+    return (periph == UNI_HAL_CORE_PERIPH_TIM_1 || periph == UNI_HAL_CORE_PERIPH_TIM_2 || periph == UNI_HAL_CORE_PERIPH_TIM_16) && enabled;
 }
 
 #define LL_TIM_GetCounter sample_counter

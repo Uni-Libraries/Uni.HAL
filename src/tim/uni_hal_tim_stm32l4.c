@@ -418,6 +418,19 @@ static bool _uni_hal_tim_get_capture_delta(TIM_TypeDef *handle, const _uni_hal_t
 }
 
 
+static bool _uni_hal_tim_output_available(TIM_TypeDef *timer, uni_hal_tim_channel_num_e channel)
+{
+    switch (channel) {
+    case UNI_HAL_TIM_CHANNEL_1: return IS_TIM_CC1_INSTANCE(timer);
+    case UNI_HAL_TIM_CHANNEL_2: return IS_TIM_CC2_INSTANCE(timer);
+    case UNI_HAL_TIM_CHANNEL_3: return IS_TIM_CC3_INSTANCE(timer);
+    case UNI_HAL_TIM_CHANNEL_4: return IS_TIM_CC4_INSTANCE(timer);
+    case UNI_HAL_TIM_CHANNEL_5: return IS_TIM_CC5_INSTANCE(timer);
+    case UNI_HAL_TIM_CHANNEL_6: return IS_TIM_CC6_INSTANCE(timer);
+    default: return false;
+    }
+}
+
 static bool _uni_hal_tim_channels_valid(const uni_hal_tim_config_t *config)
 {
     if (config->channel_count > 0U && config->channel == NULL) {
@@ -426,6 +439,10 @@ static bool _uni_hal_tim_channels_valid(const uni_hal_tim_config_t *config)
     for (size_t i = 0; i < config->channel_count; ++i) {
         const uni_hal_tim_channel_t *channel = config->channel[i];
         if (channel == NULL) {
+            return false;
+        }
+        if (channel->type == UNI_HAL_TIM_TYPE_OUTPUTCOMPARE &&
+            !_uni_hal_tim_output_available(_uni_hal_tim_get_handle(config->instance), channel->channel_number)) {
             return false;
         }
         // Only TIM1_CC_IRQHandler dispatches captured edges.
@@ -797,6 +814,7 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
             memset(ctx->status.chan, 0, sizeof(ctx->status.chan));
             LL_TIM_ClearFlag_UPDATE(handle);
 
+            uint32_t output_channels = 0U;
             bool has_inputcapture = false;
             bool has_update_callback = _uni_hal_tim_update_callback_registered(ctx);
             if (ctx->config.channel != NULL)
@@ -812,7 +830,11 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
                         _uni_hal_tim_ll_overcapture_clear(handle, chan_num);
                         _uni_hal_tim_ll_capture_it_set(handle, chan_num, true);
 
-                        LL_TIM_CC_EnableChannel(handle,  _uni_hal_tim_get_channel(chan_num));
+                        LL_TIM_CC_EnableChannel(handle, _uni_hal_tim_get_channel(chan_num));
+                    }
+                    else if (ctx->config.channel[i] != nullptr && ctx->config.channel[i]->type == UNI_HAL_TIM_TYPE_OUTPUTCOMPARE)
+                    {
+                        output_channels |= _uni_hal_tim_get_channel(ctx->config.channel[i]->channel_number);
                     }
                 }
             }
@@ -840,6 +862,12 @@ bool uni_hal_tim_start(uni_hal_tim_context_t *ctx) {
 
             if (result)
             {
+                if (output_channels != 0U) {
+                    LL_TIM_CC_EnableChannel(handle, output_channels);
+                    if (IS_TIM_BREAK_INSTANCE(handle)) {
+                        LL_TIM_EnableAllOutputs(handle);
+                    }
+                }
                 LL_TIM_EnableCounter(handle);
             }
         }
@@ -895,6 +923,7 @@ bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
             LL_TIM_DisableCounter(handle);
             LL_TIM_SetCounter(handle, 0U);
 
+            uint32_t output_channels = 0U;
             if (ctx->config.channel != NULL)
             {
                 for (size_t i = 0; i < ctx->config.channel_count; i++)
@@ -908,9 +937,19 @@ bool uni_hal_tim_stop(uni_hal_tim_context_t *ctx) {
                         _uni_hal_tim_ll_capture_clear(handle, chan_num);
                         _uni_hal_tim_ll_overcapture_clear(handle, chan_num);
                     }
+                    else if (ctx->config.channel[i] != nullptr && ctx->config.channel[i]->type == UNI_HAL_TIM_TYPE_OUTPUTCOMPARE)
+                    {
+                        output_channels |= _uni_hal_tim_get_channel(ctx->config.channel[i]->channel_number);
+                    }
                 }
             }
 
+            if (output_channels != 0U) {
+                LL_TIM_CC_DisableChannel(handle, output_channels);
+                if (IS_TIM_BREAK_INSTANCE(handle)) {
+                    LL_TIM_DisableAllOutputs(handle);
+                }
+            }
             LL_TIM_DisableIT_UPDATE(handle);
             LL_TIM_ClearFlag_UPDATE(handle);
             ctx->status.overflow_count = 0U;

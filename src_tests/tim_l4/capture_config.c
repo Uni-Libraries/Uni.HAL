@@ -30,8 +30,32 @@ static unsigned check(void) {
     ctx.config.channel = channels;
     channels[1] = &input;
     input.channel_number = UNI_HAL_TIM_CHANNEL_4;
-    CHECK(uni_hal_tim_init(&ctx) && uni_hal_tim_start(&ctx) && clock_calls == 2U);
+    CHECK(uni_hal_tim_init(&ctx) && clock_calls == 2U);
+    CHECK(!LL_TIM_CC_IsEnabledChannel(&model_tim1, LL_TIM_CHANNEL_CH2));
+    CHECK(uni_hal_tim_start(&ctx));
+    CHECK(LL_TIM_CC_IsEnabledChannel(&model_tim1, LL_TIM_CHANNEL_CH2));
+    CHECK(LL_TIM_IsEnabledAllOutputs(&model_tim1));
     CHECK(LL_TIM_IsEnabledIT_CC4(&model_tim1) && !LL_TIM_IsEnabledIT_CC2(&model_tim1));
     CHECK(uni_hal_tim_stop(&ctx));
+    CHECK(!LL_TIM_IsEnabledAllOutputs(&model_tim1));
+    CHECK(!LL_TIM_CC_IsEnabledChannel(&model_tim1, LL_TIM_CHANNEL_CH2));
+    CHECK(uni_hal_tim_start(&ctx));
+    CHECK(LL_TIM_CC_IsEnabledChannel(&model_tim1, LL_TIM_CHANNEL_CH2));
+    CHECK(LL_TIM_IsEnabledAllOutputs(&model_tim1));
+    CHECK(uni_hal_tim_stop(&ctx));
+
+    // TIM2 has no break/dead-time register. Its CH1 works without setting MOE.
+    output.channel_number = UNI_HAL_TIM_CHANNEL_1;
+    ctx.config.instance = UNI_HAL_CORE_PERIPH_TIM_2;
+    ctx.config.channel_count = 1U;
+    CHECK(uni_hal_tim_init(&ctx) && uni_hal_tim_start(&ctx));
+    CHECK(LL_TIM_CC_IsEnabledChannel(&model_tim2, LL_TIM_CHANNEL_CH1));
+    CHECK(model_tim2.BDTR == 0U && !LL_TIM_IsEnabledIT_CC1(&model_tim2));
+    CHECK(uni_hal_tim_stop(&ctx) && !LL_TIM_CC_IsEnabledChannel(&model_tim2, LL_TIM_CHANNEL_CH1));
+
+    // TIM16 only exposes CH1.
+    ctx.config.instance = UNI_HAL_CORE_PERIPH_TIM_16;
+    output.channel_number = UNI_HAL_TIM_CHANNEL_2;
+    CHECK(!uni_hal_tim_init(&ctx));
     return 0;
 }
