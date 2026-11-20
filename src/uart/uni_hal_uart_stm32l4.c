@@ -209,49 +209,21 @@ static bool _uni_hal_usart_irq_rx_enable(uni_hal_usart_context_t *ctx, bool val)
     return result;
 }
 
-static bool _uni_hal_usart_irq_tx_enable(uni_hal_usart_context_t *ctx, bool val) {
-    bool result = false;
-
-    void* handle = _uni_hal_uart_handle_get(ctx->instance);
-    if (handle != NULL) {
-        if (handle == LPUART1)
-        {
-            if (val) {
-                LL_LPUART_ClearFlag_TC(handle);
-                LL_LPUART_EnableIT_TXE(handle);
-                LL_LPUART_EnableIT_TC(handle);
-            } else {
-                LL_LPUART_DisableIT_TXE(handle);
-                LL_LPUART_DisableIT_TC(handle);
-                LL_LPUART_ClearFlag_TC(handle);
-            }
-        }
-        else
-        {
-            if (val) {
-                LL_USART_ClearFlag_TC(handle);
-                LL_USART_EnableIT_TXE(handle);
-                LL_USART_EnableIT_TC(handle);
-            } else {
-                LL_USART_DisableIT_TXE(handle);
-                LL_USART_DisableIT_TC(handle);
-                LL_USART_ClearFlag_TC(handle);
-            }
-        }
-        result = true;
-    }
-
-    return result;
-}
-
-
 //
 // IO handlers
 //
 
 static void _uni_hal_usart_tx_trigger(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_io_r), void *ctx_fn_r) {
-    uni_hal_usart_context_t *ctx_fn = (uni_hal_usart_context_t *)ctx_fn_r;
-    _uni_hal_usart_irq_tx_enable(ctx_fn, true);
+    uni_hal_usart_context_t *ctx = ctx_fn_r;
+    USART_TypeDef *uart = _uni_hal_uart_handle_get(ctx->instance);
+    if (uart == nullptr) {
+        return;
+    }
+    uint32_t const mask = uni_hal_core_irq_pause();
+    if (LL_USART_IsEnabledIT_RXNE(uart) && !uni_hal_io_buffer_is_empty(&ctx->io->buf_tx)) {
+        LL_USART_EnableIT_TXE(uart);
+    }
+    uni_hal_core_irq_resume(mask);
 }
 
 
@@ -259,73 +231,7 @@ static void _uni_hal_usart_tx_trigger(void *UNI_COMMON_COMPILER_UNUSED_VAR(ctx_i
 // IRQ handlers
 //
 
-static bool _uni_hal_usart_irq_handler_lpuart(uni_hal_usart_context_t *ctx) {
-    BaseType_t higher_task_woken = 0U;
-
-    void* dev_handle = _uni_hal_uart_handle_get(ctx->instance);
-    uni_hal_io_context_t *ctx_io = ctx->io;
-
-    if (LL_LPUART_IsActiveFlag_ORE(dev_handle)) {
-        ctx_io->stats.rx_overrun++;
-        LL_LPUART_ClearFlag_ORE(dev_handle);
-    }
-
-    if (LL_LPUART_IsEnabledIT_RXNE(dev_handle) && LL_LPUART_IsActiveFlag_RXNE(dev_handle)) {
-        // receive data
-        uint8_t data = LL_LPUART_ReceiveData8(dev_handle);
-
-        // try to tunnel data
-        uni_hal_io_tunnel_transmit_result_t tunnel_result =
-            uni_hal_io_tunnel_transmit(ctx_io->handlers.tunnel_ctx, ctx_io, &data, sizeof(data));
-
-        // send to our ringbuffer in case we failed to tunnel data
-        if (tunnel_result == UNI_HAL_IO_TUNNEL_FAIL || tunnel_result == UNI_HAL_IO_TUNNEL_TRANSPARENT) {
-            if (uni_hal_io_buffer_push_isr(&ctx_io->buf_rx, &data, 1U, &higher_task_woken)) {
-                ctx_io->stats.rx_received++;
-            }
-            else {
-                ctx_io->stats.rx_overrun++;
-            }
-        }
-    }
-
-    if (LL_LPUART_IsEnabledIT_TXE(dev_handle) && LL_LPUART_IsActiveFlag_TXE(dev_handle)) {
-        uint8_t data = 0;
-
-        if (!ctx->in_transmission) {
-            if (ctx_io->handlers.tx_start) {
-                ctx_io->handlers.tx_start(ctx_io, ctx_io->handlers.tx_start_ctx);
-            }
-            ctx->in_transmission = true;
-        }
-
-        if (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
-            LL_LPUART_TransmitData8(dev_handle, data);
-            ctx_io->stats.tx_transmited++;
-        }
-    }
-
-    // transfer complete
-    if (LL_LPUART_IsEnabledIT_TC(dev_handle) && LL_LPUART_IsActiveFlag_TC(dev_handle)) {
-        if (ctx->in_transmission) {
-            _uni_hal_usart_irq_tx_enable(ctx, false);
-            ctx->in_transmission = false;
-
-            if (ctx_io->handlers.tx_end) {
-                ctx_io->handlers.tx_end(ctx_io, ctx_io->handlers.tx_end_ctx);
-            }
-        }
-
-        if (ctx->callback) {
-            if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
-                higher_task_woken = pdTRUE;
-            }
-        }
-    }
-    
-    return higher_task_woken;
-}
-
+// L496 USART and LPUART share the RXNE, TXE and TC register layout and data registers.
 static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
     BaseType_t higher_task_woken = 0U;
 
@@ -356,43 +262,57 @@ static bool _uni_hal_usart_irq_handler(uni_hal_usart_context_t *ctx) {
         }
     }
 
+    uint8_t data;
+    bool have_byte = false, starting = false, finished = false;
+    // Keep the software queue, active frame and interrupt sources consistent with producers
+    // and IRQ masking. Run application callbacks after restoring the interrupt mask.
+    uint32_t const mask = uni_hal_core_irq_pause();
     if (LL_USART_IsEnabledIT_TXE(dev_handle) && LL_USART_IsActiveFlag_TXE(dev_handle)) {
-        uint8_t data = 0;
-
-        if (!ctx->in_transmission) {
-            if (ctx_io->handlers.tx_start) {
-                ctx_io->handlers.tx_start(ctx_io, ctx_io->handlers.tx_start_ctx);
-            }
+        have_byte = uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken) != 0U;
+        if (have_byte) {
+            starting = !ctx->in_transmission;
             ctx->in_transmission = true;
-        }
-
-        if (uni_hal_io_buffer_pop_isr(&ctx_io->buf_tx, &data, 1U, &higher_task_woken)) {
-            LL_USART_TransmitData8(dev_handle, data);
-            ctx_io->stats.tx_transmited++;
+            LL_USART_DisableIT_TC(dev_handle);
+        } else {
+            // TXE stays high while TDR is empty. Only TC can finish the active frame.
+            LL_USART_DisableIT_TXE(dev_handle);
+            if (ctx->in_transmission) {
+                LL_USART_EnableIT_TC(dev_handle);
+            }
         }
     }
-
     if (LL_USART_IsEnabledIT_TC(dev_handle) && LL_USART_IsActiveFlag_TC(dev_handle)) {
-        if (ctx->in_transmission) {
-            _uni_hal_usart_irq_tx_enable(ctx, false);
+        LL_USART_DisableIT_TC(dev_handle);
+        LL_USART_ClearFlag_TC(dev_handle);
+        if (!uni_hal_io_buffer_is_empty(&ctx_io->buf_tx)) {
+            LL_USART_EnableIT_TXE(dev_handle);
+        } else if (ctx->in_transmission) {
             ctx->in_transmission = false;
-
-            if (ctx_io->handlers.tx_end) {
-                ctx_io->handlers.tx_end(ctx_io, ctx_io->handlers.tx_end_ctx);
-            }
+            finished = true;
         }
+    }
+    uni_hal_core_irq_resume(mask);
 
-        if (ctx->callback) {
-            if (ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
-                higher_task_woken = pdTRUE;
-            }
+    if (have_byte) {
+        if (starting && ctx_io->handlers.tx_start) {
+            ctx_io->handlers.tx_start(ctx_io, ctx_io->handlers.tx_start_ctx);
+        }
+        LL_USART_TransmitData8(dev_handle, data);
+        ctx_io->stats.tx_transmited++;
+    }
+    if (finished) {
+        if (ctx_io->handlers.tx_end) {
+            ctx_io->handlers.tx_end(ctx_io, ctx_io->handlers.tx_end_ctx);
+        }
+        if (ctx->callback && ctx->callback(ctx, ctx->callback_cookie, UNI_HAL_USART_CALLBACK_TC)) {
+            higher_task_woken = pdTRUE;
         }
     }
 
     return higher_task_woken;
 }
 
-void LPUART1_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler_lpuart(_uni_hal_lpuart_1_ctx)); }
+void LPUART1_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_uni_hal_lpuart_1_ctx)); }
 
 void USART1_IRQHandler(void) { UNI_HAL_OS_ISR_EXIT(_uni_hal_usart_irq_handler(_uni_hal_usart_1_ctx)); }
 
@@ -480,6 +400,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 }
                 result = _uni_hal_usart_wait_enabled(handle);
                 if (result) {
+                    ctx->in_transmission = false;
                     ctx->io->handlers.tx_trigger = _uni_hal_usart_tx_trigger;
                     ctx->io->handlers.tx_trigger_ctx = ctx;
                     _uni_hal_usart_save_ctx(ctx);
@@ -593,10 +514,21 @@ bool uni_hal_usart_irq_enable(uni_hal_usart_context_t *ctx, bool value) {
         return false;
     }
 
-    // This target uses RXNE for reception and TXE/TC for transmission.
+    USART_TypeDef *uart = _uni_hal_uart_handle_get(ctx->instance);
+    if (uart == nullptr) {
+        return false;
+    }
+    uint32_t const mask = uni_hal_core_irq_pause();
     (void)_uni_hal_usart_irq_rx_enable(ctx, value);
     if (!value) {
-        (void)_uni_hal_usart_irq_tx_enable(ctx, false);
+        LL_USART_DisableIT_TXE(uart);
+        LL_USART_DisableIT_TC(uart);
+    } else if (!uni_hal_io_buffer_is_empty(&ctx->io->buf_tx)) {
+        LL_USART_EnableIT_TXE(uart);
+    } else if (ctx->in_transmission) {
+        // TC may already be latched if the last frame finished while IRQs were masked.
+        LL_USART_EnableIT_TC(uart);
     }
+    uni_hal_core_irq_resume(mask);
     return true;
 }

@@ -183,6 +183,8 @@ bool uni_hal_usart_transmit_busy(const uni_hal_usart_context_t *ctx);
  *
  * Implementation-specific details:
  * - On STM32H7: controls RXNE/RXFNE + IDLE and also disables TXE/TC sources.
+ * - On STM32L4: masks RXNE, TXE and TC. Re-enabling resumes queued output and reports
+ *   completion for a frame that finished while masked.
  * - On other targets: best-effort.
  */
 bool uni_hal_usart_irq_enable(uni_hal_usart_context_t *ctx, bool value);
