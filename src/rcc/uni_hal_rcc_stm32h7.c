@@ -318,23 +318,10 @@ static bool _uni_hal_stm_rcc_pll_reset(void){
         return false;
     }
 
-    LL_RCC_PLL1P_Disable();
-    LL_RCC_PLL1Q_Disable();
-    LL_RCC_PLL1R_Disable();
-    LL_RCC_PLL2P_Disable();
-    LL_RCC_PLL2Q_Disable();
-    LL_RCC_PLL2R_Disable();
-    LL_RCC_PLL3P_Disable();
-    LL_RCC_PLL3Q_Disable();
-    LL_RCC_PLL3R_Disable();
-
-    LL_RCC_PLL1FRACN_Disable();
-    LL_RCC_PLL2FRACN_Disable();
-    LL_RCC_PLL3FRACN_Disable();
-
-    // common
+    // Start with every output and fractional latch disabled. The hardware reset
+    // value of PLLCFGR enables all nine outputs, including unconfigured ones.
+    CLEAR_REG(RCC->PLLCFGR);
     LL_RCC_WriteReg(PLLCKSELR, RCC_PLLCKSELR_DIVM1_5 | RCC_PLLCKSELR_DIVM2_5 | RCC_PLLCKSELR_DIVM3_5);
-    LL_RCC_WriteReg(PLLCFGR, 0x01FF0000U);
 
     // pll 1
     LL_RCC_WriteReg(PLL1DIVR, 0x01010280U);
@@ -403,7 +390,8 @@ static bool _uni_hal_stm_rcc_pll(void) {
     bool result = true;
 
     // PLL1
-    {
+    if (g_uni_hal_rcc_config->pll[0].p != 0U || g_uni_hal_rcc_config->pll[0].q != 0U ||
+        g_uni_hal_rcc_config->pll[0].r != 0U) {
         uint32_t const pll_m = _uni_hal_stm_rcc_pll_get_m(g_uni_hal_rcc_config->pll[0].m, source_hz);
         if (pll_m == 0U) {
             g_uni_hal_rcc_status.pll_inited[0] = false;
@@ -441,6 +429,8 @@ static bool _uni_hal_stm_rcc_pll(void) {
                                                                               g_uni_hal_rcc_config->timeout.pll);
             result = result && g_uni_hal_rcc_status.pll_inited[0];
         }
+    } else {
+        g_uni_hal_rcc_status.pll_inited[0] = false;
     }
 
     // PLL2
@@ -567,7 +557,7 @@ static bool _uni_hal_stm_rcc_sysclk(void) {
     uint32_t clock_source_status;
     uint32_t target_sysclk_hz = 0U;
 
-    if (g_uni_hal_rcc_status.pll_inited[0]) {
+    if (g_uni_hal_rcc_status.pll_inited[0] && LL_RCC_PLL1P_IsEnabled()) {
         LL_PLL_ClocksTypeDef pll1_clocks = { 0 };
         LL_RCC_GetPLL1ClockFreq(&pll1_clocks);
 

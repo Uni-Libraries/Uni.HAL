@@ -44,6 +44,16 @@ static uint32_t model_pll_ready(void) {
     return LL_RCC_PLL1_IsReady();
 }
 
+static uint32_t model_pll2_ready(void) {
+    MODIFY_REG(RCC->CR, RCC_CR_PLL2RDY, (RCC->CR & RCC_CR_PLL2ON) ? RCC_CR_PLL2RDY : 0U);
+    return LL_RCC_PLL2_IsReady();
+}
+
+static uint32_t model_pll3_ready(void) {
+    MODIFY_REG(RCC->CR, RCC_CR_PLL3RDY, (RCC->CR & RCC_CR_PLL3ON) ? RCC_CR_PLL3RDY : 0U);
+    return LL_RCC_PLL3_IsReady();
+}
+
 void model_complete_clock_switch(void) {
     uint32_t const source = RCC->CFGR & RCC_CFGR_SW;
     MODIFY_REG(RCC->CFGR, RCC_CFGR_SWS, source << RCC_CFGR_SWS_Pos);
@@ -89,6 +99,8 @@ static void model_irq_resume(uint32_t mask) {
 #define uni_hal_core_irq_resume model_irq_resume
 #define LL_RCC_HSE_IsReady model_hse_ready
 #define LL_RCC_PLL1_IsReady model_pll_ready
+#define LL_RCC_PLL2_IsReady model_pll2_ready
+#define LL_RCC_PLL3_IsReady model_pll3_ready
 #define LL_RCC_SetSysClkSource model_switch
 #define uni_hal_systick_reclock model_systick_reclock
 #define uni_hal_systick_sleep model_systick_sleep

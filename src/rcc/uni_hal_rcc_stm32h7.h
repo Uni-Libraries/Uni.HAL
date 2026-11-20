@@ -27,17 +27,17 @@ typedef struct {
     uint32_t n;
 
     /**
-     * PLL post-divider (output P)
+     * PLL post-divider (output P), zero disables this output
      */
     uint32_t p;
 
     /**
-     * PLL post-divider (output Q)
+     * PLL post-divider (output Q), zero disables this output
      */
     uint32_t q;
 
     /**
-     * PLL post-divider (output R)
+     * PLL post-divider (output R), zero disables this output
      */
     uint32_t r;
 
