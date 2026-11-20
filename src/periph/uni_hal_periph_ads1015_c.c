@@ -41,17 +41,38 @@ static bool _uni_hal_ads1015_write(uni_hal_ads1015_context_t *ctx, uint8_t reg, 
                                  bytes, sizeof(bytes), timeout);
 }
 
-static uni_hal_ads1015_answer_e _uni_hal_ads1015_ready(uni_hal_ads1015_context_t *ctx, uint32_t timeout) {
-    uint16_t config;
-    if (!_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONFIG, &config, timeout)) {
-        return UNI_HAL_ADS1015_ANSWER_FAILED;
-    }
-    return (config & UNI_HAL_ADS1015_CONFIG_OS) ? UNI_HAL_ADS1015_ANSWER_OK : UNI_HAL_ADS1015_ANSWER_NOTREADY;
-}
-
 static uint32_t _uni_hal_ads1015_remaining_ms(uint32_t start, uint32_t timeout) {
     uint32_t const elapsed = uni_hal_systick_get_ms() - start;
     return elapsed < timeout ? timeout - elapsed : 0U;
+}
+
+static bool _uni_hal_ads1015_single_command(uni_hal_ads1015_context_t *ctx, uint32_t start, uint16_t os) {
+    uint32_t const remaining = _uni_hal_ads1015_remaining_ms(start, ctx->config.timeout);
+    uint16_t const config = _uni_hal_ads1015_config_word(&ctx->config) | os;
+    return remaining && _uni_hal_ads1015_write(ctx, UNI_HAL_ADS1015_REG_CONFIG, config, remaining);
+}
+
+static bool _uni_hal_ads1015_wait_idle(uni_hal_ads1015_context_t *ctx, uint32_t start, bool stop_continuous) {
+    for (;;) {
+        uint16_t status;
+        uint32_t const remaining = _uni_hal_ads1015_remaining_ms(start, ctx->config.timeout);
+        if (!remaining || !_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONFIG, &status, remaining)) {
+            return false;
+        }
+        if (status & UNI_HAL_ADS1015_CONFIG_OS) {
+            return true;
+        }
+        if (stop_continuous && !(status & UNI_HAL_ADS1015_MODE_SINGLE)) {
+            // Finish the active continuous conversion and power down before starting a single shot.
+            if (!_uni_hal_ads1015_single_command(ctx, start, 0U)) {
+                return false;
+            }
+            stop_continuous = false;
+        }
+        if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+            UNI_HAL_OS_YIELD();
+        }
+    }
 }
 
 
@@ -102,26 +123,11 @@ int16_t uni_hal_ads1015_get_raw(uni_hal_ads1015_context_t* ctx)
     uint32_t const timeout = ctx->config.timeout;
     uint32_t const start = uni_hal_systick_get_ms();
     if (ctx->config.mode == UNI_HAL_ADS1015_MODE_SINGLE) {
-        uint16_t const config = _uni_hal_ads1015_config_word(&ctx->config) | UNI_HAL_ADS1015_CONFIG_OS;
-        if (!_uni_hal_ads1015_write(ctx, UNI_HAL_ADS1015_REG_CONFIG, config, timeout)) {
+        // OS=1 is ignored while a previous conversion is running, even if the I2C write succeeds.
+        if (!_uni_hal_ads1015_wait_idle(ctx, start, true) ||
+            !_uni_hal_ads1015_single_command(ctx, start, UNI_HAL_ADS1015_CONFIG_OS) ||
+            !_uni_hal_ads1015_wait_idle(ctx, start, false)) {
             return INT16_MAX;
-        }
-
-        for (;;) {
-            uint32_t const remaining = _uni_hal_ads1015_remaining_ms(start, timeout);
-            if (remaining == 0U) {
-                return INT16_MAX;
-            }
-            uni_hal_ads1015_answer_e const ready = _uni_hal_ads1015_ready(ctx, remaining);
-            if (ready == UNI_HAL_ADS1015_ANSWER_OK) {
-                break;
-            }
-            if (ready == UNI_HAL_ADS1015_ANSWER_FAILED) {
-                return INT16_MAX;
-            }
-            if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
-                UNI_HAL_OS_YIELD();
-            }
         }
     }
 
@@ -177,5 +183,9 @@ uni_hal_ads1015_answer_e uni_hal_ads1015_is_ready(uni_hal_ads1015_context_t* ctx
     if (!uni_hal_ads1015_is_inited(ctx)) {
         return UNI_HAL_ADS1015_ANSWER_FAILED;
     }
-    return _uni_hal_ads1015_ready(ctx, ctx->config.timeout);
+    uint16_t config;
+    if (!_uni_hal_ads1015_read(ctx, UNI_HAL_ADS1015_REG_CONFIG, &config, ctx->config.timeout)) {
+        return UNI_HAL_ADS1015_ANSWER_FAILED;
+    }
+    return (config & UNI_HAL_ADS1015_CONFIG_OS) ? UNI_HAL_ADS1015_ANSWER_OK : UNI_HAL_ADS1015_ANSWER_NOTREADY;
 }
