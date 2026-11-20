@@ -462,28 +462,30 @@ static bool claim_flash(void) {
     return available;
 }
 
-size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *dst)
+size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *src)
 {
-    HAL_StatusTypeDef status;
+    uint32_t flash_word[FLASH_NB_32BITWORD_IN_FLASHWORD];
     size_t bytes_written = 0;
 
-    if (dst == NULL || size == 0 || size % 32 != 0 || addr < FLASH_BASE || addr >= FLASH_END) {
+    if (src == nullptr || size == 0 || size % sizeof(flash_word) != 0 || addr < FLASH_BASE || addr >= FLASH_END) {
         return 0;
     }
 
-    // a flash word is 32 bytes: the address must be aligned and the range must stay inside the flash
-    if (addr % 32 != 0 || size > (FLASH_END - addr) + 1U || !claim_flash()) {
+    if (addr % sizeof(flash_word) != 0 || size > (FLASH_END - addr) + 1U || !claim_flash()) {
         return 0;
     }
 
-    status = HAL_FLASH_Unlock();
-    if (status == HAL_OK) {
-        for (size_t i = 0; i < size; i += 32) {
-            status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_FLASHWORD, addr + i, (uint32_t)&dst[i]);
-            if (status != HAL_OK) {
+    if (HAL_FLASH_Unlock() == HAL_OK) {
+        while (bytes_written < size) {
+            // ST reads uint32_t values. Use byte loads even when Cortex-M unaligned access traps are enabled.
+            const volatile uint8_t *source = src + bytes_written;
+            for (size_t i = 0; i < sizeof(flash_word); ++i) {
+                ((uint8_t *)flash_word)[i] = source[i];
+            }
+            if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_FLASHWORD, addr + bytes_written, (uint32_t)flash_word) != HAL_OK) {
                 break;
             }
-            bytes_written += 32;
+            bytes_written += sizeof(flash_word);
         }
     }
     // Unlock can leave the first bank open when the second bank rejects its key.

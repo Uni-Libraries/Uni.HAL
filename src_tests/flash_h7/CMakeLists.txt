@@ -10,3 +10,4 @@ endfunction()
 
 add_flash_h7_test(flash_h743_init init.c)
 add_flash_h7_test(flash_h743_ownership ownership.c)
+add_flash_h7_test(flash_h743_write write.c)

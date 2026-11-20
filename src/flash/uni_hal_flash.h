@@ -52,9 +52,10 @@ size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst);
 
 /**
  * On STM32H743, call mutation APIs from thread mode with interrupts enabled.
+ * Writes accept byte-aligned source buffers. The Flash address and size must be multiples of 32 bytes.
  * A competing write, erase or bank swap fails immediately (zero bytes or false).
  */
-size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *dst);
+size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *src);
 
 bool uni_hal_flash_erase(size_t addr, size_t size);
 
