@@ -39,6 +39,7 @@ typedef enum {
 //
 
 /** Initialize the STM32H743 sector-erase IRQ. Repeated calls are safe.
+ * Set an NVIC priority grouping compatible with FreeRTOS before calling this function.
  * Before FreeRTOS starts, initialization and erase polling use no kernel objects.
  * Task-mode erases allocate their completion semaphore on first use if necessary.
  */

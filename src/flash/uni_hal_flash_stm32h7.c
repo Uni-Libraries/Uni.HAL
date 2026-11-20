@@ -21,6 +21,7 @@
 #include "dwt/uni_hal_dwt.h"
 #include "flash/uni_hal_flash.h"
 #include "os/uni_hal_os.h"
+#include "os/uni_hal_os_irq_stm32.h"
 #include "systick/uni_hal_systick.h"
 
 
@@ -43,6 +44,7 @@ static flash_erase_state_t irq_result;
 
 
 enum {
+    UNI_HAL_FLASH_IRQ_PRIORITY = 5U,
     UNI_HAL_FLASH_LATENCY_TIMEOUT_MS = 100U,
     // same budget as FLASH_TIMEOUT_VALUE of the ST HAL blocking erase
     UNI_HAL_FLASH_ERASE_TIMEOUT_MS = 50000U,
@@ -392,6 +394,10 @@ static bool _uni_hal_flash_apply_latency(uint32_t latency, uint32_t wrhighfreq) 
 //
 
 static bool prepare_flash(bool need_event) {
+    uint32_t const priority = uni_hal_os_irq_priority_for_kernel(UNI_HAL_FLASH_IRQ_PRIORITY);
+    if (!uni_hal_os_irq_priority_valid(priority)) {
+        return false;
+    }
     if (flash_initialized && (!need_event || xFlashDoneSem != nullptr)) {
         return true;
     }
@@ -410,7 +416,7 @@ static bool prepare_flash(bool need_event) {
         candidate = nullptr;
     }
     if (!flash_initialized) {
-        HAL_NVIC_SetPriority(FLASH_IRQn, 5, 0);
+        HAL_NVIC_SetPriority(FLASH_IRQn, priority, 0U);
         HAL_NVIC_EnableIRQ(FLASH_IRQn);
         flash_initialized = true;
     }

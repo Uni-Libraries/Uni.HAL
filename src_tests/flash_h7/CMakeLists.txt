@@ -9,6 +9,8 @@ function(add_flash_h7_test name source)
 endfunction()
 
 add_flash_h7_test(flash_h743_init init.c)
+add_flash_h7_test(flash_h743_irq_priority init.c)
+target_compile_definitions(flash_h743_irq_priority_qemu PRIVATE TEST_STRICT_IRQ_CEILING)
 add_flash_h7_test(flash_h743_ownership ownership.c)
 add_flash_h7_test(flash_h743_write write.c)
 add_flash_h7_test(flash_h743_axi_latency latency.c)
