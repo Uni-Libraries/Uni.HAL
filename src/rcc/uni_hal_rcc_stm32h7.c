@@ -27,6 +27,7 @@
 #include "rcc/uni_hal_rcc.h"
 #include "rcc/uni_hal_rcc_stm32h7.h"
 #include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32.h"
 
 
 
@@ -64,7 +65,11 @@ typedef struct {
 
 static volatile uni_hal_rcc_stm32h7_diag_t g_uni_hal_rcc_diag_boot = { 0 };
 static volatile uint32_t g_uni_hal_rcc_reset_flags_shadow = 0U;
-static volatile bool g_uni_hal_rcc_reconfig_in_progress = false;
+static volatile bool g_uni_hal_rcc_reconfig_in_progress;
+static volatile bool css_recovery_active;
+static volatile uint32_t css_event_count;
+// Maximum SYSCLK prepared by init at the programmed bus prescalers and Flash latency.
+static volatile uint32_t prepared_sysclk;
 
 
 typedef enum {
@@ -83,7 +88,7 @@ static volatile uni_hal_rcc_boot_stage_e g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_
 
 
 enum {
-    UNI_HAL_RCC_NMI_WAIT_ITERATIONS = 500000U,
+    UNI_HAL_RCC_NMI_WAIT_ITERATIONS = 4096U,
 };
 
 
@@ -163,24 +168,27 @@ static bool _uni_hal_stm_rcc_wait_timeout_expired(const uni_hal_rcc_wait_timeout
 }
 
 
-static bool _uni_hal_stm_rcc_wait_ready(uint32_t (*get_state)(void), bool expected_state, uint32_t timeout_ms) {
-    if (get_state == nullptr) {
-        return false;
-    }
-
-    if (((get_state() != 0U) == expected_state)) {
+static bool _uni_hal_stm_rcc_wait_ready(uint32_t (*get_state)(void), uint32_t expected, uint32_t timeout_ms) {
+    if (get_state() == expected) {
         return true;
+    }
+    if (css_recovery_active) {
+        // Neither the FreeRTOS tick nor an optional DWT counter is a clock source for NMI.
+        for (uint32_t i = 0; timeout_ms && i < UNI_HAL_RCC_NMI_WAIT_ITERATIONS; ++i) {
+            if (get_state() == expected) {
+                return true;
+            }
+        }
+        return false;
     }
 
     uni_hal_rcc_wait_timeout_t timeout_ctx = { 0 };
     _uni_hal_stm_rcc_wait_timeout_begin(&timeout_ctx, timeout_ms);
-
-    while (((get_state() != 0U) != expected_state)) {
-        if (_uni_hal_stm_rcc_wait_timeout_expired(&timeout_ctx)) {
+    while (get_state() != expected) {
+        if (g_uni_hal_rcc_status.css_recovery_pending || _uni_hal_stm_rcc_wait_timeout_expired(&timeout_ctx)) {
             return false;
         }
     }
-
     return true;
 }
 
@@ -202,27 +210,9 @@ static uint32_t _uni_hal_stm_rcc_get_pll_input_range(uint32_t input_hz)
 }
 
 
-static bool _uni_hal_stm_rcc_wait_sysclk_status(uint32_t status, uint32_t timeout_ms) {
-    if (LL_RCC_GetSysClkSource() == status) {
-        return true;
-    }
-
-    uni_hal_rcc_wait_timeout_t timeout_ctx = { 0 };
-    _uni_hal_stm_rcc_wait_timeout_begin(&timeout_ctx, timeout_ms);
-
-    while (LL_RCC_GetSysClkSource() != status) {
-        if (_uni_hal_stm_rcc_wait_timeout_expired(&timeout_ctx)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-
 static bool _uni_hal_stm_rcc_switch_sysclk(uint32_t source, uint32_t status, uint32_t timeout_ms) {
     LL_RCC_SetSysClkSource(source);
-    return _uni_hal_stm_rcc_wait_sysclk_status(status, timeout_ms);
+    return _uni_hal_stm_rcc_wait_ready(LL_RCC_GetSysClkSource, status, timeout_ms);
 }
 
 /**
@@ -251,7 +241,6 @@ static bool _uni_hal_stm_rcc_hse(void) {
         if (g_uni_hal_rcc_config->hse_css) {
             LL_RCC_ClearFlag_HSECSS();
             LL_RCC_HSE_EnableCSS();
-            LL_RCC_ClearFlag_HSECSS();
         }
     }
     else {
@@ -447,7 +436,7 @@ static bool _uni_hal_stm_rcc_pll(void) {
     }
     else if (g_uni_hal_rcc_status.hsi_inited) {
         clock_source = LL_RCC_PLLSOURCE_HSI;
-        source_hz = HSI_VALUE;
+        source_hz = HSI_VALUE >> (LL_RCC_HSI_GetDivider() >> RCC_CR_HSIDIV_Pos);
     }
     else {
         return false;
@@ -669,6 +658,7 @@ static bool _uni_hal_stm_rcc_sysclk(void) {
         return false;
     }
 
+    prepared_sysclk = 0U;
     if (!uni_hal_flash_configure_latency_auto(target_axi_hz)) {
         g_uni_hal_rcc_status.sys_inited = false;
         return false;
@@ -681,6 +671,8 @@ static bool _uni_hal_stm_rcc_sysclk(void) {
     LL_RCC_SetAPB2Prescaler(apb2_prescaler);
     LL_RCC_SetAPB3Prescaler(apb3_prescaler);
     LL_RCC_SetAPB4Prescaler(apb4_prescaler);
+
+    prepared_sysclk = target_sysclk_hz;
 
     // Reconfigure sysclk
     if (!_uni_hal_stm_rcc_switch_sysclk(clock_source, clock_source_status, g_uni_hal_rcc_config->timeout.pll)) {
@@ -698,20 +690,74 @@ static bool _uni_hal_stm_rcc_sysclk(void) {
 
 
 
+static bool _uni_hal_rcc_css_dividers_prepared(void) {
+    return LL_RCC_GetSysPrescaler() == LL_RCC_SYSCLK_DIV_1 &&
+           LL_RCC_GetAHBPrescaler() == LL_RCC_AHB_DIV_2 &&
+           LL_RCC_GetAPB1Prescaler() == LL_RCC_APB1_DIV_2 &&
+           LL_RCC_GetAPB2Prescaler() == LL_RCC_APB2_DIV_2 &&
+           LL_RCC_GetAPB3Prescaler() == LL_RCC_APB3_DIV_2 &&
+           LL_RCC_GetAPB4Prescaler() == LL_RCC_APB4_DIV_2;
+}
+
+// CSS has already switched an HSE-based SYSCLK to HSI. Keep the current Flash timing
+// and bus dividers; the PLL can resume only at the frequency prepared by startup.
+static void _uni_hal_rcc_recover_css(void) {
+    uint32_t const old_core_hz = SystemCoreClock;
+    uint32_t const timeout = g_uni_hal_rcc_config->timeout.pll;
+    css_recovery_active = true;
+    g_uni_hal_rcc_status.inited = false;
+    g_uni_hal_rcc_status.hse_inited = false;
+    g_uni_hal_rcc_status.sys_inited = false;
+    g_uni_hal_rcc_status.pll_inited[0] = false;
+    g_uni_hal_rcc_status.pll_inited[1] = false;
+    g_uni_hal_rcc_status.pll_inited[2] = false;
+    g_uni_hal_rcc_status.csi_inited = LL_RCC_CSI_IsReady();
+    LL_RCC_HSI_Enable();
+    g_uni_hal_rcc_status.hsi_inited = _uni_hal_stm_rcc_wait_ready(LL_RCC_HSI_IsReady, 1U, g_uni_hal_rcc_config->timeout.hsi);
+    if (g_uni_hal_rcc_status.hsi_inited &&
+        _uni_hal_stm_rcc_switch_sysclk(LL_RCC_SYS_CLKSOURCE_HSI, LL_RCC_SYS_CLKSOURCE_STATUS_HSI, timeout)) {
+        if (prepared_sysclk != 0U && _uni_hal_rcc_css_dividers_prepared() && _uni_hal_stm_rcc_pll()) {
+            LL_PLL_ClocksTypeDef pll;
+            LL_RCC_GetPLL1ClockFreq(&pll);
+            if (pll.PLL_P_Frequency == prepared_sysclk) {
+                g_uni_hal_rcc_status.inited = _uni_hal_stm_rcc_switch_sysclk(
+                    LL_RCC_SYS_CLKSOURCE_PLL1, LL_RCC_SYS_CLKSOURCE_STATUS_PLL1, timeout);
+            }
+        }
+    }
+    if (!g_uni_hal_rcc_status.inited) {
+        // Cancel a late PLL switch. Report fallback only after SWS confirms HSI.
+        if (g_uni_hal_rcc_status.hsi_inited) {
+            g_uni_hal_rcc_status.sys_inited = _uni_hal_stm_rcc_switch_sysclk(
+                LL_RCC_SYS_CLKSOURCE_HSI, LL_RCC_SYS_CLKSOURCE_STATUS_HSI, timeout);
+        } else {
+            LL_RCC_SetSysClkSource(LL_RCC_GetSysClkSource() >> RCC_CFGR_SWS_Pos);
+        }
+    } else {
+        g_uni_hal_rcc_status.sys_inited = true;
+    }
+    SystemCoreClockUpdate();
+    uni_hal_systick_reclock(old_core_hz, SystemCoreClock);
+    css_recovery_active = false;
+}
+
 bool uni_hal_rcc_init(void) {
     bool result = false;
 
-    if ((g_uni_hal_rcc_config == nullptr) || g_uni_hal_rcc_status.inited) {
-        return g_uni_hal_rcc_status.inited;
-    }
-
-    if (g_uni_hal_rcc_reconfig_in_progress) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    if (g_uni_hal_rcc_config == nullptr || g_uni_hal_rcc_reconfig_in_progress) {
+        uni_hal_core_irq_resume(mask);
         return false;
     }
 
     g_uni_hal_rcc_reconfig_in_progress = true;
+    uni_hal_core_irq_resume(mask);
 
-    if (g_uni_hal_rcc_config != nullptr && !g_uni_hal_rcc_status.inited) {
+    if (!g_uni_hal_rcc_status.inited && !g_uni_hal_rcc_status.css_recovery_pending) {
+        g_uni_hal_rcc_status.sys_inited = false;
+        g_uni_hal_rcc_status.hse_inited = false;
+        g_uni_hal_rcc_status.csi_inited = false;
+        g_uni_hal_rcc_status.lse_inited = false;
         // Keep the reason for this boot and clear the flags: they are sticky, and left alone
         // the next boot would show its own reset on top of this one.
         g_uni_hal_rcc_reset_flags_shadow = RCC->RSR;
@@ -727,8 +773,7 @@ bool uni_hal_rcc_init(void) {
             g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_NONE;
             _uni_hal_stm_rcc_diag_capture(&g_uni_hal_rcc_diag_boot);
             g_uni_hal_rcc_status.inited = false;
-            g_uni_hal_rcc_reconfig_in_progress = false;
-            return g_uni_hal_rcc_status.inited;
+            goto finish;
         }
 
         SystemCoreClockUpdate();
@@ -758,24 +803,33 @@ bool uni_hal_rcc_init(void) {
         bool pll_ok = _uni_hal_stm_rcc_pll();
 
         g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_SYSCLK;
-        if (pll_ok) {
+        if (pll_ok && !g_uni_hal_rcc_status.css_recovery_pending) {
             result = _uni_hal_stm_rcc_sysclk() && result;
         }
-
-        /*
-        if (!result || !pll_ok || !g_uni_hal_rcc_status.sys_inited) {
-            result = _uni_hal_stm_rcc_fallback_to_safe_clk(g_uni_hal_rcc_config->timeout.hsi);
-        }*/
 
         uni_hal_systick_init();
         _uni_hal_stm_rcc_diag_capture(&g_uni_hal_rcc_diag_boot);
         g_uni_hal_rcc_boot_stage = UNI_HAL_RCC_BOOT_STAGE_NONE;
 
-        g_uni_hal_rcc_status.inited = result && g_uni_hal_rcc_status.sys_inited;
+        g_uni_hal_rcc_status.inited = result && pll_ok && g_uni_hal_rcc_status.sys_inited;
     }
 
-    g_uni_hal_rcc_reconfig_in_progress = false;
-    return g_uni_hal_rcc_status.inited;
+finish:
+    for (;;) {
+        if (g_uni_hal_rcc_status.css_recovery_pending) {
+            g_uni_hal_rcc_status.css_recovery_pending = false;
+            _uni_hal_rcc_recover_css();
+        }
+        // An NMI just before release belongs to this init; one just after owns its recovery.
+        uint32_t const release_mask = uni_hal_core_irq_pause();
+        g_uni_hal_rcc_reconfig_in_progress = false;
+        if (!g_uni_hal_rcc_status.css_recovery_pending) {
+            uni_hal_core_irq_resume(release_mask);
+            return g_uni_hal_rcc_status.inited;
+        }
+        g_uni_hal_rcc_reconfig_in_progress = true;
+        uni_hal_core_irq_resume(release_mask);
+    }
 }
 
 
@@ -1706,8 +1760,16 @@ uint32_t uni_hal_rcc_stm32h7_reset_flags_get(void) {
     return g_uni_hal_rcc_reset_flags_shadow;
 }
 
-uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get() {
-    return g_uni_hal_rcc_status;
+uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get(void) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    uni_hal_rcc_stm32h7_status_t status;
+    uint32_t event_count;
+    do {
+        event_count = css_event_count;
+        status = g_uni_hal_rcc_status;
+    } while (event_count != css_event_count); // NMI interrupted the multiword snapshot.
+    uni_hal_core_irq_resume(mask);
+    return status;
 }
 
 
@@ -1835,16 +1897,19 @@ void NMI_Handler(void) {
         LL_RCC_ClearFlag_HSECSS();
 
         g_uni_hal_rcc_status.css_fault = true;
-        g_uni_hal_rcc_status.hse_inited = false;
-        g_uni_hal_rcc_status.pll_inited[0] = false;
-        g_uni_hal_rcc_status.pll_inited[1] = false;
-        g_uni_hal_rcc_status.pll_inited[2] = false;
-        g_uni_hal_rcc_status.sys_inited = false;
+        if (g_uni_hal_rcc_reconfig_in_progress) {
+            g_uni_hal_rcc_status.css_recovery_pending = true;
+            g_uni_hal_rcc_status.inited = false;
+            g_uni_hal_rcc_status.hse_inited = false;
+            g_uni_hal_rcc_status.pll_inited[0] = false;
+            g_uni_hal_rcc_status.pll_inited[1] = false;
+            g_uni_hal_rcc_status.pll_inited[2] = false;
+            g_uni_hal_rcc_status.sys_inited = false;
+        } else if (g_uni_hal_rcc_config != nullptr) {
+            _uni_hal_rcc_recover_css();
+        }
 
-        //TODO: NEEDED? LL_RCC_HSE_Disable();
-        _uni_hal_stm_rcc_pll();
-        _uni_hal_stm_rcc_sysclk();
-
+        ++css_event_count;
         uni_hal_rcc_css_callback();
     }
 }

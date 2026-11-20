@@ -107,6 +107,7 @@ typedef struct {
  * STM RCC interface status context
  */
 typedef struct {
+    /** True when the configured PLLs and nominal system clock are available. */
     bool inited;
 
     /**
@@ -145,7 +146,7 @@ typedef struct {
     bool pll_inited[3];
 
     /**
-     * SYS clock initialization was successful
+     * SYSCLK has been confirmed. After CSS this can also indicate direct HSI fallback.
      */
     bool sys_inited;
 
@@ -153,6 +154,9 @@ typedef struct {
      * HSE clock security system fault happened
      */
     bool css_fault;
+
+    /** During startup, the interrupted init completes recovery after the NMI returns. */
+    bool css_recovery_pending;
 
 } uni_hal_rcc_stm32h7_status_t;
 
@@ -165,7 +169,7 @@ typedef struct {
 /** Copy the configuration for startup and clock recovery. Returns false during clock initialization. */
 bool uni_hal_rcc_stm32h7_config_set(const uni_hal_rcc_stm32h7_config_t *config);
 
-uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get();
+uni_hal_rcc_stm32h7_status_t uni_hal_rcc_stm32h7_status_get(void);
 
 /**
  * Get the reason for the last reset

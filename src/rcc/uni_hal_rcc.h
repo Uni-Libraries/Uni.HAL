@@ -45,7 +45,7 @@ uint8_t uni_hal_rcc_get_status_reg(void);
 bool uni_hal_rcc_get_status_reg_flag(uint8_t flag);
 
 /**
- * Called from NMI on an HSE clock security fault. On L496, inspect the RCC status for the
+ * Called from NMI on an HSE clock security fault. On STM32L496 and STM32H743, inspect RCC status for the
  * recovery result. A fault during clock initialization is recovered by the interrupted init.
  * The default implementation does nothing. An application defines its own to record the event
  * or to re-initialise what depends on exact clocks. It runs in NMI context: keep it short and

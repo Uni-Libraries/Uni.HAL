@@ -9,3 +9,5 @@ function(add_rcc_h7_test name source)
 endfunction()
 
 add_rcc_h7_test(rcc_h743_config_ownership ownership.c)
+add_rcc_h7_test(rcc_h743_css_recovery recovery.c)
+add_rcc_h7_test(rcc_h743_css_stalled_clocks stalled.c)

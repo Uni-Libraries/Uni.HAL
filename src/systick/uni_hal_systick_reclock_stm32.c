@@ -1,10 +1,14 @@
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#include <stm32h7xx.h>
+#else
 #include <stm32l4xx.h>
+#endif
 #include <FreeRTOS.h>
 #include <task.h>
 
 #include "systick/uni_hal_systick_stm32.h"
 
-#ifdef UNI_HAL_L4_TICKLESS_SYSTICK
+#ifdef UNI_HAL_STM32_TICKLESS_SYSTICK
 static volatile bool port_sleep_active;
 static volatile bool port_reclock_needed;
 
@@ -20,7 +24,7 @@ static void refresh_port_timer(void) {
     }
 }
 
-void uni_hal_systick_l4_sleep(uint32_t ticks) {
+void uni_hal_systick_sleep(uint32_t ticks) {
     uint32_t const primask = __get_PRIMASK();
     __disable_irq();
     port_sleep_active = true;
@@ -35,11 +39,11 @@ void uni_hal_systick_l4_sleep(uint32_t ticks) {
 }
 #endif
 
-void uni_hal_systick_l4_reclock(uint32_t old_hclk, uint32_t new_hclk) {
-    if (old_hclk == new_hclk || old_hclk == 0U) {
+void uni_hal_systick_reclock(uint32_t old_core_hz, uint32_t new_core_hz) {
+    if (old_core_hz == new_core_hz || old_core_hz == 0U) {
         return;
     }
-#ifdef UNI_HAL_L4_TICKLESS_SYSTICK
+#ifdef UNI_HAL_STM32_TICKLESS_SYSTICK
     if (uni_hal_systick_uses_rtos_period) {
         port_reclock_needed = true;
         if (port_sleep_active) {
@@ -56,8 +60,8 @@ void uni_hal_systick_l4_reclock(uint32_t old_hclk, uint32_t new_hclk) {
     if (old_reload == 0U) {
         return;
     }
-    uint64_t scaled = (uint64_t)(old_reload + 1U) * new_hclk;
-    uint64_t period = (scaled + old_hclk / 2U) / old_hclk;
+    uint64_t scaled = (uint64_t)(old_reload + 1U) * new_core_hz;
+    uint64_t period = (scaled + old_core_hz / 2U) / old_core_hz;
     if (period > SysTick_LOAD_RELOAD_Msk + 1U) {
         period = SysTick_LOAD_RELOAD_Msk + 1U;
     }

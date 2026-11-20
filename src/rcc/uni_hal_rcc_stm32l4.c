@@ -360,7 +360,7 @@ static bool _uni_hal_stm_rcc_pll(bool recovery) {
 static void _uni_hal_rcc_update_timebase(void) {
     uint32_t const old_hclk = SystemCoreClock;
     SystemCoreClockUpdate();
-    uni_hal_systick_l4_reclock(old_hclk, SystemCoreClock);
+    uni_hal_systick_reclock(old_hclk, SystemCoreClock);
 }
 
 static bool _uni_hal_stm_rcc_sysclk(bool recovery) {

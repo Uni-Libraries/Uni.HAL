@@ -258,13 +258,13 @@ if(UNI_HAL_RTOS_CONFIG_EXTRA)
     )
 endif()
 
-if(UNI_HAL_TARGET_MCU STREQUAL "STM32L496")
+if(UNI_HAL_TARGET_MCU MATCHES "^STM32")
     # CSS can change HCLK in the middle of the stock port's tickless sleep.
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "#if defined(configUSE_TICKLESS_IDLE) && configUSE_TICKLESS_IDLE == 1 && !defined(portSUPPRESS_TICKS_AND_SLEEP)\n"
-        "#define UNI_HAL_L4_TICKLESS_SYSTICK 1\n"
-        "void uni_hal_systick_l4_sleep(uint32_t ticks);\n"
-        "#define portSUPPRESS_TICKS_AND_SLEEP(ticks) uni_hal_systick_l4_sleep(ticks)\n"
+        "#define UNI_HAL_STM32_TICKLESS_SYSTICK 1\n"
+        "void uni_hal_systick_sleep(uint32_t ticks);\n"
+        "#define portSUPPRESS_TICKS_AND_SLEEP(ticks) uni_hal_systick_sleep(ticks)\n"
         "#endif\n"
     )
 endif()

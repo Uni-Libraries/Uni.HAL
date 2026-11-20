@@ -44,7 +44,7 @@ void uni_hal_test_pre_sleep(void) {
         uint32_t const sleep_reload = SysTick->LOAD;
         uint32_t const old_hclk = SystemCoreClock;
         SystemCoreClock = old_hclk / 2U;
-        uni_hal_systick_l4_reclock(old_hclk, SystemCoreClock);
+        uni_hal_systick_reclock(old_hclk, SystemCoreClock);
         if (SysTick->LOAD != sleep_reload) {
             exit_qemu(24);
         }
@@ -67,7 +67,7 @@ static void check_tickless_reclock(void) {
     // sleep must also use the new calibration when the port restores the reload.
     uint32_t const old_hclk = SystemCoreClock;
     SystemCoreClock = old_hclk * 2U;
-    uni_hal_systick_l4_reclock(old_hclk, SystemCoreClock);
+    uni_hal_systick_reclock(old_hclk, SystemCoreClock);
     vTaskDelay(16);
     if (SysTick->LOAD != SystemCoreClock / configTICK_RATE_HZ - 1U || !clocks_agree()) {
         exit_qemu(27);
