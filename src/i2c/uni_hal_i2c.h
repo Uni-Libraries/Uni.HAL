@@ -197,7 +197,7 @@ bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *ctx);
 
 /**
  * Deinitialize I2C interface from task or startup context.
- * On STM32H743 this also resets a valid peripheral before its first initialization.
+ * On STM32L496 and STM32H743 this also resets a valid peripheral before its first initialization.
  * @param ctx pointer to the interface context
  * @return true on success
  */

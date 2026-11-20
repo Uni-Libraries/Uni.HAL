@@ -56,6 +56,18 @@ typedef struct {
 #endif
 } i2c_bus_t;
 
+typedef struct {
+    uni_hal_core_irq_e event;
+    uni_hal_core_irq_e error;
+} i2c_irq_lines_t;
+
+static const i2c_irq_lines_t g_irq_lines[UNI_HAL_I2C_MAXINSTANCES] = {
+    {UNI_HAL_CORE_IRQ_I2C_1_IRQ1, UNI_HAL_CORE_IRQ_I2C_1_IRQ2},
+    {UNI_HAL_CORE_IRQ_I2C_2_IRQ1, UNI_HAL_CORE_IRQ_I2C_2_IRQ2},
+    {UNI_HAL_CORE_IRQ_I2C_3_IRQ1, UNI_HAL_CORE_IRQ_I2C_3_IRQ2},
+    {UNI_HAL_CORE_IRQ_I2C_4_IRQ1, UNI_HAL_CORE_IRQ_I2C_4_IRQ2},
+};
+
 static i2c_bus_t g_buses[UNI_HAL_I2C_MAXINSTANCES];
 
 
@@ -65,6 +77,11 @@ static i2c_bus_t g_buses[UNI_HAL_I2C_MAXINSTANCES];
 
 static void handle_irq(I2C_HandleTypeDef *handle, unsigned index, bool error)
 {
+    if (!handle->Instance) {
+        // An interrupt inherited from the bootloader may remain asserted until the reset.
+        (void)uni_hal_core_irq_disable(error ? g_irq_lines[index].error : g_irq_lines[index].event);
+        return;
+    }
     // Event and error IRQs for this bus have the same priority. Other buses may preempt them.
     g_buses[index].higher_priority_woken = pdFALSE;
     UNI_HAL_OS_ISR_ENTER();
@@ -213,52 +230,6 @@ static I2C_HandleTypeDef *_uni_hal_i2c_get_handle_hal(uni_hal_core_periph_e inst
 }
 
 
-static bool _uni_hal_i2c_init_irq(uni_hal_i2c_context_t *ctx)
-{
-    bool result = false;
-
-    uni_hal_core_irq_e irq_1 = UNI_HAL_CORE_IRQ_UNKNOWN;
-    uni_hal_core_irq_e irq_2 = UNI_HAL_CORE_IRQ_UNKNOWN;
-
-    switch (ctx->config.instance)
-    {
-        case UNI_HAL_CORE_PERIPH_I2C_1:
-            irq_1 = UNI_HAL_CORE_IRQ_I2C_1_IRQ1;
-            irq_2 = UNI_HAL_CORE_IRQ_I2C_1_IRQ2;
-            break;
-        case UNI_HAL_CORE_PERIPH_I2C_2:
-            irq_1 = UNI_HAL_CORE_IRQ_I2C_2_IRQ1;
-            irq_2 = UNI_HAL_CORE_IRQ_I2C_2_IRQ2;
-            break;
-        case UNI_HAL_CORE_PERIPH_I2C_3:
-            irq_1 = UNI_HAL_CORE_IRQ_I2C_3_IRQ1;
-            irq_2 = UNI_HAL_CORE_IRQ_I2C_3_IRQ2;
-            break;
-        case UNI_HAL_CORE_PERIPH_I2C_4:
-            irq_1 = UNI_HAL_CORE_IRQ_I2C_4_IRQ1;
-            irq_2 = UNI_HAL_CORE_IRQ_I2C_4_IRQ2;
-            break;
-        default:
-            break;
-    }
-
-    if (irq_1 != UNI_HAL_CORE_IRQ_UNKNOWN || irq_2 != UNI_HAL_CORE_IRQ_UNKNOWN)
-    {
-        result = true;
-        if (irq_1 != UNI_HAL_CORE_IRQ_UNKNOWN)
-        {
-            result = result && uni_hal_core_irq_enable(irq_1, ctx->config.irq_priority, 0U);
-        }
-        if (irq_2 != UNI_HAL_CORE_IRQ_UNKNOWN)
-        {
-            result = result && uni_hal_core_irq_enable(irq_2, ctx->config.irq_priority, 0U);
-        }
-    }
-
-    return result;
-}
-
-
 static i2c_bus_t *get_bus(uni_hal_core_periph_e instance)
 {
     uint32_t number = _uni_hal_i2c_get_number(instance);
@@ -403,7 +374,9 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
 
             if (result && ctx->config.irq_enable)
             {
-                result = _uni_hal_i2c_init_irq(ctx);
+                const i2c_irq_lines_t *irqs = &g_irq_lines[bus - g_buses];
+                result = uni_hal_core_irq_enable(irqs->event, ctx->config.irq_priority, 0U) &&
+                         uni_hal_core_irq_enable(irqs->error, ctx->config.irq_priority, 0U);
             }
 
             if (result)
@@ -430,16 +403,28 @@ bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
         return false;
     }
     I2C_HandleTypeDef *handle = _uni_hal_i2c_get_handle_hal(ctx->config.instance);
-    if (handle->Instance) {
-        HAL_I2C_DeInit(handle);
-        LL_I2C_DeInit(handle->Instance);
+    I2C_TypeDef *instance = _uni_hal_i2c_get_handle(ctx->config.instance);
+    ctx->state.initialized = false;
+
+    const i2c_irq_lines_t *irqs = &g_irq_lines[bus - g_buses];
+    bool event_disabled = uni_hal_core_irq_disable(irqs->event);
+    bool error_disabled = uni_hal_core_irq_disable(irqs->error);
+    if (!event_disabled || !error_disabled ||
+        (handle->Instance && (handle->Instance != instance || HAL_I2C_DeInit(handle) != HAL_OK))) {
+        release_bus(bus);
+        return false;
+    }
+    handle->Instance = NULL;
+    // The previous firmware can leave this peripheral active before our first HAL init.
+    if (LL_I2C_DeInit(instance) != SUCCESS) {
+        release_bus(bus);
+        return false;
     }
     if (bus->event) {
         vSemaphoreDelete(bus->event);
         bus->event = NULL;
     }
     bus->owner = NULL;
-    ctx->state.initialized = false;
     release_bus(bus);
     return true;
 }

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "dwt/uni_hal_dwt.h"
 #include "i2c/uni_hal_i2c.h"
 #include "systick/uni_hal_systick.h"
 #include "stm32l4xx_hal.h"
@@ -13,6 +14,7 @@
 
 extern I2C_HandleTypeDef hi2c1;
 void I2C1_EV_IRQHandler(void);
+void I2C1_ER_IRQHandler(void);
 
 I2C_TypeDef model_instances[4];
 static uni_hal_gpio_pin_context_t pins[2];
@@ -28,6 +30,8 @@ static uint32_t irq_lag_ms, resume_lag_ms;
 static bool sample_wake_tick;
 static bool scheduler_running;
 static bool in_irq;
+static bool peripheral_enabled, event_irq_enabled, error_irq_enabled, fail_reset, fail_deinit;
+static unsigned hal_deinits, output_pin_inits;
 static SemaphoreHandle_t active_event;
 static uint32_t event_creation_ms;
 #if !configSUPPORT_STATIC_ALLOCATION
@@ -83,9 +87,18 @@ uint32_t __get_BASEPRI(void) { return 0; }
 uint32_t NVIC_GetPriority(int irq) { assert(irq == SysTick_IRQn); return 15U; }
 uint32_t __get_IPSR(void) { return in_irq; }
 
-bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *c) { return c && c->state.initialized; }
+bool uni_hal_dwt_init(void) { return true; }
+bool uni_hal_dwt_is_inited(void) { return true; }
+void uni_hal_dwt_delay_us(uint32_t us) { (void)us; }
+bool uni_hal_gpio_pin_deinit(uni_hal_gpio_pin_context_t *pin) { pin->inited = false; return true; }
+bool uni_hal_gpio_pin_get(const uni_hal_gpio_pin_context_t *pin) { return pin->gpio_init; }
+bool uni_hal_gpio_pin_set(uni_hal_gpio_pin_context_t *pin, bool high) { pin->gpio_init = high; return true; }
 bool uni_hal_gpio_pin_init(uni_hal_gpio_pin_context_t *pin) {
     if (!pin) { return false; }
+    if (pin->gpio_type == UNI_HAL_GPIO_TYPE_OUT_OD) {
+        assert(!peripheral_enabled && !event_irq_enabled && !error_irq_enabled);
+        ++output_pin_inits;
+    }
     pin->inited = true;
     return true;
 }
@@ -95,9 +108,16 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e instance, uni_hal_rcc_clksrc_e
 }
 bool uni_hal_rcc_clk_set(uni_hal_core_periph_e instance, bool enable) { (void)instance; return enable; }
 uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e instance) { (void)instance; return 0; }
-uint32_t uni_hal_i2c_timing_calc(uint32_t hz, uni_hal_i2c_speed_e speed) { (void)hz; (void)speed; return 0; }
 bool uni_hal_core_irq_enable(uni_hal_core_irq_e irq, uint32_t priority, uint32_t sub) {
-    (void)irq; (void)priority; (void)sub; return true;
+    (void)priority; (void)sub;
+    assert(irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ1 || irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ2);
+    if (irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ1) { event_irq_enabled = true; } else { error_irq_enabled = true; }
+    return true;
+}
+bool uni_hal_core_irq_disable(uni_hal_core_irq_e irq) {
+    assert(irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ1 || irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ2);
+    if (irq == UNI_HAL_CORE_IRQ_I2C_1_IRQ1) { event_irq_enabled = false; } else { error_irq_enabled = false; }
+    return true;
 }
 
 int xTaskGetSchedulerState(void) { return scheduler_running ? taskSCHEDULER_RUNNING : 0; }
@@ -149,11 +169,25 @@ BaseType_t xSemaphoreTake(SemaphoreHandle_t event, TickType_t ticks) {
 
 HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *h) {
     assert(h->Init.Timing == 42);
+    peripheral_enabled = !fail_init;
     h->State = HAL_I2C_STATE_READY;
     return fail_init ? HAL_ERROR : HAL_OK;
 }
-HAL_StatusTypeDef HAL_I2C_DeInit(I2C_HandleTypeDef *h) { h->State = 0; return HAL_OK; }
-int LL_I2C_DeInit(I2C_TypeDef *instance) { assert(instance == I2C1); ++resets; return SUCCESS; }
+HAL_StatusTypeDef HAL_I2C_DeInit(I2C_HandleTypeDef *h) {
+    assert(h->Instance == I2C1);
+    ++hal_deinits;
+    if (fail_deinit) { return HAL_ERROR; }
+    h->State = 0;
+    peripheral_enabled = false;
+    return HAL_OK;
+}
+int LL_I2C_DeInit(I2C_TypeDef *instance) {
+    assert(instance == I2C1);
+    ++resets;
+    if (fail_reset) { return 0; }
+    peripheral_enabled = false;
+    return SUCCESS;
+}
 uint32_t HAL_I2C_GetState(I2C_HandleTypeDef *h) { return h->State; }
 HAL_StatusTypeDef HAL_I2CEx_ConfigAnalogFilter(I2C_HandleTypeDef *h, uint32_t v) { (void)h; (void)v; return HAL_OK; }
 HAL_StatusTypeDef HAL_I2CEx_ConfigDigitalFilter(I2C_HandleTypeDef *h, uint32_t v) { (void)h; (void)v; return HAL_OK; }
@@ -185,8 +219,8 @@ static void transfer_irq(I2C_HandleTypeDef *h)
         }
     }
 }
-void HAL_I2C_EV_IRQHandler(I2C_HandleTypeDef *h) { if (h->XferISR) { h->XferISR(h); } }
-void HAL_I2C_ER_IRQHandler(I2C_HandleTypeDef *h) { HAL_I2C_ErrorCallback(h); }
+void HAL_I2C_EV_IRQHandler(I2C_HandleTypeDef *h) { assert(h->Instance); if (h->XferISR) { h->XferISR(h); } }
+void HAL_I2C_ER_IRQHandler(I2C_HandleTypeDef *h) { assert(h->Instance); HAL_I2C_ErrorCallback(h); }
 
 static HAL_StatusTypeDef start(I2C_HandleTypeDef *h, uint16_t addr, uint16_t reg, uint16_t width,
                                uint8_t *b, uint16_t len, bool read)
@@ -280,7 +314,11 @@ int main(void)
     incomplete = ctx;
     incomplete.config.pin_sda = NULL;
     assert(!uni_hal_i2c_init(&incomplete) && !incomplete.state.initialized && !pins[0].inited);
-    assert(uni_hal_i2c_init(&ctx));
+    // A bootloader left I2C1 and its NVIC vectors running. Our handle starts empty.
+    peripheral_enabled = event_irq_enabled = error_irq_enabled = true;
+    assert(!hi2c1.Instance && uni_hal_i2c_recover(&ctx));
+    assert(output_pin_inits == 2 && resets == 1 && hal_deinits == 0);
+    assert(ctx.state.initialized && peripheral_enabled && event_irq_enabled && error_irq_enabled);
     exercise(uni_hal_i2c_mem_read);
     exercise(uni_hal_i2c_mem_write);
     assert(waits == 0 && delays == 0 && !active_event);
@@ -315,6 +353,26 @@ int main(void)
     deliver = true;
     assert(uni_hal_i2c_init(&ctx));
     assert(uni_hal_i2c_mem_read(&ctx, 0x40, 7, UNI_HAL_I2C_MEMADD_SIZE_8BIT, buffer, 1, 20));
-    assert(active_event && uni_hal_i2c_deinit(&ctx) && !active_event);
+    uni_hal_i2c_context_t other = {.config = ctx.config};
+    unsigned const prior_hal_deinits = hal_deinits, prior_resets = resets;
+    fail_deinit = true;
+    assert(!uni_hal_i2c_recover(&ctx));
+    assert(!ctx.state.initialized && active_event && resets == prior_resets);
+    assert(!uni_hal_i2c_deinit(&other) && !uni_hal_i2c_init(&other));
+    fail_deinit = false;
+    fail_reset = true;
+    assert(!uni_hal_i2c_recover(&ctx));
+    assert(active_event && !uni_hal_i2c_init(&other) && output_pin_inits == 2);
+    fail_reset = false;
+    assert(uni_hal_i2c_deinit(&ctx) && !active_event && !event_irq_enabled && !error_irq_enabled);
+    // An inherited vector with no HAL handle must be masked even if its source stays asserted.
+    event_irq_enabled = error_irq_enabled = true;
+    I2C1_EV_IRQHandler();
+    assert(!event_irq_enabled && error_irq_enabled);
+    I2C1_ER_IRQHandler();
+    assert(!error_irq_enabled);
+    assert(uni_hal_i2c_deinit(&ctx) && resets == prior_resets + 3);
+    assert(hal_deinits == prior_hal_deinits + 2);
+    assert(uni_hal_i2c_init(&other) && uni_hal_i2c_deinit(&other));
     return 0;
 }
