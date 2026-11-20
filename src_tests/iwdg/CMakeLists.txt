@@ -4,7 +4,7 @@ else()
     set(iwdg_machine mps2-an386)
 endif()
 
-foreach(scenario IN ITEMS deinit instance)
+foreach(scenario IN ITEMS deinit instance ready_timeout)
     add_executable(iwdg_${scenario}_qemu ${scenario}.c)
     target_link_libraries(iwdg_${scenario}_qemu PRIVATE uni.hal)
     uni_hal_set_linker_file(iwdg_${scenario}_qemu "${CMAKE_CURRENT_SOURCE_DIR}/../adc/mps2.ld")

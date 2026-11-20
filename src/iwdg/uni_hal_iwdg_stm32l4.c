@@ -13,7 +13,7 @@
 
 // Uni.HAL
 #include "iwdg/uni_hal_iwdg.h"
-#include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 
 
 //
@@ -70,15 +70,8 @@ bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx) {
         LL_IWDG_EnableWriteAccess(IWDG);
         LL_IWDG_SetPrescaler(IWDG, prescaler);
         LL_IWDG_SetReloadCounter(IWDG, counter);
-        // PVU/RVU clear a few LSI periods after the write; without LSI they never do
-        uint32_t const start_ms = uni_hal_systick_get_ms();
-        result = true;
-        while (LL_IWDG_IsReady(IWDG) != 1) {
-            if ((uni_hal_systick_get_ms() - start_ms) > UNI_HAL_IWDG_READY_TIMEOUT_MS) {
-                result = false;
-                break;
-            }
-        }
+        result = uni_hal_stm32_wait_bits(&IWDG->SR, IWDG_SR_PVU | IWDG_SR_RVU | IWDG_SR_WVU,
+                                         0U, UNI_HAL_IWDG_READY_TIMEOUT_MS);
 
         // the watchdog is running in any case and has to be served
         ctx->inited = true;

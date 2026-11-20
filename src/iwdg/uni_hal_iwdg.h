@@ -54,7 +54,8 @@ typedef struct {
 //
 
 /**
- * Initializes Watchdog
+ * Initializes the watchdog. If STM32 register updates time out after starting
+ * the watchdog, this returns false and the context can still reload it.
  * @param ctx pointer to the watchdog context
  * @return true on success
  */
