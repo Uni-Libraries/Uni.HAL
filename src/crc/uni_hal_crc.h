@@ -50,7 +50,7 @@ typedef enum {
 /**
  * CRC module context
  */
-typedef struct {
+typedef struct uni_hal_crc_context_t {
     /**
      * CRC instance
      */
@@ -75,6 +75,19 @@ typedef struct {
      * Initialization state
      */
     bool initialized;
+
+#if defined(UNI_HAL_TARGET_MCU_PC)
+    /** Private state of the software calculation unit. */
+    struct {
+        uint32_t shift;
+        uint32_t polynomial;
+        uint32_t remainder;
+#if defined(__cplusplus)
+    } pc{};  // Allow client aggregates to initialize just the configuration and status.
+#else
+    } pc;
+#endif
+#endif
 
 } uni_hal_crc_context_t;
 

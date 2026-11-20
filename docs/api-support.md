@@ -33,11 +33,12 @@ for other targets.
   I/O buffer helpers can be used independently. They do not provide a Zynq
   ADC, CAN, I²C, SPI or STM32-style RCC driver. RTT-to-stdio needs a HAL timer.
 - **PC** provides host time in milliseconds and real FreeRTOS I/O buffers.
-  Peripheral entries are host stand-ins. For example, Flash reports zero
-  capacity, SPI transfers return failure, and CRC and I²C do not model
-  hardware results. RNG reads the operating system's random source and
-  reports failure if it cannot fill the requested buffer. Discard the buffer on failure, as it may be partially
-  filled. Use controlled driver models to test peripheral behaviour.
+  CRC computes an independent remainder for each context using its seed and odd
+  polynomial at widths 7, 8, 16 and 32. It processes bytes most-significant bit
+  first without reflection or a final XOR. RNG reads the operating system's
+  random source. Discard the buffer after a failed read because it may be
+  partially filled. Flash reports zero capacity, SPI transfers return failure,
+  and I²C is a stand-in.
 
 ## Link contract
 
