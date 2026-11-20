@@ -48,7 +48,8 @@ typedef enum {
 
 
 /**
- * CRC module context
+ * Each initialized context owns its polynomial and running remainder. Different
+ * contexts may be interleaved. Serialize access to the same context.
  */
 typedef struct uni_hal_crc_context_t {
     /**
@@ -86,6 +87,18 @@ typedef struct uni_hal_crc_context_t {
     } pc{};  // Allow client aggregates to initialize just the configuration and status.
 #else
     } pc;
+#endif
+#elif defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_STM32L496)
+    /** Private configuration and remainder saved between hardware transactions. */
+    struct {
+        uint32_t length;
+        uint32_t polynomial;
+        uint32_t mask;
+        uint32_t remainder;
+#if defined(__cplusplus)
+    } stm32{};
+#else
+    } stm32;
 #endif
 #endif
 
