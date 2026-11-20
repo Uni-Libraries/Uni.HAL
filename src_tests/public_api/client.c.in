@@ -1,0 +1,25 @@
+#include <stdalign.h>
+#include "uni_hal.h"
+#include "io/uni_hal_io_tunnel.h"
+#include "segger/uni_hal_segger_rtt.h"
+#include "segger/uni_hal_segger_rtt_stdio.h"
+#if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_STM32L496)
+#include "pwr/uni_hal_pwr_stm32.h"
+#endif
+#if defined(UNI_HAL_TARGET_MCU_STM32L496)
+#include "pwr/uni_hal_pwr_stm32l4.h"
+#endif
+
+#if configAPPLICATION_ALLOCATED_HEAP
+alignas(portBYTE_ALIGNMENT) uint8_t ucHeap[configTOTAL_HEAP_SIZE];
+#endif
+
+// Volatile stores keep every reference live through optimization and linker GC.
+// The consumer only takes addresses and can run without touching any peripherals.
+typedef void (*api_function_t)(void);
+static api_function_t volatile reference;
+#define LINK_API(fn) reference = (api_function_t)(fn)
+
+int main(void) {
+@references@    return reference == NULL;
+}

@@ -7,6 +7,7 @@ endif()
 
 add_subdirectory(../.. uni.hal)
 include(../../uni.hal.cmake)
+add_subdirectory(../public_api public_api)
 uni_hal_add_executable(allocator_regression)
 target_sources(allocator_regression PRIVATE main.c)
 target_compile_options(allocator_regression PRIVATE -fno-builtin)

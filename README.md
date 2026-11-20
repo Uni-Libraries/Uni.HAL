@@ -9,9 +9,9 @@ A hardware abstraction layer in C23 for STM32 microcontrollers, with a PC target
 | Zynq-7000 | `ZYNQ7000` | Cortex-A9 #0 of the PS, on the Vitis standalone BSP of the board (`UNI_HAL_ZYNQ7000_BSP_DIR`) |
 | Host | `PC` | stand-ins for the drivers, used by the unit tests |
 
-Not every module exists for every target; the header of a module says what it covers. The
-library bundles CMSIS, the ST HAL/LL drivers, the FreeRTOS kernel and SEGGER RTT under
-`3rdparty/`.
+The [public API matrix](docs/api-support.md) lists the functions and driver modes
+available on each target, including the PC stand-ins. The library bundles CMSIS,
+the ST HAL/LL drivers, the FreeRTOS kernel and SEGGER RTT under `3rdparty/`.
 
 On Zynq-7000, the PS UART driver reserves CPU0's global timer comparator and its private
 interrupt (PPI 27) when the first UART is initialized. Leave both available when using a
@@ -55,8 +55,9 @@ All MCU targets and the PC target use the bundled FreeRTOS kernel.
 
 ## What the application has to get right
 
-**Start-up order.** `uni_hal_pwr_init()`, then `uni_hal_core_irq_init()`, then
-`uni_hal_rcc_stmXX_config_set()` and `uni_hal_rcc_init()`. Check the result before starting
+**STM32 start-up order.** Call `uni_hal_pwr_init()`, then `uni_hal_core_irq_init()`, then
+`uni_hal_rcc_stm32h7_config_set()` or `uni_hal_rcc_stm32l4_config_set()` for your target,
+followed by `uni_hal_rcc_init()`. Check the result before starting
 peripherals. On STM32H7, a failure leaves the nominal peripheral clocks unavailable.
 On STM32L4, loss of HSE triggers an attempt to reproduce the configured PLL
 frequency from HSI. If the PLL cannot deliver that frequency, the driver can use HSI directly.
@@ -64,6 +65,10 @@ An application that requires the PLL should check `pll_inited` as well as `sys_i
 `uni_hal_rcc_stm32l4_status_get()`. The CSS callback runs in NMI context. If HSE fails
 during initialization, `uni_hal_rcc_init()` finishes recovery after the handler returns.
 The drivers use SysTick for their timeouts.
+
+**Zynq-7000 startup.** Start with the board's PS7 configuration and standalone BSP.
+Call `uni_hal_core_zynq7000_init()` in `main` to install the exception vectors,
+start the global timer and initialize the GIC before starting peripherals and FreeRTOS.
 
 **Dynamic memory with FreeRTOS.** Blocks from the C library (`malloc`, `calloc`,
 `realloc`, aligned allocations and the newlib reentrant functions) belong to the C
