@@ -36,6 +36,12 @@ static QueueHandle_t init_queue(QueueHandle_t *queue) {
     return *queue;
 }
 #define uni_hal_can_init_rx_queue init_queue
+// Exercise a board that reserves interrupt priorities 0..5 for non-kernel users.
+#include <FreeRTOS.h>
+#if configMAX_SYSCALL_INTERRUPT_PRIORITY < (6U << (8U - __NVIC_PRIO_BITS))
+#undef configMAX_SYSCALL_INTERRUPT_PRIORITY
+#define configMAX_SYSCALL_INTERRUPT_PRIORITY (6U << (8U - __NVIC_PRIO_BITS))
+#endif
 #include "can/uni_hal_can_stm32h7.c"
 #include "../arm/semihost_test.h"
 
@@ -68,6 +74,12 @@ static unsigned check(void) {
 
     second.config.clock_source = UNI_HAL_RCC_CLKSRC_HSE;
     CHECK(uni_hal_can_init(&second));
+    uint32_t const expected_priority = configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS);
+    CHECK(NVIC_GetPriority(FDCAN1_IT0_IRQn) == expected_priority);
+    CHECK(NVIC_GetPriority(FDCAN2_IT0_IRQn) == expected_priority);
+    NVIC_SetPriorityGrouping(7U);
+    CHECK(!uni_hal_can_init(&second) && uni_hal_can_is_inited(&second));
+    NVIC_SetPriorityGrouping(0U);
     CHECK(controllers[0].NBTP == controllers[1].NBTP);
     // A rejected reinit must preserve a stopped controller's pending transmission and callback.
     controllers[0].PSR = 1U << FDCAN_PSR_ACT_Pos;

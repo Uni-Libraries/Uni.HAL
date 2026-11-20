@@ -11,6 +11,7 @@
 // uni_hal
 #include "can/uni_hal_can_internal.h"
 #include "os/uni_hal_os.h"
+#include "os/uni_hal_os_irq_stm32.h"
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
 
@@ -493,8 +494,9 @@ void CAN2_SCE_IRQHandler(void)
 //
 
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
+    uint32_t const priority = uni_hal_os_irq_priority_for_kernel(UNI_HAL_CAN_IRQ_PRIORITY);
     bool result = false;
-    if (ctx != nullptr) {
+    if (ctx != nullptr && uni_hal_os_irq_priority_valid(priority)) {
         ctx->status = (uni_hal_can_status_t){0};
         result = _uni_hal_can_set_context(ctx);
 
@@ -576,7 +578,7 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
                 can->IER = CAN_IER_ERRIE | CAN_IER_EWGIE | CAN_IER_EPVIE | CAN_IER_BOFIE | CAN_IER_FOVIE0 |
                            CAN_IER_FOVIE1;
 
-                result = _uni_hal_can_interrupt_enable(ctx->config.instance, UNI_HAL_CAN_IRQ_PRIORITY);
+                result = _uni_hal_can_interrupt_enable(ctx->config.instance, priority);
             }
 
             ctx->status.inited = result;

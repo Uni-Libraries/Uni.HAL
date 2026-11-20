@@ -23,6 +23,12 @@ static void set_bits(volatile uint32_t *reg, uint32_t bits) {
 }
 #undef SET_BIT
 #define SET_BIT(reg, bits) set_bits(&(reg), (bits))
+// Exercise a board that reserves interrupt priorities 0..5 for non-kernel users.
+#include <FreeRTOS.h>
+#if configMAX_SYSCALL_INTERRUPT_PRIORITY < (6U << (8U - __NVIC_PRIO_BITS))
+#undef configMAX_SYSCALL_INTERRUPT_PRIORITY
+#define configMAX_SYSCALL_INTERRUPT_PRIORITY (6U << (8U - __NVIC_PRIO_BITS))
+#endif
 #include "can/uni_hal_can_stm32l4.c"
 
 _Noreturn void finish(unsigned code);
@@ -66,6 +72,14 @@ int main(void) {
     can2.config = (uni_hal_can_config_t){.instance = UNI_HAL_CORE_PERIPH_CAN_2, .pin_rx = &pins[2], .pin_tx = &pins[3]};
     CAN1->MSR = CAN2->MSR = CAN_MSR_INAK;
     CHECK(uni_hal_can_init(&can1) && uni_hal_can_init(&can2));
+    uint32_t const expected_priority = configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS);
+    IRQn_Type const interrupts[] = {CAN1_RX0_IRQn, CAN1_RX1_IRQn, CAN1_TX_IRQn, CAN1_SCE_IRQn,
+                                    CAN2_RX0_IRQn, CAN2_RX1_IRQn, CAN2_TX_IRQn, CAN2_SCE_IRQn};
+    for (unsigned i = 0; i < sizeof(interrupts) / sizeof(interrupts[0]); ++i) {
+        CHECK(NVIC_GetPriority(interrupts[i]) == expected_priority);
+    }
+    NVIC_SetPriorityGrouping(7U);
+    CHECK(!uni_hal_can_init(&can2) && uni_hal_can_is_inited(&can2));
     NVIC_SetPriorityGrouping(0U);
     NVIC_SetPriority(WWDG_IRQn, configMAX_SYSCALL_INTERRUPT_PRIORITY >> (8U - __NVIC_PRIO_BITS));
     NVIC_EnableIRQ(WWDG_IRQn);

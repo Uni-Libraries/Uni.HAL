@@ -422,7 +422,9 @@ uint32_t uni_hal_can_is_available(const uni_hal_can_context_t *ctx);
  * Initialise the controller from ctx->config. On STM32 the receive queue belongs
  * to the peripheral. Each PC context owns a queue and must start zero-initialised.
  * Stop the controller and its users before reinitialisation, which empties the queue.
- * Use one active context per STM32 peripheral.
+ * Use one active context per STM32 peripheral. CAN IRQs use priority 4 or the
+ * FreeRTOS syscall threshold, whichever is numerically higher. Configure NVIC
+ * priority grouping for FreeRTOS before calling init.
  */
 bool uni_hal_can_init(uni_hal_can_context_t *ctx);
 

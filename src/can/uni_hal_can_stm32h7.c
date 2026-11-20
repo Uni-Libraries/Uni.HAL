@@ -13,6 +13,7 @@
 #include "can/uni_hal_can_internal.h"
 #include "core/uni_hal_core.h"
 #include "os/uni_hal_os.h"
+#include "os/uni_hal_os_irq_stm32.h"
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
 
@@ -607,7 +608,8 @@ void FDCAN2_IT0_IRQHandler(void)
 //
 
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
-    if (ctx == nullptr) {
+    uint32_t const priority = uni_hal_os_irq_priority_for_kernel(UNI_HAL_CAN_IRQ_PRIORITY);
+    if (ctx == nullptr || !uni_hal_os_irq_priority_valid(priority)) {
         return false;
     }
     bool result = false;
@@ -765,7 +767,7 @@ bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
             can->ILS = 0U;
             can->ILE = FDCAN_ILE_EINT0;
 
-            NVIC_SetPriority(inst->irq, UNI_HAL_CAN_IRQ_PRIORITY);
+            NVIC_SetPriority(inst->irq, priority);
             NVIC_EnableIRQ(inst->irq);
         }
 
