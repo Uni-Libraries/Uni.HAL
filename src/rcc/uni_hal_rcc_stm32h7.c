@@ -1502,7 +1502,6 @@ uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
             }
             break;
         case UNI_HAL_CORE_PERIPH_RTC:
-            uni_hal_pwr_stm_set_backup_access(true);
             switch (LL_RCC_GetRTCClockSource()) {
             case LL_RCC_RTC_CLKSOURCE_NONE:
                 result = UNI_HAL_RCC_CLKSRC_NONE;
@@ -1520,7 +1519,6 @@ uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
                 // unknown clock source
                 break;
             }
-            uni_hal_pwr_stm_set_backup_access(false);
             break;
         case UNI_HAL_CORE_PERIPH_SPI_4:
         case UNI_HAL_CORE_PERIPH_SPI_5: {
