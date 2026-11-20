@@ -794,7 +794,7 @@ def detect_divider(text: str, patterns: list[str]) -> int | None:
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate RCC map DOT/PNG/SVG",
+        description="Generate RCC map DOT/PNG/SVG", fromfile_prefix_chars="@",
         epilog="Conditions use --define and macros declared in each input file. Headers are not expanded. "
                "Supported #if expressions use integer constants, defined, !, comparisons, &&, || and parentheses.",
     )

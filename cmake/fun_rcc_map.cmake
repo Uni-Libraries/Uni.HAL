@@ -7,6 +7,9 @@ include_guard(GLOBAL)
 # Usage:
 #   uni_hal_generate_rcc_map(<target_name> <file_path> [<file_path> ...])
 #
+# The map uses the target definitions for the primary input's language.
+# Multi-configuration builds put each map in rcc_map/<target>/<config>/.
+#
 # Minimal example:
 #   uni_hal_generate_rcc_map(my_app ${CMAKE_SOURCE_DIR}/src_lib/config/app_config_rcc.c ${CMAKE_SOURCE_DIR}/src_app/app.c)
 #
@@ -37,6 +40,10 @@ function(uni_hal_generate_rcc_map target_name)
     list(GET _rcc_input_files 0 _rcc_input_file)
 
     set(_rcc_map_out_dir "${CMAKE_CURRENT_BINARY_DIR}/rcc_map/${target_name}")
+    get_property(_rcc_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(_rcc_multi_config)
+        string(APPEND _rcc_map_out_dir "/$<CONFIG>")
+    endif()
     set(_rcc_map_dot_file "${_rcc_map_out_dir}/rcc_map.dot")
     set(_rcc_map_png_file "${_rcc_map_out_dir}/rcc_map.png")
     set(_rcc_map_svg_file "${_rcc_map_out_dir}/rcc_map.svg")
@@ -78,45 +85,23 @@ function(uni_hal_generate_rcc_map target_name)
         set(_rcc_map_lse_hz "${UNI_HAL_LSE_VALUE}")
     endif()
 
-    get_directory_property(_rcc_dir_definitions COMPILE_DEFINITIONS)
-    get_target_property(_rcc_target_definitions "${target_name}" COMPILE_DEFINITIONS)
-    if(_rcc_target_definitions STREQUAL "NOTFOUND")
-        set(_rcc_target_definitions "")
-    endif()
-
-    set(_rcc_map_definitions "${_rcc_dir_definitions};${_rcc_target_definitions}")
-
-    if(DEFINED UNI_HAL_TARGET_MCU)
-        string(TOUPPER "${UNI_HAL_TARGET_MCU}" _rcc_mcu_upper)
-        if(_rcc_mcu_upper MATCHES "^STM32H7")
-            list(APPEND _rcc_map_definitions "STM32H7")
-        elseif(_rcc_mcu_upper MATCHES "^STM32L4")
-            list(APPEND _rcc_map_definitions "STM32L4")
+    get_source_file_property(_rcc_language "${_rcc_input_file}" LANGUAGE)
+    if(NOT _rcc_language)
+        # Headers and inputs owned by another target may have no source property.
+        get_property(_rcc_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+        if("C" IN_LIST _rcc_languages)
+            set(_rcc_language C)
+        else()
+            list(GET _rcc_languages 0 _rcc_language)
         endif()
     endif()
 
-    if(NOT _rcc_map_hse_hz STREQUAL "")
-        list(APPEND _rcc_map_definitions "HSE_VALUE=${_rcc_map_hse_hz}")
-    endif()
-    if(NOT _rcc_map_hsi_hz STREQUAL "")
-        list(APPEND _rcc_map_definitions "HSI_VALUE=${_rcc_map_hsi_hz}")
-    endif()
-    if(NOT _rcc_map_hsi48_hz STREQUAL "")
-        list(APPEND _rcc_map_definitions "HSI48_VALUE=${_rcc_map_hsi48_hz}")
-    endif()
-    if(NOT _rcc_map_csi_hz STREQUAL "")
-        list(APPEND _rcc_map_definitions "CSI_VALUE=${_rcc_map_csi_hz}")
-    endif()
-    if(NOT _rcc_map_lsi_hz STREQUAL "")
-        list(APPEND _rcc_map_definitions "LSI_VALUE=${_rcc_map_lsi_hz}")
-    endif()
-    if(NOT _rcc_map_lse_hz STREQUAL "")
-        list(APPEND _rcc_map_definitions "LSE_VALUE=${_rcc_map_lse_hz}")
-    endif()
-
-    if(_rcc_map_definitions)
-        list(REMOVE_DUPLICATES _rcc_map_definitions)
-    endif()
+    # Evaluate the target's own and transitive definitions at generation time.
+    # A dependency on this file also invalidates maps after CMake reconfiguration.
+    set(_rcc_definitions_file "${_rcc_map_out_dir}/definitions.rsp")
+    file(GENERATE OUTPUT "${_rcc_definitions_file}"
+        CONTENT "$<JOIN:$<LIST:TRANSFORM,$<TARGET_PROPERTY:${target_name},COMPILE_DEFINITIONS>,PREPEND,--define=>,\n>"
+        CONDITION "$<COMPILE_LANGUAGE:${_rcc_language}>" TARGET "${target_name}")
 
     if(NOT Python_EXECUTABLE)
         find_package(Python COMPONENTS Interpreter REQUIRED)
@@ -125,13 +110,6 @@ function(uni_hal_generate_rcc_map target_name)
     set(_rcc_input_args "")
     foreach(_input_file IN LISTS _rcc_input_files)
         list(APPEND _rcc_input_args "--input-file" "${_input_file}")
-    endforeach()
-
-    set(_rcc_define_args "")
-    foreach(_def IN LISTS _rcc_map_definitions)
-        if(NOT _def STREQUAL "")
-            list(APPEND _rcc_define_args "--define" "${_def}")
-        endif()
     endforeach()
 
     set(_rcc_freq_args "")
@@ -164,10 +142,10 @@ function(uni_hal_generate_rcc_map target_name)
             "--dot-file" "${_rcc_map_dot_file}"
             "--png-file" "${_rcc_map_png_file}"
             "--svg-file" "${_rcc_map_svg_file}"
-            ${_rcc_define_args}
+            "@${_rcc_definitions_file}"
             ${_rcc_freq_args}
         # A MAIN_DEPENDENCY would replace the compile rule for that source.
-        DEPENDS ${_rcc_input_files} "${_rcc_map_script}"
+        DEPENDS ${_rcc_input_files} "${_rcc_map_script}" "${_rcc_definitions_file}"
         COMMENT "Generating RCC map for target ${target_name}"
         VERBATIM
     )

@@ -17,6 +17,13 @@ foreach(hse IN ITEMS 8000000 4000000 2000000)
 endforeach()
 
 
+find_program(UNI_HAL_NINJA ninja)
+if(UNI_HAL_NINJA)
+    add_test(NAME rcc_map_target_definitions
+        COMMAND "${CMAKE_COMMAND}" "-DCC=${CMAKE_C_COMPILER}" "-DNINJA=${UNI_HAL_NINJA}"
+            "-DSYSTEM=${CMAKE_SYSTEM_NAME}" -P "${CMAKE_CURRENT_SOURCE_DIR}/rcc/map_target_definitions.cmake")
+endif()
+
 find_program(UNI_HAL_PWSH pwsh)
 if(UNI_HAL_PWSH)
     add_test(NAME vendor_archive_integrity COMMAND "${UNI_HAL_PWSH}" -NoProfile -File
