@@ -103,12 +103,12 @@ SemaphoreHandle_t xSemaphoreCreateBinaryStatic(StaticSemaphore_t *storage) {
 #else
 SemaphoreHandle_t xSemaphoreCreateBinary(void) {
     static ModelSemaphore allocated;
-    return fail_event_allocation ? nullptr : create_event(&allocated);
+    return fail_event_allocation ? NULL : create_event(&allocated);
 }
 #endif
 void vSemaphoreDelete(SemaphoreHandle_t event) {
     assert(event && event == active_event && !in_irq);
-    active_event = nullptr;
+    active_event = NULL;
 }
 BaseType_t xSemaphoreGiveFromISR(SemaphoreHandle_t event, BaseType_t *woken) {
     assert(event == active_event && in_irq && !event->count);
@@ -148,7 +148,7 @@ HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *h, uint16_t a, uint
 static void transfer_irq(I2C_HandleTypeDef *h)
 {
     assert(h->pBuffPtr == buffer && h->State == HAL_I2C_STATE_BUSY);
-    h->XferISR = nullptr;
+    h->XferISR = NULL;
     h->State = HAL_I2C_STATE_READY;
     if (fail) {
         HAL_I2C_ErrorCallback(h);

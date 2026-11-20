@@ -2,6 +2,8 @@
 // Includes
 //
 
+#include <stddef.h>
+
 #include "can/uni_hal_can_internal.h"
 
 
@@ -12,10 +14,10 @@
 
 
 bool uni_hal_can_init(uni_hal_can_context_t *ctx) {
-    if (ctx == nullptr) {
+    if (ctx == NULL) {
         return false;
     }
-    ctx->status.inited = uni_hal_can_init_rx_queue(&ctx->status.queue_rx) != nullptr;
+    ctx->status.inited = uni_hal_can_init_rx_queue(&ctx->status.queue_rx) != NULL;
     return ctx->status.inited;
 }
 

@@ -69,22 +69,22 @@ typedef struct {
 } i2c_bus_t;
 
 static i2c_bus_t buses[] = {
-    {I2C1, &hi2c1, nullptr},
-    {I2C2, &hi2c2, nullptr},
-    {I2C3, &hi2c3, nullptr},
-    {I2C4, &hi2c4, nullptr},
+    {I2C1, &hi2c1, NULL},
+    {I2C2, &hi2c2, NULL},
+    {I2C3, &hi2c3, NULL},
+    {I2C4, &hi2c4, NULL},
 };
 
 static i2c_bus_t *get_bus(uni_hal_core_periph_e instance) {
     if (instance < UNI_HAL_CORE_PERIPH_I2C_1 || instance > UNI_HAL_CORE_PERIPH_I2C_4) {
-        return nullptr;
+        return NULL;
     }
     return &buses[instance - UNI_HAL_CORE_PERIPH_I2C_1];
 }
 
 static I2C_HandleTypeDef *_uni_hal_i2c_get_handle_hal(uni_hal_core_periph_e instance) {
     i2c_bus_t *bus = get_bus(instance);
-    return bus ? bus->hal : nullptr;
+    return bus ? bus->hal : NULL;
 }
 
 
@@ -94,7 +94,7 @@ static I2C_HandleTypeDef *_uni_hal_i2c_get_handle_hal(uni_hal_core_periph_e inst
 //
 
 bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
-    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : nullptr;
+    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : NULL;
     if (!bus || bus->owner || ctx->state.initialized) {
         return false;
     }
@@ -139,7 +139,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
 
 
 bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
-    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : nullptr;
+    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : NULL;
     if (!bus || (bus->owner && bus->owner != ctx)) {
         return false;
     }
@@ -148,13 +148,13 @@ bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
         if (bus->hal->Instance != bus->instance || HAL_I2C_DeInit(bus->hal) != HAL_OK) {
             return false;
         }
-        bus->hal->Instance = nullptr;
+        bus->hal->Instance = NULL;
     }
     // A bootloader can leave the peripheral enabled even when our HAL handle is still empty.
     if (LL_I2C_DeInit(bus->instance) != SUCCESS) {
         return false;
     }
-    bus->owner = nullptr;
+    bus->owner = NULL;
     return true;
 }
 

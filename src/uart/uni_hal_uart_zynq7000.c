@@ -16,6 +16,9 @@
 // Includes
 //
 
+// stdlib
+#include <stddef.h>
+
 // Xilinx BSP
 #include <xparameters_ps.h>
 #include <xuartps.h>
@@ -156,8 +159,8 @@ static bool _uni_hal_uart_zynq7000_fill_fifo(uni_hal_usart_context_t *ctx, uint3
 
 static void _uni_hal_uart_zynq7000_start_tx(uni_hal_usart_context_t *ctx, uint32_t base, BaseType_t *woken) {
     unsigned const port = (unsigned)_uni_hal_uart_zynq7000_index(ctx->instance);
-    if ((!ctx->in_transmission || draining[port] != nullptr) && _uni_hal_uart_zynq7000_fill_fifo(ctx, base, woken)) {
-        draining[port] = nullptr;
+    if ((!ctx->in_transmission || draining[port] != NULL) && _uni_hal_uart_zynq7000_fill_fifo(ctx, base, woken)) {
+        draining[port] = NULL;
         XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, XUARTPS_IXR_TXEMPTY);
     }
 }
@@ -165,7 +168,7 @@ static void _uni_hal_uart_zynq7000_start_tx(uni_hal_usart_context_t *ctx, uint32
 static void _uni_hal_uart_zynq7000_tx_trigger(void *ctx_io_r, void *ctx_fn_r) {
     (void)ctx_io_r;
     uni_hal_usart_context_t *ctx = ctx_fn_r;
-    if (ctx == nullptr || !ctx->initialized) {
+    if (ctx == NULL || !ctx->initialized) {
         return;
     }
 
@@ -181,7 +184,7 @@ static void _uni_hal_uart_zynq7000_tx_trigger(void *ctx_io_r, void *ctx_fn_r) {
         }
     } else {
         taskENTER_CRITICAL();
-        _uni_hal_uart_zynq7000_start_tx(ctx, base, nullptr);
+        _uni_hal_uart_zynq7000_start_tx(ctx, base, NULL);
         taskEXIT_CRITICAL();
     }
 }
@@ -197,7 +200,7 @@ static void finish_or_defer(uni_hal_usart_context_t *ctx, uint32_t base, BaseTyp
     uint32_t const status = XUartPs_ReadReg(base, XUARTPS_SR_OFFSET);
     if (!(status & XUARTPS_SR_TXEMPTY)) {
         // A stale empty event after a refill: wait for the fresh FIFO interrupt.
-        draining[port] = nullptr;
+        draining[port] = NULL;
         XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, XUARTPS_IXR_TXEMPTY);
         return;
     }
@@ -206,7 +209,7 @@ static void finish_or_defer(uni_hal_usart_context_t *ctx, uint32_t base, BaseTyp
         draining[port] = ctx;
         schedule_check(port);
     } else {
-        draining[port] = nullptr;
+        draining[port] = NULL;
         ctx->in_transmission = false;
         if (ctx->io->handlers.tx_end) {
             ctx->io->handlers.tx_end(ctx->io, ctx->io->handlers.tx_end_ctx);
@@ -227,11 +230,11 @@ static void check_shift_registers(void *unused) {
         alarm_armed = false;
         for (unsigned port = 0; port < UNI_HAL_UART_ZYNQ7000_COUNT; ++port) {
             uni_hal_usart_context_t *ctx = draining[port];
-            if (ctx != nullptr) {
+            if (ctx != NULL) {
                 uint32_t const base = _uni_hal_uart_zynq7000_base(ctx->instance);
                 // A producer may already have queued bytes before its trigger runs.
                 _uni_hal_uart_zynq7000_start_tx(ctx, base, &woken);
-                if (draining[port] != nullptr) {
+                if (draining[port] != NULL) {
                     finish_or_defer(ctx, base, &woken);
                 }
             }
@@ -243,7 +246,7 @@ static void check_shift_registers(void *unused) {
 
 static void _uni_hal_uart_zynq7000_irq_handler(void *arg) {
     uni_hal_usart_context_t *ctx = (uni_hal_usart_context_t *)arg;
-    if (ctx == nullptr || ctx->io == nullptr) {
+    if (ctx == NULL || ctx->io == NULL) {
         return;
     }
 
@@ -297,19 +300,19 @@ static void _uni_hal_uart_zynq7000_irq_handler(void *arg) {
 
 bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
     bool result = false;
-    if (ctx != nullptr && ctx->io != nullptr) {
+    if (ctx != NULL && ctx->io != NULL) {
         int32_t idx = _uni_hal_uart_zynq7000_index(ctx->instance);
         if (idx >= 0 && (alarm_connected || alarm_available())) {
             XUartPs *dev = &_uni_hal_uart_zynq7000_dev[idx];
             uint32_t base = _uni_hal_uart_zynq7000_base(ctx->instance);
 
-            ctx->callback = nullptr;
-            ctx->callback_cookie = nullptr;
+            ctx->callback = NULL;
+            ctx->callback_cookie = NULL;
             ctx->in_transmission = false;
             ctx->initialized = false;
 
             XUartPs_Config *cfg = XUartPs_LookupConfig(base);
-            result = cfg != nullptr && XUartPs_CfgInitialize(dev, cfg, cfg->BaseAddress) == XST_SUCCESS;
+            result = cfg != NULL && XUartPs_CfgInitialize(dev, cfg, cfg->BaseAddress) == XST_SUCCESS;
             if (result && ctx->baudrate != 0U) {
                 result = XUartPs_SetBaudRate(dev, ctx->baudrate) == XST_SUCCESS;
             }
@@ -327,7 +330,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 bool const had_alarm = alarm_connected;
                 if (!had_alarm) {
                     alarm_connected = alarm_available() && uni_hal_core_zynq7000_irq_connect(
-                        XPS_GLOBAL_TMR_INT_ID, check_shift_registers, nullptr, UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT, true);
+                        XPS_GLOBAL_TMR_INT_ID, check_shift_registers, NULL, UNI_HAL_CORE_ZYNQ7000_IRQ_PRIORITY_DEFAULT, true);
                 }
                 // Publish the caller's pointer to the UART vector only when everything else is ready.
                 result = alarm_connected && uni_hal_core_zynq7000_irq_connect(
@@ -342,7 +345,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
                 }
             }
             if (result) {
-                draining[idx] = nullptr;
+                draining[idx] = NULL;
                 ctx->io->handlers.tx_trigger = _uni_hal_uart_zynq7000_tx_trigger;
                 ctx->io->handlers.tx_trigger_ctx = ctx;
                 XUartPs_WriteReg(base, XUARTPS_IER_OFFSET, UNI_HAL_UART_ZYNQ7000_RX_IRQS);

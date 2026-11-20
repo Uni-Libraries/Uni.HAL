@@ -3,6 +3,7 @@
 //
 
 // stdlib
+#include <stddef.h>
 #include <string.h>
 
 // uni_hal
@@ -16,7 +17,7 @@
 
 static bool _uni_hal_io_buf_create(uni_hal_io_buffer_t *buf) {
 #if configSUPPORT_STATIC_ALLOCATION
-    if (buf->size == 0U || buf->array == nullptr) {
+    if (buf->size == 0U || buf->array == NULL) {
         return false;
     }
     buf->handle = xStreamBufferCreateStatic(buf->size, 1U, buf->array, &buf->cb);
@@ -27,7 +28,7 @@ static bool _uni_hal_io_buf_create(uni_hal_io_buffer_t *buf) {
     // FreeRTOS adds the reserved slot itself in its dynamic constructor.
     buf->handle = xStreamBufferCreate(buf->size - 1U, 1U);
 #endif
-    return buf->handle != nullptr;
+    return buf->handle != NULL;
 }
 
 /**
@@ -90,7 +91,7 @@ static size_t _uni_hal_io_buf_write(uni_hal_io_buffer_t *buf, const uint8_t *dat
 //
 
 bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
-    if (ctx == nullptr) {
+    if (ctx == NULL) {
         return false;
     }
     uni_hal_io_deinit(ctx);
@@ -102,19 +103,19 @@ bool uni_hal_io_init(uni_hal_io_context_t *ctx) {
 }
 
 void uni_hal_io_deinit(uni_hal_io_context_t *ctx) {
-    if (ctx == nullptr) {
+    if (ctx == NULL) {
         return;
     }
 #if !configSUPPORT_STATIC_ALLOCATION
-    if (ctx->buf_rx.handle != nullptr) {
+    if (ctx->buf_rx.handle != NULL) {
         vStreamBufferDelete(ctx->buf_rx.handle);
     }
-    if (ctx->buf_tx.handle != nullptr) {
+    if (ctx->buf_tx.handle != NULL) {
         vStreamBufferDelete(ctx->buf_tx.handle);
     }
 #endif
-    ctx->buf_rx.handle = nullptr;
-    ctx->buf_tx.handle = nullptr;
+    ctx->buf_rx.handle = NULL;
+    ctx->buf_tx.handle = NULL;
     uni_hal_io_receive_sync_reset(ctx);
     ctx->buf_tx.sync_idx = 0U;
     ctx->handlers = (uni_hal_io_handlers_t){0};
@@ -128,7 +129,7 @@ void uni_hal_io_deinit(uni_hal_io_context_t *ctx) {
 
 size_t uni_hal_io_buffer_push_isr(uni_hal_io_buffer_t *buf, const uint8_t *data, size_t data_len, BaseType_t *woken) {
     size_t result = 0U;
-    if (buf != nullptr && buf->handle != nullptr && data != nullptr) {
+    if (buf != NULL && buf->handle != NULL && data != NULL) {
         result = xStreamBufferSendFromISR(buf->handle, data, data_len, woken);
     }
     return result;
@@ -137,7 +138,7 @@ size_t uni_hal_io_buffer_push_isr(uni_hal_io_buffer_t *buf, const uint8_t *data,
 
 size_t uni_hal_io_buffer_pop_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t data_len, BaseType_t *woken) {
     size_t result = 0U;
-    if (buf != nullptr && buf->handle != nullptr && data != nullptr) {
+    if (buf != NULL && buf->handle != NULL && data != NULL) {
         result = xStreamBufferReceiveFromISR(buf->handle, data, data_len, woken);
         if (result != 0U) {
             buf->sync_idx = 0U;
@@ -148,7 +149,7 @@ size_t uni_hal_io_buffer_pop_isr(uni_hal_io_buffer_t *buf, uint8_t *data, size_t
 
 
 bool uni_hal_io_buffer_is_empty(const uni_hal_io_buffer_t *buf) {
-    return buf == nullptr || buf->handle == nullptr || xStreamBufferBytesAvailable(buf->handle) == 0U;
+    return buf == NULL || buf->handle == NULL || xStreamBufferBytesAvailable(buf->handle) == 0U;
 }
 
 
@@ -158,7 +159,7 @@ bool uni_hal_io_buffer_is_empty(const uni_hal_io_buffer_t *buf) {
 
 size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
     size_t result = 0;
-    if (ctx != nullptr && ctx->buf_rx.handle != nullptr) {
+    if (ctx != NULL && ctx->buf_rx.handle != NULL) {
         result = xStreamBufferBytesAvailable(ctx->buf_rx.handle);
     }
     return result;
@@ -167,7 +168,7 @@ size_t uni_hal_io_receive_available(const uni_hal_io_context_t *ctx) {
 
 bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
     bool result = false;
-    if (ctx != nullptr && ctx->buf_rx.handle != nullptr) {
+    if (ctx != NULL && ctx->buf_rx.handle != NULL) {
         result = xStreamBufferReset(ctx->buf_rx.handle) == pdPASS;
         if (result) {
             uni_hal_io_receive_sync_reset(ctx);
@@ -180,7 +181,7 @@ bool uni_hal_io_receive_clear(uni_hal_io_context_t *ctx) {
 size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_t data_len, uint32_t timeout) {
     size_t received = 0;
 
-    if (ctx != nullptr && ctx->buf_rx.handle != nullptr && data != nullptr) {
+    if (ctx != NULL && ctx->buf_rx.handle != NULL && data != NULL) {
         uint32_t const t_start = uni_hal_systick_get_ms();
 
         for (;;) {
@@ -203,7 +204,7 @@ size_t uni_hal_io_receive_data(uni_hal_io_context_t *ctx, uint8_t *data, uint32_
 
 
 void uni_hal_io_receive_sync_reset(uni_hal_io_context_t *ctx) {
-    if (ctx != nullptr) {
+    if (ctx != NULL) {
         ctx->buf_rx.sync_idx = 0U;
         ctx->sync_pattern_addr = 0U;
         ctx->sync_pattern_len = 0U;
@@ -213,7 +214,7 @@ void uni_hal_io_receive_sync_reset(uni_hal_io_context_t *ctx) {
 
 bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, size_t data_len, uint32_t timeout) {
     // Validate inputs
-    if (ctx == nullptr || ctx->buf_rx.handle == nullptr || data == nullptr || data_len == 0U) {
+    if (ctx == NULL || ctx->buf_rx.handle == NULL || data == NULL || data_len == 0U) {
         return false;
     }
 
@@ -291,12 +292,12 @@ bool uni_hal_io_receive_sync(uni_hal_io_context_t *ctx, const uint8_t *data, siz
 size_t uni_hal_io_transmit_data(uni_hal_io_context_t *ctx, const uint8_t *data, uint32_t data_len) {
     size_t result = 0;
 
-    if (ctx != nullptr && ctx->buf_tx.handle != nullptr && data != nullptr) {
+    if (ctx != NULL && ctx->buf_tx.handle != NULL && data != NULL) {
         // push to buffer
         result = _uni_hal_io_buf_write(&ctx->buf_tx, data, data_len);
 
         // call TX trigger hook
-        if (result != 0U && ctx->handlers.tx_trigger != nullptr) {
+        if (result != 0U && ctx->handlers.tx_trigger != NULL) {
             ctx->handlers.tx_trigger(ctx, ctx->handlers.tx_trigger_ctx);
         }
     }

@@ -104,7 +104,7 @@ void rcc_test_reset(void) {
     rcc.CR = RCC_CR_MSIRDY | RCC_CR_MSIRGSEL | LL_RCC_MSIRANGE_6 |
         RCC_CR_HSERDY | RCC_CR_HSIRDY;
     rcc.CSR = RCC_CSR_LSIRDY;
-    g_uni_hal_rcc_config = nullptr;
+    g_uni_hal_rcc_config = NULL;
     g_uni_hal_rcc_status = (uni_hal_rcc_stm32l4_status_t){0};
     rcc_test_fault_on_switch = false;
     rcc_test_pll_locks = true;

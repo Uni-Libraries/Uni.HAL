@@ -19,7 +19,7 @@ int main(void) {
     assert(uni_hal_flash_read(FLASH_BASE - 1, 1, dst) == 0);
     assert(uni_hal_flash_read(FLASH_END + 1, 1, dst) == 0);
     assert(uni_hal_flash_read(FLASH_BASE, 0, dst) == 0);
-    assert(uni_hal_flash_read(FLASH_BASE, 1, nullptr) == 0);
+    assert(uni_hal_flash_read(FLASH_BASE, 1, NULL) == 0);
     assert(memcmp(dst, expected, sizeof(dst)) == 0);
     return 0;
 }

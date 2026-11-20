@@ -261,7 +261,7 @@ static bool _uni_hal_i2c_init_irq(uni_hal_i2c_context_t *ctx)
 static i2c_bus_t *get_bus(uni_hal_core_periph_e instance)
 {
     uint32_t number = _uni_hal_i2c_get_number(instance);
-    return number <= UNI_HAL_I2C_MAXINSTANCES ? &g_buses[number - 1U] : nullptr;
+    return number <= UNI_HAL_I2C_MAXINSTANCES ? &g_buses[number - 1U] : NULL;
 }
 
 static bool try_claim(i2c_bus_t *bus)
@@ -285,11 +285,11 @@ static void release_bus(i2c_bus_t *bus)
 static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uint32_t timeout)
 {
     if (!timeout || !polling_allowed() || !uni_hal_i2c_is_inited(ctx)) {
-        return nullptr;
+        return NULL;
     }
     i2c_bus_t *bus = get_bus(ctx->config.instance);
     if (!bus) {
-        return nullptr;
+        return NULL;
     }
     do {
         if (try_claim(bus)) {
@@ -297,10 +297,10 @@ static i2c_bus_t *claim_transfer(uni_hal_i2c_context_t *ctx, uint32_t start, uin
                 return bus;
             }
             release_bus(bus);
-            return nullptr;
+            return NULL;
         }
     } while (retry_budget(start, timeout));
-    return nullptr;
+    return NULL;
 }
 
 static void _uni_hal_i2c_callback(I2C_HandleTypeDef *handle, bool success)
@@ -417,7 +417,7 @@ bool uni_hal_i2c_init(uni_hal_i2c_context_t *ctx) {
 
 
 bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
-    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : nullptr;
+    i2c_bus_t *bus = ctx ? get_bus(ctx->config.instance) : NULL;
     if (__get_IPSR() || !bus || !try_claim(bus)) {
         return false;
     }
@@ -432,9 +432,9 @@ bool uni_hal_i2c_deinit(uni_hal_i2c_context_t *ctx) {
     }
     if (bus->event) {
         vSemaphoreDelete(bus->event);
-        bus->event = nullptr;
+        bus->event = NULL;
     }
-    bus->owner = nullptr;
+    bus->owner = NULL;
     ctx->state.initialized = false;
     release_bus(bus);
     return true;
@@ -557,8 +557,8 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
     if (bus->irq_state == IRQ_PENDING) {
         // No STOP/abort interrupt is guaranteed on a stalled bus. Reset the peripheral
         // synchronously, including its interrupt sources, before releasing caller storage.
-        handle->XferISR = nullptr;
-        handle->pBuffPtr = nullptr;
+        handle->XferISR = NULL;
+        handle->pBuffPtr = NULL;
         handle->XferCount = 0U;
         handle->XferSize = 0U;
         bool reset = LL_I2C_DeInit(handle->Instance) == SUCCESS;
@@ -566,7 +566,7 @@ static bool mem_transfer(bool read, uni_hal_i2c_context_t *ctx, uint16_t dev_add
         ctx->state.initialized = reset && HAL_I2C_Init(handle) == HAL_OK;
     } else if (status == HAL_OK) {
         result = bus->irq_state == IRQ_SUCCEEDED;
-        handle->pBuffPtr = nullptr;
+        handle->pBuffPtr = NULL;
     }
     bus->irq_state = IRQ_IDLE;
     bus->wait_with_event = false;

@@ -1,3 +1,5 @@
+#include <stddef.h>
+
 #include "io/uni_hal_io_tunnel.h"
 #include "uart/uni_hal_uart.h"
 #include "model.h"
@@ -16,7 +18,7 @@ int main(void) {
     CHECK(uni_hal_io_tunnel_init(&tunnel, &first_ctx, &second_ctx, false));
 
     // The first byte must start a previously idle UART from the other UART's receive interrupt.
-    tunnel_model_wake_on(second_ctx.buf_tx.handle, nullptr);
+    tunnel_model_wake_on(second_ctx.buf_tx.handle, NULL);
     unsigned yields = uart_model_yields;
     uart_model_rx(0, 0x41);
     uart_model_irq(0);
@@ -26,7 +28,7 @@ int main(void) {
 
     // A TX pop can also wake a writer. Transparent forwarding preserves the local input.
     CHECK(uni_hal_io_tunnel_init(&tunnel, &first_ctx, &second_ctx, true));
-    tunnel_model_wake_on(nullptr, first_ctx.buf_tx.handle);
+    tunnel_model_wake_on(NULL, first_ctx.buf_tx.handle);
     yields = uart_model_yields;
     uart_model_rx(1, 0x5A);
     uart_model_irq(1);

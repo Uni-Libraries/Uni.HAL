@@ -44,27 +44,59 @@ HAL_StatusTypeDef HAL_I2CEx_ConfigDigitalFilter(I2C_HandleTypeDef *handle, uint3
 }
 
 // This fixture only exercises lifecycle calls. The transfer entry points must remain unused.
-HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *, uint16_t, uint32_t, uint32_t) {
+HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *handle, uint16_t addr, uint32_t trials, uint32_t timeout) {
+    (void)handle;
+    (void)addr;
+    (void)trials;
+    (void)timeout;
     assert(false);
     return HAL_ERROR;
 }
 
-HAL_StatusTypeDef HAL_I2C_Master_Receive(I2C_HandleTypeDef *, uint16_t, uint8_t *, uint16_t, uint32_t) {
+HAL_StatusTypeDef HAL_I2C_Master_Receive(I2C_HandleTypeDef *handle, uint16_t addr, uint8_t *data, uint16_t len,
+                                        uint32_t timeout) {
+    (void)handle;
+    (void)addr;
+    (void)data;
+    (void)len;
+    (void)timeout;
     assert(false);
     return HAL_ERROR;
 }
 
-HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *, uint16_t, uint8_t *, uint16_t, uint32_t) {
+HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *handle, uint16_t addr, uint8_t *data, uint16_t len,
+                                         uint32_t timeout) {
+    (void)handle;
+    (void)addr;
+    (void)data;
+    (void)len;
+    (void)timeout;
     assert(false);
     return HAL_ERROR;
 }
 
-HAL_StatusTypeDef HAL_I2C_Mem_Read(I2C_HandleTypeDef *, uint16_t, uint16_t, uint16_t, uint8_t *, uint16_t, uint32_t) {
+HAL_StatusTypeDef HAL_I2C_Mem_Read(I2C_HandleTypeDef *handle, uint16_t addr, uint16_t reg, uint16_t reg_size,
+                                  uint8_t *data, uint16_t len, uint32_t timeout) {
+    (void)handle;
+    (void)addr;
+    (void)reg;
+    (void)reg_size;
+    (void)data;
+    (void)len;
+    (void)timeout;
     assert(false);
     return HAL_ERROR;
 }
 
-HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *, uint16_t, uint16_t, uint16_t, uint8_t *, uint16_t, uint32_t) {
+HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *handle, uint16_t addr, uint16_t reg, uint16_t reg_size,
+                                   uint8_t *data, uint16_t len, uint32_t timeout) {
+    (void)handle;
+    (void)addr;
+    (void)reg;
+    (void)reg_size;
+    (void)data;
+    (void)len;
+    (void)timeout;
     assert(false);
     return HAL_ERROR;
 }
@@ -78,7 +110,7 @@ int main(void) {
     uni_hal_i2c_context_t other = ctx;
     uni_hal_i2c_context_t invalid = {0};
 
-    assert(!uni_hal_i2c_deinit(nullptr));
+    assert(!uni_hal_i2c_deinit(NULL));
     assert(!uni_hal_i2c_deinit(&invalid));
     assert(uni_hal_i2c_recover(&ctx));
     assert(hal_deinits == 0U && peripheral_resets == 1U && hal_inits == 1U);

@@ -1,3 +1,5 @@
+#include <stddef.h>
+
 #include "model.h"
 #include "xuartps.h"
 #include "xparameters_ps.h"
@@ -18,11 +20,11 @@ static uint64_t clock_count, comparator;
 bool uart_model_ppi_available = true;
 unsigned uart_model_fail_irq;
 XScuGic g_uni_hal_core_zynq7000_gic;
-bool uart_model_irq_connected(unsigned id) { return vectors[id].handler != nullptr; }
+bool uart_model_irq_connected(unsigned id) { return vectors[id].handler != NULL; }
 void XScuGic_Disconnect(XScuGic *gic, uint32_t id) {
     (void)gic;
-    vectors[id].handler = nullptr;
-    vectors[id].ctx = nullptr;
+    vectors[id].handler = NULL;
+    vectors[id].ctx = NULL;
 }
 uint32_t uart_model_timer_control = 1U;
 unsigned uart_model_bad_task_critical, uart_model_yields;
