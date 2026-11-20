@@ -30,6 +30,7 @@
 #include "rcc/uni_hal_rcc_stm32h7_internal.h"
 #include "systick/uni_hal_systick.h"
 #include "systick/uni_hal_systick_stm32.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 
 
 
@@ -96,15 +97,6 @@ enum {
 };
 
 
-typedef struct {
-    bool dwt_ready;
-    uint32_t start_tick;
-    uint32_t timeout_tick;
-    uint32_t start_ms;
-    uint32_t timeout_ms;
-} uni_hal_rcc_wait_timeout_t;
-
-
 static void _uni_hal_stm_rcc_diag_capture(volatile uni_hal_rcc_stm32h7_diag_t* dst) {
     if (dst == nullptr) {
         return;
@@ -130,48 +122,6 @@ static void _uni_hal_stm_rcc_diag_capture(volatile uni_hal_rcc_stm32h7_diag_t* d
 }
 
 
-static void _uni_hal_stm_rcc_wait_timeout_begin(uni_hal_rcc_wait_timeout_t* timeout_ctx, uint32_t timeout_ms) {
-    if (timeout_ctx == nullptr) {
-        return;
-    }
-
-    timeout_ctx->dwt_ready = uni_hal_dwt_is_inited();
-    timeout_ctx->start_tick = 0U;
-    timeout_ctx->timeout_tick = 0U;
-    timeout_ctx->start_ms = uni_hal_systick_get_ms();
-    timeout_ctx->timeout_ms = timeout_ms;
-
-    if (timeout_ctx->dwt_ready) {
-        timeout_ctx->start_tick = uni_hal_dwt_get_tick();
-        timeout_ctx->timeout_tick = uni_hal_dwt_timeout_ms_to_tick(timeout_ms);
-    }
-}
-
-
-static bool _uni_hal_stm_rcc_wait_timeout_expired(const uni_hal_rcc_wait_timeout_t* timeout_ctx) {
-    if (timeout_ctx == nullptr) {
-        return true;
-    }
-
-    if (timeout_ctx->timeout_ms == 0U) {
-        return true;
-    }
-
-    if (timeout_ctx->dwt_ready) {
-        if (timeout_ctx->timeout_tick == 0U) {
-            uint32_t elapsed_ms = uni_hal_systick_get_ms() - timeout_ctx->start_ms;
-            return elapsed_ms >= timeout_ctx->timeout_ms;
-        }
-
-        uint32_t elapsed_tick = uni_hal_dwt_compare(timeout_ctx->start_tick, uni_hal_dwt_get_tick());
-        return elapsed_tick >= timeout_ctx->timeout_tick;
-    }
-
-    uint32_t elapsed_ms = uni_hal_systick_get_ms() - timeout_ctx->start_ms;
-    return elapsed_ms >= timeout_ctx->timeout_ms;
-}
-
-
 static bool _uni_hal_stm_rcc_wait_ready(uint32_t (*get_state)(void), uint32_t expected, uint32_t timeout_ms) {
     if (get_state() == expected) {
         return true;
@@ -186,11 +136,24 @@ static bool _uni_hal_stm_rcc_wait_ready(uint32_t (*get_state)(void), uint32_t ex
         return false;
     }
 
-    uni_hal_rcc_wait_timeout_t timeout_ctx = { 0 };
-    _uni_hal_stm_rcc_wait_timeout_begin(&timeout_ctx, timeout_ms);
+    uni_hal_stm32_poll_budget_t budget = uni_hal_stm32_poll_begin(timeout_ms);
+    bool const use_dwt = SystemCoreClock != 0U && uni_hal_dwt_is_inited();
+    uint32_t previous_cycle = use_dwt ? uni_hal_dwt_get_tick() : 0U;
+    uint64_t cycles_left = ((uint64_t)timeout_ms * SystemCoreClock + 999U) / 1000U;
     while (get_state() != expected) {
-        if (g_uni_hal_rcc_status.css_recovery_pending || _uni_hal_stm_rcc_wait_timeout_expired(&timeout_ctx)) {
+        if (g_uni_hal_rcc_status.css_recovery_pending || uni_hal_stm32_poll_expired(&budget)) {
             return false;
+        }
+        // CYCCNT still measures real time with SysTick masked. Count successive
+        // deltas because a configured oscillator timeout may span several wraps.
+        if (use_dwt) {
+            uint32_t const cycle = uni_hal_dwt_get_tick();
+            uint32_t const elapsed = uni_hal_dwt_compare(previous_cycle, cycle);
+            if (elapsed >= cycles_left) {
+                return false;
+            }
+            cycles_left -= elapsed;
+            previous_cycle = cycle;
         }
     }
     return true;

@@ -18,6 +18,7 @@ static DBGMCU_TypeDef debug;
 #include "../../3rdparty/st_stm32h7/src_device/system_stm32h7xx.c"
 #include "../../3rdparty/st_stm32h7/src_hal/stm32h7xx_ll_rcc.c"
 #include "model.h"
+#include "dwt/uni_hal_dwt_internal.h"
 
 SysTick_Type model_systick;
 #undef SysTick
@@ -25,7 +26,9 @@ SysTick_Type model_systick;
 bool model_pll_locks = true, model_pll_switches = true, model_inject_css;
 bool model_css_active, model_flash_allowed = true;
 bool model_css_on_claim, model_css_after_claim;
-unsigned model_clock_reads, model_flash_calls;
+unsigned model_clock_reads, model_flash_calls, model_pll_delay;
+bool model_have_dwt;
+uint32_t model_ms_step, model_dwt_step;
 
 static uint32_t model_hse_ready(void) {
     MODIFY_REG(RCC->CR, RCC_CR_HSERDY, (RCC->CR & RCC_CR_HSEON) ? RCC_CR_HSERDY : 0U);
@@ -33,6 +36,10 @@ static uint32_t model_hse_ready(void) {
 }
 
 static uint32_t model_pll_ready(void) {
+    if ((RCC->CR & RCC_CR_PLL1ON) && model_pll_delay != 0U) {
+        --model_pll_delay;
+        return 0U;
+    }
     MODIFY_REG(RCC->CR, RCC_CR_PLL1RDY, (model_pll_locks && (RCC->CR & RCC_CR_PLL1ON)) ? RCC_CR_PLL1RDY : 0U);
     return LL_RCC_PLL1_IsReady();
 }
@@ -77,13 +84,21 @@ static void model_irq_resume(uint32_t mask) {
 
 bool uni_hal_flash_configure_latency_auto(uint32_t hz) { ++model_flash_calls; return model_flash_allowed && hz != 0U; }
 bool uni_hal_dwt_init(void) { return false; }
-bool uni_hal_dwt_is_inited(void) { return false; }
-uint32_t uni_hal_dwt_get_tick(void) { return 0; }
-uint32_t uni_hal_dwt_timeout_ms_to_tick(uint32_t ms) { return ms; }
+bool uni_hal_dwt_is_inited(void) { return model_have_dwt; }
+uint32_t uni_hal_dwt_get_tick(void) {
+    static uint32_t cycles;
+    cycles += model_dwt_step;
+    return cycles;
+}
+uint32_t uni_hal_dwt_timeout_ms_to_tick(uint32_t ms) {
+    return uni_hal_dwt_internal_timeout_ms_to_tick(ms, SystemCoreClock);
+}
 uint32_t uni_hal_dwt_compare(uint32_t start, uint32_t end) { return end - start; }
 uint32_t uni_hal_systick_get_ms(void) {
+    static uint32_t ms;
     if (model_css_active) ++model_clock_reads;
-    return 0;
+    ms += model_ms_step;
+    return ms;
 }
 bool uni_hal_systick_init(void) {
     SystemCoreClockUpdate();
