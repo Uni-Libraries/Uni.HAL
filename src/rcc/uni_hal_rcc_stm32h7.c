@@ -1407,13 +1407,23 @@ static const kernel_clock_source_t i2c_clock_sources[2][4] = {
     },
 };
 
-static const kernel_clock_source_t spi45_clock_sources[] = {
-    {UNI_HAL_RCC_CLKSRC_PCLK2, LL_RCC_SPI45_CLKSOURCE_PCLK2},
-    {UNI_HAL_RCC_CLKSRC_PLL2Q, LL_RCC_SPI45_CLKSOURCE_PLL2Q},
-    {UNI_HAL_RCC_CLKSRC_PLL3Q, LL_RCC_SPI45_CLKSOURCE_PLL3Q},
-    {UNI_HAL_RCC_CLKSRC_HSI, LL_RCC_SPI45_CLKSOURCE_HSI},
-    {UNI_HAL_RCC_CLKSRC_CSI, LL_RCC_SPI45_CLKSOURCE_CSI},
-    {UNI_HAL_RCC_CLKSRC_HSE, LL_RCC_SPI45_CLKSOURCE_HSE},
+static const kernel_clock_source_t spi456_clock_sources[2][6] = {
+    {
+        {UNI_HAL_RCC_CLKSRC_PCLK2, LL_RCC_SPI45_CLKSOURCE_PCLK2},
+        {UNI_HAL_RCC_CLKSRC_PLL2Q, LL_RCC_SPI45_CLKSOURCE_PLL2Q},
+        {UNI_HAL_RCC_CLKSRC_PLL3Q, LL_RCC_SPI45_CLKSOURCE_PLL3Q},
+        {UNI_HAL_RCC_CLKSRC_HSI, LL_RCC_SPI45_CLKSOURCE_HSI},
+        {UNI_HAL_RCC_CLKSRC_CSI, LL_RCC_SPI45_CLKSOURCE_CSI},
+        {UNI_HAL_RCC_CLKSRC_HSE, LL_RCC_SPI45_CLKSOURCE_HSE},
+    },
+    {
+        {UNI_HAL_RCC_CLKSRC_PCLK4, LL_RCC_SPI6_CLKSOURCE_PCLK4},
+        {UNI_HAL_RCC_CLKSRC_PLL2Q, LL_RCC_SPI6_CLKSOURCE_PLL2Q},
+        {UNI_HAL_RCC_CLKSRC_PLL3Q, LL_RCC_SPI6_CLKSOURCE_PLL3Q},
+        {UNI_HAL_RCC_CLKSRC_HSI, LL_RCC_SPI6_CLKSOURCE_HSI},
+        {UNI_HAL_RCC_CLKSRC_CSI, LL_RCC_SPI6_CLKSOURCE_CSI},
+        {UNI_HAL_RCC_CLKSRC_HSE, LL_RCC_SPI6_CLKSOURCE_HSE},
+    },
 };
 
 static const kernel_clock_source_t uart_clock_sources[2][6] = {
@@ -1520,11 +1530,13 @@ uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
             }
             break;
         case UNI_HAL_CORE_PERIPH_SPI_4:
-        case UNI_HAL_CORE_PERIPH_SPI_5: {
-            uint32_t const mux = LL_RCC_GetSPIClockSource(LL_RCC_SPI45_CLKSOURCE);
-            for (size_t i = 0; i < sizeof spi45_clock_sources / sizeof spi45_clock_sources[0]; ++i) {
-                if (spi45_clock_sources[i].selector == mux) {
-                    return spi45_clock_sources[i].source;
+        case UNI_HAL_CORE_PERIPH_SPI_5:
+        case UNI_HAL_CORE_PERIPH_SPI_6: {
+            bool const spi6 = target == UNI_HAL_CORE_PERIPH_SPI_6;
+            uint32_t const mux = LL_RCC_GetSPIClockSource(spi6 ? LL_RCC_SPI6_CLKSOURCE : LL_RCC_SPI45_CLKSOURCE);
+            for (unsigned i = 0; i < 6U; ++i) {
+                if (spi456_clock_sources[spi6][i].selector == mux) {
+                    return spi456_clock_sources[spi6][i].source;
                 }
             }
             break;
@@ -1686,41 +1698,13 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
             }
             case UNI_HAL_CORE_PERIPH_SPI_4:
             case UNI_HAL_CORE_PERIPH_SPI_5:
-                for (size_t i = 0; i < sizeof spi45_clock_sources / sizeof spi45_clock_sources[0]; ++i) {
-                    if (spi45_clock_sources[i].source == source) {
-                        LL_RCC_SetSPIClockSource(spi45_clock_sources[i].selector);
+            case UNI_HAL_CORE_PERIPH_SPI_6: {
+                const kernel_clock_source_t *choices = spi456_clock_sources[target == UNI_HAL_CORE_PERIPH_SPI_6];
+                for (unsigned i = 0; i < 6U; ++i) {
+                    if (choices[i].source == source) {
+                        LL_RCC_SetSPIClockSource(choices[i].selector);
                         return true;
                     }
-                }
-                break;
-            case UNI_HAL_CORE_PERIPH_SPI_6:{
-                uint32_t src = UINT32_MAX;
-                switch (source) {
-                    case UNI_HAL_RCC_CLKSRC_PCLK4:
-                        src = LL_RCC_SPI6_CLKSOURCE_PCLK4;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_PLL2Q:
-                        src = LL_RCC_SPI6_CLKSOURCE_PLL2Q;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_PLL3Q:
-                        src = LL_RCC_SPI6_CLKSOURCE_PLL3Q;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_HSI:
-                        src = LL_RCC_SPI6_CLKSOURCE_HSI;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_CSI:
-                        src = LL_RCC_SPI6_CLKSOURCE_CSI;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_HSE:
-                        src = LL_RCC_SPI6_CLKSOURCE_HSE;
-                        break;
-                    default:
-                        // unknown clock source
-                        break;
-                }
-                if (src != UINT32_MAX) {
-                    LL_RCC_SetSPIClockSource(src);
-                    result = true;
                 }
                 break;
             }
