@@ -59,6 +59,15 @@ static ADC_Common_TypeDef common3;
 #undef ADC123_COMMON
 #define ADC123_COMMON (&common)
 #include "dma/uni_hal_dma_stm32l4.c"
+#include <stm32l4xx_ll_adc.h>
+
+// Hardware ignores writing zero to ADEN when LL writes the ADSTART command.
+static void model_start_conversion(ADC_TypeDef *adc) {
+    uint32_t const enabled = adc->CR & ADC_CR_ADEN;
+    LL_ADC_REG_StartConversion(adc);
+    adc->CR |= enabled;
+}
+#define LL_ADC_REG_StartConversion model_start_conversion
 #endif
 
 static bool model_dma_init(uni_hal_dma_context_t *dma);
@@ -96,8 +105,12 @@ bool adc_model_untouched(void) {
            memcmp(dma_banks, reset_dma, sizeof dma_banks) == 0;
 }
 
-const ADC_TypeDef *adc_model_registers(void) {
-    return ADC1;
+const ADC_TypeDef *adc_model_registers(uni_hal_core_periph_e instance) {
+    return _uni_hal_adc_get_instance(instance);
+}
+
+ADC_Common_TypeDef *adc_model_common_registers(void) {
+    return &common;
 }
 
 bool adc_model_capturing(const volatile uint16_t *data, uint32_t count) {

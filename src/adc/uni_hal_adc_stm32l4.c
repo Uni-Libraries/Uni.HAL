@@ -18,6 +18,7 @@
 // Uni.HAL
 #include "adc/uni_hal_adc.h"
 #include "adc/uni_hal_adc_stm32_config.h"
+#include "core/uni_hal_core.h"
 #include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
 #include "rcc/uni_hal_rcc.h"
@@ -493,46 +494,40 @@ static uint32_t _uni_hal_adc_get_resolution(uint32_t bits) {
 
 
 bool _uni_hal_adc_configure_common(uni_hal_adc_context_t *ctx) {
-    bool result = false;
-
-    // one common block for the three ADC
-    ADC_Common_TypeDef *common_instance = __LL_ADC_COMMON_INSTANCE(_uni_hal_adc_get_instance(ctx->config.instance));
     uint32_t const clock = _uni_hal_adc_get_clock(&ctx->config);
-
     if (clock == UINT32_MAX) {
-        // no such clock setting
+        return false;
     }
-    else if (!__LL_ADC_IS_ENABLED_ALL_COMMON_INSTANCE(common_instance)) {
-        // internal path
-        uint32_t internal_path = LL_ADC_PATH_INTERNAL_NONE;
-        for (uint32_t idx_channel = 0; idx_channel < ctx->config.channels_count; idx_channel++) {
-            switch (ctx->config.channels[idx_channel]) {
-            case UNI_HAL_ADC_STM32L4_CHANNEL_REFINT:
-                internal_path |= LL_ADC_PATH_INTERNAL_VREFINT;
-                break;
-            case UNI_HAL_ADC_STM32L4_CHANNEL_TEMPSENSOR:
-                internal_path |= LL_ADC_PATH_INTERNAL_TEMPSENSOR;
-                break;
-            case UNI_HAL_ADC_STM32L4_CHANNEL_VBAT:
-                internal_path |= LL_ADC_PATH_INTERNAL_VBAT;
-                break;
-            default:
-                break;
-            }
+
+    uint32_t paths = LL_ADC_PATH_INTERNAL_NONE;
+    for (uint32_t i = 0U; i < ctx->config.channels_count; ++i) {
+        switch (ctx->config.channels[i]) {
+        case UNI_HAL_ADC_STM32L4_CHANNEL_REFINT:
+            paths |= LL_ADC_PATH_INTERNAL_VREFINT;
+            break;
+        case UNI_HAL_ADC_STM32L4_CHANNEL_TEMPSENSOR:
+            paths |= LL_ADC_PATH_INTERNAL_TEMPSENSOR;
+            break;
+        case UNI_HAL_ADC_STM32L4_CHANNEL_VBAT:
+            paths |= LL_ADC_PATH_INTERNAL_VBAT;
+            break;
+        default:
+            break;
         }
-
-        LL_ADC_SetCommonClock(common_instance, clock);
-        LL_ADC_SetMultimode(common_instance, LL_ADC_MULTI_INDEPENDENT);
-        LL_ADC_SetCommonPathInternalCh(common_instance, internal_path);
-
-        result = true;
-    }
-    else{
-        result = true;
     }
 
-
-    return result;
+    // All three ADCs share CCR. The clock and multimode require disabled ADCs.
+    // Each new scan can enable its analog inputs independently (RM0351, ADC_CCR).
+    uint32_t const mask = uni_hal_core_irq_pause();
+    if (!__LL_ADC_IS_ENABLED_ALL_COMMON_INSTANCE(ADC123_COMMON)) {
+        LL_ADC_SetCommonClock(ADC123_COMMON, clock);
+        LL_ADC_SetMultimode(ADC123_COMMON, LL_ADC_MULTI_INDEPENDENT);
+        LL_ADC_SetCommonPathInternalCh(ADC123_COMMON, paths);
+    } else if (paths != LL_ADC_PATH_INTERNAL_NONE) {
+        LL_ADC_SetCommonPathInternalChAdd(ADC123_COMMON, paths);
+    }
+    uni_hal_core_irq_resume(mask);
+    return true;
 }
 
 

@@ -12,7 +12,7 @@ unsigned test_adc(void) {
     if (!uni_hal_adc_init(&ctx)) {
         return __LINE__;
     }
-    const ADC_TypeDef *adc = adc_model_registers();
+    const ADC_TypeDef *adc = adc_model_registers(ctx.config.instance);
     const uint32_t sequence = (3U << ADC_SQR1_L_Pos) | (2U << ADC_SQR1_SQ1_Pos) |
                               (6U << ADC_SQR1_SQ2_Pos) | (6U << ADC_SQR1_SQ3_Pos) |
                               (19U << ADC_SQR1_SQ4_Pos);
