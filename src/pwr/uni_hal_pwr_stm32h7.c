@@ -11,7 +11,7 @@
 #include <stm32h7xx_ll_pwr.h>
 
 // Uni.HAL
-#include "dwt/uni_hal_dwt.h"
+#include "dwt/uni_hal_dwt_stm32_wait.h"
 #include "pwr/uni_hal_pwr.h"
 #include "pwr/uni_hal_pwr_stm32.h"
 #include "rcc/uni_hal_rcc.h"
@@ -29,12 +29,14 @@ extern uni_hal_pwr_context_t g_uni_hal_pwr_ctx;
 // Private
 //
 
+enum { UNI_HAL_PWR_VOS_TIMEOUT_MS = 200U };
+
 static bool _uni_hal_stm_pwr_is_voltage_ready(void) {
     return (LL_PWR_IsActiveFlag_ACTVOS() != 0U) && (LL_PWR_IsActiveFlag_VOS() != 0U);
 }
 
 
-static bool _uni_hal_stm_pwr_wait_vos_ready(uint32_t timeout_us) {
+static bool _uni_hal_stm_pwr_wait_vos_ready(void) {
     if (SystemCoreClock == 0U) {
         return false;
     }
@@ -44,24 +46,11 @@ static bool _uni_hal_stm_pwr_wait_vos_ready(uint32_t timeout_us) {
     }
 
     if (!uni_hal_dwt_is_inited()) {
-        if (!uni_hal_dwt_init()) {
-            return false;
-        }
+        (void)uni_hal_dwt_init();
     }
-
-    if (timeout_us == 0U) {
-        return false;
-    }
-
-    uint32_t const start_tick = uni_hal_dwt_get_tick();
-    uint64_t const timeout_ticks_64 = ((uint64_t)SystemCoreClock * (uint64_t)timeout_us) / 1'000'000ULL;
-    uint32_t timeout_ticks = timeout_ticks_64 > (uint64_t)UINT32_MAX ? UINT32_MAX : (uint32_t)timeout_ticks_64;
-    if (timeout_ticks == 0U) {
-        timeout_ticks = 1U;
-    }
-
+    uni_hal_stm32_clock_timeout_t timeout = uni_hal_stm32_clock_timeout_begin(UNI_HAL_PWR_VOS_TIMEOUT_MS);
     while (!_uni_hal_stm_pwr_is_voltage_ready()) {
-        if (uni_hal_dwt_compare(start_tick, uni_hal_dwt_get_tick()) >= timeout_ticks) {
+        if (uni_hal_stm32_clock_timeout_expired(&timeout)) {
             return false;
         }
     }
@@ -71,30 +60,28 @@ static bool _uni_hal_stm_pwr_wait_vos_ready(uint32_t timeout_us) {
 
 
 static bool _uni_hal_stm_pwr_voltagescale(void) {
-    uint32_t const pwr_timeout_us = 200'000U;
-
     // enable LDO
     LL_PWR_ConfigSupply(LL_PWR_LDO_SUPPLY);
-    if (!_uni_hal_stm_pwr_wait_vos_ready(pwr_timeout_us)) {
+    if (!_uni_hal_stm_pwr_wait_vos_ready()) {
         return false;
     }
 
     // set VOS1
     LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
-    if (!_uni_hal_stm_pwr_wait_vos_ready(pwr_timeout_us)) {
+    if (!_uni_hal_stm_pwr_wait_vos_ready()) {
         return false;
     }
 
     // enable LDO overdrive
     // event on VOS1 it improves RAM stability on some MCU samples
     SYSCFG->PWRCR |= SYSCFG_PWRCR_ODEN;
-    if (!_uni_hal_stm_pwr_wait_vos_ready(pwr_timeout_us)) {
+    if (!_uni_hal_stm_pwr_wait_vos_ready()) {
         return false;
     }
 
     // set VOS0
     LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE0);
-    if (!_uni_hal_stm_pwr_wait_vos_ready(pwr_timeout_us)) {
+    if (!_uni_hal_stm_pwr_wait_vos_ready()) {
         return false;
     }
 
