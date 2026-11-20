@@ -14,6 +14,8 @@
 
 // uni_hal
 #include "dma/uni_hal_dma.h"
+#include "dma/uni_hal_dma_stm32h7_irq.h"
+#include "core/uni_hal_core.h"
 #include "rcc/uni_hal_rcc.h"
 
 
@@ -28,87 +30,99 @@
 // ISRs
 //
 
-void DMA1_Stream0_IRQHandler(void) {
-    UNI_HAL_OS_ISR_ENTER();
+typedef struct {
+    const uni_hal_dma_context_t *dma;
+    uni_hal_dma_stm32h7_event_fn event;
+    void *owner;
+    uint32_t saved_interrupts;
+    bool circular_running;
+} dma_listener_t;
 
-    // transfer complete
-    if (LL_DMA_IsActiveFlag_TC0(DMA1)) {
-        LL_DMA_ClearFlag_TC0(DMA1);
+static dma_listener_t listeners[2][8];
+static const uint8_t flag_shift[4] = {0U, 6U, 16U, 22U};
+#define DMA_STREAM_FLAGS (DMA_LISR_TCIF0 | DMA_LISR_HTIF0 | DMA_LISR_TEIF0 | DMA_LISR_DMEIF0 | DMA_LISR_FEIF0)
+
+static void clear_stream_flags(DMA_TypeDef *module, uint32_t stream, uint32_t flags) {
+    uint32_t const bits = flags << flag_shift[stream % 4U];
+    if (stream < 4U) {
+        WRITE_REG(module->LIFCR, bits);
+    } else {
+        WRITE_REG(module->HIFCR, bits);
     }
-
-    // transfer error
-    if (LL_DMA_IsActiveFlag_TE0(DMA1)) {
-        LL_DMA_ClearFlag_TE0(DMA1);
-    }
-
-    UNI_HAL_OS_ISR_EXIT(pdFALSE);
 }
 
-void DMA1_Stream1_IRQHandler(void) {
-    UNI_HAL_OS_ISR_ENTER();
-
-    // transfer complete
-    if (LL_DMA_IsActiveFlag_TC1(DMA1)) {
-        LL_DMA_ClearFlag_TC1(DMA1);
-    }
-
-    // transfer error
-    if (LL_DMA_IsActiveFlag_TE1(DMA1)) {
-        LL_DMA_ClearFlag_TE1(DMA1);
-    }
-
-    UNI_HAL_OS_ISR_EXIT(pdFALSE);
+static DMA_Stream_TypeDef *stream_regs(DMA_TypeDef *module, uint32_t stream) {
+    return (DMA_Stream_TypeDef *)((uintptr_t)module + LL_DMA_STR_OFFSET_TAB[stream]);
 }
 
-void DMA1_Stream2_IRQHandler(void) {
-    UNI_HAL_OS_ISR_ENTER();
-
-    // transfer complete
-    if (LL_DMA_IsActiveFlag_TC2(DMA1)) {
-        LL_DMA_ClearFlag_TC2(DMA1);
+static dma_listener_t *stream_owner(const uni_hal_dma_context_t *dma) {
+    if (!dma || (unsigned)dma->config.channel > LL_DMA_STREAM_7) {
+        return nullptr;
     }
-
-    // transfer error
-    if (LL_DMA_IsActiveFlag_TE2(DMA1)) {
-        LL_DMA_ClearFlag_TE2(DMA1);
-    }
-
-    UNI_HAL_OS_ISR_EXIT(pdFALSE);
+    DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(dma->config.instance);
+    return module ? &listeners[module == DMA2][dma->config.channel] : nullptr;
 }
 
-void DMA1_Stream3_IRQHandler(void) {
-    UNI_HAL_OS_ISR_ENTER();
-
-    // transfer complete
-    if (LL_DMA_IsActiveFlag_TC3(DMA1)) {
-        LL_DMA_ClearFlag_TC3(DMA1);
+bool uni_hal_dma_stm32h7_claim(const uni_hal_dma_context_t *dma, uni_hal_dma_stm32h7_event_fn event, void *owner) {
+    DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(dma->config.instance);
+    uint32_t const stream = dma->config.channel;
+    if (!module || stream > LL_DMA_STREAM_7 || !dma->state.initialized) {
+        return false;
     }
-
-    // transfer error
-    if (LL_DMA_IsActiveFlag_TE3(DMA1)) {
-        LL_DMA_ClearFlag_TE3(DMA1);
+    dma_listener_t *slot = &listeners[module == DMA2][stream];
+    if (slot->dma || LL_DMA_IsEnabledStream(module, stream)) {
+        return false;
     }
-
-    UNI_HAL_OS_ISR_EXIT(pdFALSE);
+    clear_stream_flags(module, stream, DMA_STREAM_FLAGS);
+    *slot = (dma_listener_t){.dma = dma, .event = event, .owner = owner,
+        .saved_interrupts = stream_regs(module, stream)->CR & (DMA_SxCR_TCIE | DMA_SxCR_TEIE | DMA_SxCR_DMEIE)};
+    return true;
 }
 
-// Streams without a dedicated handler above: uni_hal_dma_init() enables their
-// interrupt as well, so they need a handler that acknowledges the flags.
-#define UNI_HAL_DMA_IRQ_HANDLER(module, stream)                 \
-    void module##_Stream##stream##_IRQHandler(void) {           \
-        UNI_HAL_OS_ISR_ENTER();                                       \
-                                                                \
-        if (LL_DMA_IsActiveFlag_TC##stream(module)) {           \
-            LL_DMA_ClearFlag_TC##stream(module);                \
-        }                                                       \
-                                                                \
-        if (LL_DMA_IsActiveFlag_TE##stream(module)) {           \
-            LL_DMA_ClearFlag_TE##stream(module);                \
-        }                                                       \
-                                                                \
-        UNI_HAL_OS_ISR_EXIT(pdFALSE);                            \
+void uni_hal_dma_stm32h7_circular_started(const uni_hal_dma_context_t *dma) {
+    // Only the owner of an established circular capture may stop it through the public DMA API.
+    stream_owner(dma)->circular_running = true;
+}
+
+bool uni_hal_dma_stm32h7_release(const uni_hal_dma_context_t *dma) {
+    DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(dma->config.instance);
+    uint32_t const stream = dma->config.channel;
+    uint32_t const flags = (stream < 4U ? module->LISR : module->HISR) >> flag_shift[stream % 4U];
+    clear_stream_flags(module, stream, DMA_STREAM_FLAGS);
+    dma_listener_t *slot = &listeners[module == DMA2][stream];
+    MODIFY_REG(stream_regs(module, stream)->CR, DMA_SxCR_TCIE | DMA_SxCR_TEIE | DMA_SxCR_DMEIE, slot->saved_interrupts);
+    *slot = (dma_listener_t){};
+    return (flags & (DMA_LISR_TEIF0 | DMA_LISR_DMEIF0)) != 0U;
+}
+
+static void handle_stream_irq(DMA_TypeDef *module, uint32_t stream) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    uint32_t const status = stream < 4U ? module->LISR : module->HISR;
+    uint32_t const flags = (status >> flag_shift[stream % 4U]) & DMA_STREAM_FLAGS;
+    dma_listener_t const listener = listeners[module == DMA2][stream];
+    // Streams used directly by the application can also enable transfer interrupts.
+    uint32_t const handled = listener.dma ? flags : flags & (DMA_LISR_TCIF0 | DMA_LISR_TEIF0 | DMA_LISR_DMEIF0);
+    if (handled) {
+        clear_stream_flags(module, stream, handled);
+        uint32_t const fault = handled & (DMA_LISR_TEIF0 | DMA_LISR_DMEIF0);
+        if (listener.event && (fault || (handled & DMA_LISR_TCIF0))) {
+            listener.event(listener.owner, listener.dma, fault != 0U);
+        }
+    }
+    uni_hal_core_irq_resume(mask);
+}
+
+#define UNI_HAL_DMA_IRQ_HANDLER(module, stream)              \
+    void module##_Stream##stream##_IRQHandler(void) {        \
+        UNI_HAL_OS_ISR_ENTER();                              \
+        handle_stream_irq(module, stream);                   \
+        UNI_HAL_OS_ISR_EXIT(pdFALSE);                        \
     }
 
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 0)
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 1)
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 2)
+UNI_HAL_DMA_IRQ_HANDLER(DMA1, 3)
 UNI_HAL_DMA_IRQ_HANDLER(DMA1, 4)
 UNI_HAL_DMA_IRQ_HANDLER(DMA1, 5)
 UNI_HAL_DMA_IRQ_HANDLER(DMA1, 6)
@@ -291,44 +305,45 @@ uint32_t _uni_hal_dma_get_interrupt(uni_hal_core_periph_e module, uni_hal_dma_ch
 //
 
 bool uni_hal_dma_init(uni_hal_dma_context_t *ctx) {
-    bool result = false;
-
-    // a stream that is already set up is not an error
-    if (ctx != NULL && ctx->state.initialized) {
-        return true;
+    uint32_t const mask = uni_hal_core_irq_pause();
+    dma_listener_t *slot = stream_owner(ctx);
+    if (!slot || (slot->dma && slot->dma != ctx)) {
+        uni_hal_core_irq_resume(mask);
+        return false;
     }
-
-    if (ctx != NULL) {
-        result = uni_hal_rcc_clk_set(ctx->config.instance, true);
-
-        // 0 is returned for an unknown module/stream pair and is not a DMA interrupt
-        uint32_t interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);
-        if (interrupt != 0U) {
-            NVIC_SetPriority(interrupt, UNI_HAL_DMA_INTERRUPT_PRIORITY);
-            NVIC_EnableIRQ(interrupt);
-        }
-        else {
-            result = false;
-        }
-
-        ctx->state.initialized = result;
+    if (!ctx->state.initialized && uni_hal_rcc_clk_set(ctx->config.instance, true)) {
+        uint32_t const interrupt = _uni_hal_dma_get_interrupt(ctx->config.instance, ctx->config.channel);
+        NVIC_SetPriority(interrupt, UNI_HAL_DMA_INTERRUPT_PRIORITY);
+        NVIC_EnableIRQ(interrupt);
+        ctx->state.initialized = true;
     }
-
-    return result;
+    uni_hal_core_irq_resume(mask);
+    return ctx->state.initialized;
 }
 
 
 bool uni_hal_dma_enable(uni_hal_dma_context_t *ctx, bool val) {
-    bool result = false;
-    if (uni_hal_dma_is_inited(ctx)) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    dma_listener_t *slot = stream_owner(ctx);
+    bool ok = false;
+    // The ADC owner can explicitly stop its circular capture using the original descriptor.
+    if (slot && ctx->state.initialized && (!slot->dma || (!val && slot->dma == ctx && slot->circular_running))) {
         DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.instance);
-        uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.channel);
-        val != false ? LL_DMA_EnableStream(module, stream) : LL_DMA_DisableStream(module, stream);
-        result = true;
+        uint32_t const stream = ctx->config.channel;
+        if (val) {
+            LL_DMA_EnableStream(module, stream);
+            ok = true;
+        } else {
+            LL_DMA_DisableStream(module, stream);
+            ok = !LL_DMA_IsEnabledStream(module, stream);
+            if (ok && slot->dma) {
+                uni_hal_dma_stm32h7_release(ctx);
+            }
+        }
     }
-    return result;
+    uni_hal_core_irq_resume(mask);
+    return ok;
 }
-
 
 
 //
@@ -337,19 +352,24 @@ bool uni_hal_dma_enable(uni_hal_dma_context_t *ctx, bool val) {
 
 bool uni_hal_dma_set_fifo_mode(uni_hal_dma_context_t *ctx, bool val) {
     bool result = false;
-    if (uni_hal_dma_is_inited(ctx)) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    dma_listener_t *slot = stream_owner(ctx);
+    if (slot && ctx->state.initialized && !slot->dma) {
         DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.instance);
         uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.channel);
         val != false ? LL_DMA_EnableFifoMode(module, stream) : LL_DMA_DisableFifoMode(module, stream);
         result = true;
     }
+    uni_hal_core_irq_resume(mask);
     return result;
 }
 
 
 bool uni_hal_dma_set_mode(uni_hal_dma_context_t *ctx, uni_hal_dma_mode_e val) {
     bool result = false;
-    if (uni_hal_dma_is_inited(ctx)) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    dma_listener_t *slot = stream_owner(ctx);
+    if (slot && ctx->state.initialized && !slot->dma) {
         DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.instance);
         uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.channel);
 
@@ -371,13 +391,16 @@ bool uni_hal_dma_set_mode(uni_hal_dma_context_t *ctx, uni_hal_dma_mode_e val) {
         result = true;
     }
 
+    uni_hal_core_irq_resume(mask);
     return result;
 }
 
 
 bool uni_hal_dma_set_priority(uni_hal_dma_context_t *ctx, uni_hal_dma_priority_e val) {
     bool result = false;
-    if (uni_hal_dma_is_inited(ctx)) {
+    uint32_t const mask = uni_hal_core_irq_pause();
+    dma_listener_t *slot = stream_owner(ctx);
+    if (slot && ctx->state.initialized && !slot->dma) {
         DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.instance);
         uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.channel);
 
@@ -401,5 +424,6 @@ bool uni_hal_dma_set_priority(uni_hal_dma_context_t *ctx, uni_hal_dma_priority_e
         result = true;
     }
 
+    uni_hal_core_irq_resume(mask);
     return result;
 }

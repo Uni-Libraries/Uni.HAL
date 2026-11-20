@@ -66,7 +66,7 @@ bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_d
     return false;
 }
 
-bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx,
+bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, uint8_t *data_rx, const uint8_t *data_tx,
                                   uint32_t len) {
 
     (void)ctx;

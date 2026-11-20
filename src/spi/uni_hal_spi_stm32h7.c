@@ -21,14 +21,34 @@
 #include "rcc/uni_hal_rcc.h"
 #include "spi/uni_hal_spi.h"
 #include "systick/uni_hal_systick.h"
-#include "core/uni_hal_core_cm7.h"
+#include "dma/uni_hal_dma_stm32h7_irq.h"
 
 
 //
 // Globals
 //
 
-uni_hal_spi_context_t *g_uni_hal_spi_ctx[6] = {NULL};
+static uni_hal_spi_context_t *g_uni_hal_spi_ctx[6];
+typedef struct {
+    uni_hal_dma_context_t *rx;
+    uni_hal_dma_context_t *tx;
+    uint8_t pending;
+    bool active;
+    bool aborting;
+    bool awaiting_suspend;
+} spi_transfer_t;
+static spi_transfer_t transfers[6];
+// One SPI IRQ delivers its result until its callback returns. A preempting IRQ must not erase it.
+static volatile uint32_t callback_level[6];
+
+static bool reserved_for_callback(size_t index) {
+    return callback_level[index] && callback_level[index] != __get_IPSR() + 1U;
+}
+static const IRQn_Type spi_irqs[] = {SPI1_IRQn, SPI2_IRQn, SPI3_IRQn, SPI4_IRQn, SPI5_IRQn, SPI6_IRQn};
+#define SPI_RX_PENDING 1U
+#define SPI_TX_PENDING 2U
+#define SPI_ERROR_IRQS (SPI_IER_UDRIE | SPI_IER_OVRIE | SPI_IER_CRCEIE | SPI_IER_TIFREIE | SPI_IER_MODFIE)
+
 
 /**
  * A blocking master transfer is abandoned when the bus makes no progress for this long.
@@ -270,6 +290,8 @@ static bool _uni_hal_spi_clear_flags(uni_hal_core_periph_e instance) {
 
     SPI_TypeDef *handle = _uni_hal_spi_handle_get(instance);
     if (handle != NULL) {
+        LL_SPI_ClearFlag_UDR(handle);
+        LL_SPI_ClearFlag_SUSP(handle);
         LL_SPI_ClearFlag_OVR(handle);
         LL_SPI_ClearFlag_FRE(handle);
         LL_SPI_ClearFlag_CRCERR(handle);
@@ -443,92 +465,44 @@ static bool _uni_hal_spi_init_gpio(uni_hal_spi_context_t *ctx) {
 
 
 static bool _uni_hal_spi_init_irq(uni_hal_spi_context_t *ctx) {
-    bool result = false;
-    IRQn_Type irq = WWDG_IRQn;
-
-    switch (ctx->config.instance) {
-        case UNI_HAL_CORE_PERIPH_SPI_1:
-            irq = SPI1_IRQn;
-            break;
-        case UNI_HAL_CORE_PERIPH_SPI_2:
-            irq = SPI2_IRQn;
-            break;
-        case UNI_HAL_CORE_PERIPH_SPI_3:
-            irq = SPI3_IRQn;
-            break;
-        case UNI_HAL_CORE_PERIPH_SPI_4:
-            irq = SPI4_IRQn;
-            break;
-        case UNI_HAL_CORE_PERIPH_SPI_5:
-            irq = SPI5_IRQn;
-            break;
-        case UNI_HAL_CORE_PERIPH_SPI_6:
-            irq = SPI6_IRQn;
-            break;
-        default:
-            break;
+    size_t const index = _uni_hal_spi_index_get(ctx->config.instance);
+    if (index == SIZE_MAX) {
+        return false;
     }
-
-    if (irq != WWDG_IRQn) {
-        NVIC_SetPriority(irq, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
-        NVIC_EnableIRQ(irq);
-        result = true;
-    }
-
-    return result;
+    IRQn_Type const irq = spi_irqs[index];
+    NVIC_SetPriority(irq, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
+    NVIC_EnableIRQ(irq);
+    return true;
 }
 
+static bool valid_dma(const uni_hal_dma_context_t *dma) {
+    return dma == nullptr || (uni_hal_dma_stm32h7_get_module(dma->config.instance) != nullptr &&
+                              (unsigned)dma->config.channel <= UNI_HAL_DMA_CHANNEL_7);
+}
 
-static bool _uni_hal_spi_init_dma(uni_hal_spi_context_t *ctx) {
-    bool result = true;
-
-    if (ctx->config.dma_tx != NULL) {
-        result = result && uni_hal_dma_init(ctx->config.dma_tx);
-
-        if (result) {
-            uni_hal_dma_set_fifo_mode(ctx->config.dma_tx, false);
-            uni_hal_dma_set_mode(ctx->config.dma_tx, UNI_HAL_DMA_MODE_NORMAL);
-            uni_hal_dma_set_priority(ctx->config.dma_tx, UNI_HAL_DMA_PRIORITY_LOW);
-
-            DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_tx->config.instance);
-            uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_tx->config.channel);
-
-            LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_MEMORY_TO_PERIPH);
-            LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
-            LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
-            LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-            LL_DMA_SetMemorySize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-            LL_DMA_SetPeriphRequest(module, stream, _uni_hal_spi_dma_request_tx_get(ctx->config.instance));
-
-            LL_DMA_EnableIT_TC(module, stream);
-            LL_DMA_EnableIT_TE(module, stream);
-        }
-    }
-
-    if (ctx->config.dma_rx != NULL) {
-        result = result && uni_hal_dma_init(ctx->config.dma_rx);
-
-        if (result) {
-            uni_hal_dma_set_fifo_mode(ctx->config.dma_rx, false);
-            uni_hal_dma_set_mode(ctx->config.dma_rx, UNI_HAL_DMA_MODE_NORMAL);
-            uni_hal_dma_set_priority(ctx->config.dma_rx, UNI_HAL_DMA_PRIORITY_LOW);
-
-            DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_rx->config.instance);
-            uint32_t stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_rx->config.channel);
-
-            LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
-            LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
-            LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
-            LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-            LL_DMA_SetMemorySize(module, stream, LL_DMA_PDATAALIGN_BYTE);
-            LL_DMA_SetPeriphRequest(module, stream, _uni_hal_spi_dma_request_rx_get(ctx->config.instance));
-
-            LL_DMA_EnableIT_TC(module, stream);
-            LL_DMA_EnableIT_TE(module, stream);
-        }
-    }
-
-    return result;
+static void configure_stream(uni_hal_spi_context_t *ctx, uni_hal_dma_context_t *dma, bool transmit,
+                             uint32_t address, uint32_t length) {
+    SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+    DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(dma->config.instance);
+    uint32_t const stream = dma->config.channel;
+    uint32_t const direction = transmit ? LL_DMA_DIRECTION_MEMORY_TO_PERIPH : LL_DMA_DIRECTION_PERIPH_TO_MEMORY;
+    LL_DMA_DisableFifoMode(module, stream);
+    LL_DMA_SetMode(module, stream, LL_DMA_MODE_NORMAL);
+    LL_DMA_SetStreamPriorityLevel(module, stream, LL_DMA_PRIORITY_LOW);
+    LL_DMA_SetDataTransferDirection(module, stream, direction);
+    LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
+    LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
+    LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_BYTE);
+    LL_DMA_SetMemorySize(module, stream, LL_DMA_MDATAALIGN_BYTE);
+    LL_DMA_SetPeriphRequest(module, stream, transmit ? _uni_hal_spi_dma_request_tx_get(ctx->config.instance)
+                                                    : _uni_hal_spi_dma_request_rx_get(ctx->config.instance));
+    LL_DMA_ConfigAddresses(module, stream, transmit ? address : LL_SPI_DMA_GetRxRegAddr(instance),
+                           transmit ? LL_SPI_DMA_GetTxRegAddr(instance) : address, direction);
+    LL_DMA_SetDataLength(module, stream, length);
+    LL_DMA_EnableIT_TC(module, stream);
+    LL_DMA_EnableIT_TE(module, stream);
+    LL_DMA_EnableIT_DME(module, stream);
+    LL_DMA_EnableStream(module, stream);
 }
 
 
@@ -560,6 +534,10 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
             LL_SPI_SetFIFOThreshold(instance, LL_SPI_FIFO_TH_01DATA);
             LL_SPI_SetStandard(instance, LL_SPI_PROTOCOL_MOTOROLA);
             LL_SPI_SetNSSPolarity(instance, LL_SPI_NSS_POLARITY_LOW);
+            if (init_struct.NSS == LL_SPI_NSS_SOFT) {
+                LL_SPI_SetInternalSSLevel(instance, ctx->config.mode == UNI_HAL_SPI_MODE_MASTER
+                                                       ? LL_SPI_SS_LEVEL_HIGH : LL_SPI_SS_LEVEL_LOW);
+            }
 
             if (ctx->config.crc_type != UNI_HAL_SPI_CRC_DISABLE)
             {
@@ -591,31 +569,54 @@ static bool _uni_hal_spi_init_spi(uni_hal_spi_context_t *ctx) {
 //
 
 bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
-    if (ctx != NULL && !uni_hal_spi_is_inited(ctx)) {
-        bool result = _uni_hal_spi_init_rcc(ctx);
-        result = result && _uni_hal_spi_init_gpio(ctx);
-        result = result && _uni_hal_spi_init_irq(ctx);
-        result = result && _uni_hal_spi_init_dma(ctx);
-        result = result && _uni_hal_spi_init_spi(ctx);
-
-        size_t index = _uni_hal_spi_index_get(ctx->config.instance);
-        if (result && index != SIZE_MAX) {
-            g_uni_hal_spi_ctx[index] = ctx;
-            ctx->status.inited = true;
-        }
+    if (!ctx) {
+        return false;
     }
-
-    return uni_hal_spi_is_inited(ctx);
+    size_t const index = _uni_hal_spi_index_get(ctx->config.instance);
+    uni_hal_dma_context_t *rx = ctx->config.dma_rx;
+    uni_hal_dma_context_t *tx = ctx->config.dma_tx;
+    if (index == SIZE_MAX || !valid_dma(rx) || !valid_dma(tx) ||
+        (index == 5U && (rx || tx))) { // SPI6 is routed to BDMA/DMAMUX2.
+        return false;
+    }
+    uint32_t mask = uni_hal_core_irq_pause();
+    uni_hal_spi_context_t *old = g_uni_hal_spi_ctx[index];
+    if (old == ctx || (old && (!old->status.inited || old->status.in_process || callback_level[index]))) {
+        bool const ready = old == ctx && ctx->status.inited;
+        uni_hal_core_irq_resume(mask);
+        return ready;
+    }
+    if (old) {
+        old->status.inited = false;
+    }
+    ctx->status.inited = false;
+    g_uni_hal_spi_ctx[index] = ctx;
+    uni_hal_core_irq_resume(mask);
+    bool const ready = _uni_hal_spi_init_rcc(ctx) && _uni_hal_spi_init_gpio(ctx) &&
+                       (!rx || uni_hal_dma_init(rx)) && (!tx || uni_hal_dma_init(tx)) &&
+                       _uni_hal_spi_init_spi(ctx) && _uni_hal_spi_init_irq(ctx);
+    mask = uni_hal_core_irq_pause();
+    ctx->status.inited = ready;
+    if (!ready) {
+        g_uni_hal_spi_ctx[index] = nullptr;
+    }
+    uni_hal_core_irq_resume(mask);
+    return ready;
 }
 
 
 bool uni_hal_spi_is_inited(const uni_hal_spi_context_t *ctx) {
-    return ctx != NULL && ctx->status.inited;
+    if (!ctx || !ctx->status.inited) {
+        return false;
+    }
+    size_t const index = _uni_hal_spi_index_get(ctx->config.instance);
+    return index != SIZE_MAX && g_uni_hal_spi_ctx[index] == ctx;
 }
 
 
 bool uni_hal_spi_is_busy(const uni_hal_spi_context_t *ctx) {
-    return uni_hal_spi_is_inited(ctx) && ctx->status.in_process;
+    return uni_hal_spi_is_inited(ctx) &&
+           (ctx->status.in_process || reserved_for_callback(_uni_hal_spi_index_get(ctx->config.instance)));
 }
 
 
@@ -643,196 +644,290 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 }
 
 
-bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx,
+// Runs from the DMA IRQ with interrupts masked. Application callbacks always run from the SPI IRQ.
+static void dma_event(void *owner, const uni_hal_dma_context_t *dma, bool error) {
+    uni_hal_spi_context_t *ctx = owner;
+    size_t const index = _uni_hal_spi_index_get(ctx->config.instance);
+    if (index == SIZE_MAX) {
+        return;
+    }
+    spi_transfer_t *transfer = &transfers[index];
+    if (!transfer->active) {
+        if (error && (dma == transfer->rx || dma == transfer->tx)) {
+            ctx->status.last_errors |= UNI_HAL_SPI_ERROR_DMA;
+        }
+        return;
+    }
+    transfer->pending &= ~(dma == transfer->rx ? SPI_RX_PENDING : SPI_TX_PENDING);
+    DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(dma->config.instance);
+    if (error || (!transfer->aborting && !ctx->status.last_errors && LL_DMA_GetDataLength(module, dma->config.channel) != 0U)) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_DMA;
+    }
+    if (ctx->status.last_errors || transfer->aborting) {
+        NVIC_SetPendingIRQ(spi_irqs[index]);
+    } else if (!transfer->pending) {
+        // EOT stays latched even when the last DMA write happens after the last SPI clock.
+        LL_SPI_EnableIT_EOT(_uni_hal_spi_handle_get(ctx->config.instance));
+    }
+}
+
+
+bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, uint8_t *data_rx, const uint8_t *data_tx,
                                   uint32_t len) {
-    bool result = false;
-    // a buffer can only be transferred through a DMA stream that was configured for it
-    if (uni_hal_spi_is_inited(ctx) && ((data_rx != NULL && ctx->config.dma_rx == NULL) ||
-                                       (data_tx != NULL && ctx->config.dma_tx == NULL))) {
+    if (!uni_hal_spi_is_inited(ctx) || len == 0U || len > UINT16_MAX || (!data_tx && !data_rx) ||
+        (data_rx && !ctx->config.dma_rx) || (data_tx && !ctx->config.dma_tx)) {
         return false;
     }
-
-    if (uni_hal_spi_is_inited(ctx) && len > 0U && (data_rx || data_tx)) {
-        ctx->status.in_process = true;
-        ctx->status.last_rx_data = (uint8_t *) data_rx;
-        ctx->status.last_len = len;
-        ctx->status.last_errors = UNI_HAL_SPI_ERROR_NONE;
-
-        if (!ctx->config.nss_hard) {
-            uni_hal_gpio_pin_set(ctx->config.pin_nss, false);
+    if (data_rx && data_tx && data_rx != data_tx) {
+        uintptr_t const rx_addr = (uintptr_t)data_rx;
+        uintptr_t const tx_addr = (uintptr_t)data_tx;
+        uintptr_t const distance = rx_addr > tx_addr ? rx_addr - tx_addr : tx_addr - rx_addr;
+        if (distance < len) {
+            return false;
         }
-
-        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-
-        // set DMA source and destination
-        if (data_rx != NULL) {
-            uni_hal_core_cm7_dcache_invalidate((void *) data_rx, len);
-            DMA_TypeDef *dma_rx_module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_rx->config.instance);
-            uint32_t dma_rx_stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_rx->config.channel);
-
-            LL_DMA_ConfigAddresses(dma_rx_module, dma_rx_stream, LL_SPI_DMA_GetRxRegAddr(instance), (uint32_t) data_rx,
-                                   LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
-            LL_DMA_SetDataLength(dma_rx_module, dma_rx_stream, len);
-            LL_DMA_EnableStream(dma_rx_module, dma_rx_stream);
-
-            LL_SPI_EnableDMAReq_RX(instance);
-        }
-
-        if (data_tx != NULL) {
-            uni_hal_core_cm7_dcache_clean((void *) data_tx, len);
-            DMA_TypeDef *dma_tx_module = uni_hal_dma_stm32h7_get_module(ctx->config.dma_tx->config.instance);
-            uint32_t dma_tx_stream = uni_hal_dma_stm32h7_get_channel(ctx->config.dma_tx->config.channel);
-
-            LL_DMA_ConfigAddresses(dma_tx_module, dma_tx_stream, (uint32_t) data_tx, LL_SPI_DMA_GetTxRegAddr(instance),
-                                   LL_DMA_DIRECTION_MEMORY_TO_PERIPH);
-            LL_DMA_SetDataLength(dma_tx_module, dma_tx_stream, len);
-            LL_DMA_EnableStream(dma_tx_module, dma_tx_stream);
-
-            LL_SPI_EnableDMAReq_TX(instance);
-        }
-
-        // enable
-        LL_SPI_DisableMasterRxAutoSuspend(instance);
-        LL_SPI_SetTransferSize(instance, len);
-        LL_SPI_EnableIT_EOT(instance);
-        LL_SPI_Enable(instance);
-        if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
-            LL_SPI_StartMasterTransfer(instance);
-        }
-
-        result = true;
     }
-    return result;
+    size_t const index = _uni_hal_spi_index_get(ctx->config.instance);
+    SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+    spi_transfer_t *transfer = &transfers[index];
+    uni_hal_dma_context_t *rx = data_rx ? ctx->config.dma_rx : nullptr;
+    uni_hal_dma_context_t *tx = data_tx ? ctx->config.dma_tx : nullptr;
+    uint32_t mask = uni_hal_core_irq_pause();
+    if (g_uni_hal_spi_ctx[index] != ctx || !ctx->status.inited || ctx->status.in_process ||
+        reserved_for_callback(index) || (rx && !uni_hal_dma_stm32h7_claim(rx, dma_event, ctx))) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    if (tx && !uni_hal_dma_stm32h7_claim(tx, dma_event, ctx)) {
+        if (rx) {
+            uni_hal_dma_stm32h7_release(rx);
+        }
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    ctx->status.in_process = true;
+    uni_hal_core_irq_resume(mask);
+
+    // Clean TX first, including when both directions use the same buffer.
+    if (tx) {
+        uni_hal_core_cm7_dcache_clean((void *)data_tx, len);
+    }
+    if (rx) {
+        uni_hal_core_cm7_dcache_cleaninvalidate_addr(data_rx, len);
+    }
+
+    mask = uni_hal_core_irq_pause();
+    *transfer = (spi_transfer_t){.rx = rx, .tx = tx, .active = true,
+                                 .pending = (rx ? SPI_RX_PENDING : 0U) | (tx ? SPI_TX_PENDING : 0U)};
+    ctx->status.last_rx_data = data_rx;
+    ctx->status.last_len = len;
+    ctx->status.last_errors = UNI_HAL_SPI_ERROR_NONE;
+    _uni_hal_spi_clear_flags(ctx->config.instance);
+    LL_SPI_SetTransferDirection(instance, rx && tx ? LL_SPI_FULL_DUPLEX : (tx ? LL_SPI_SIMPLEX_TX : LL_SPI_SIMPLEX_RX));
+    LL_SPI_DisableMasterRxAutoSuspend(instance);
+    LL_SPI_SetTransferSize(instance, len);
+    if (rx) {
+        configure_stream(ctx, rx, false, (uint32_t)data_rx, len);
+        LL_SPI_EnableDMAReq_RX(instance);
+    }
+    if (tx) {
+        configure_stream(ctx, tx, true, (uint32_t)data_tx, len);
+        LL_SPI_EnableDMAReq_TX(instance);
+    }
+    if (!ctx->config.nss_hard) {
+        uni_hal_gpio_pin_set(ctx->config.pin_nss, false);
+    }
+    SET_BIT(instance->IER, SPI_IER_MODFIE | SPI_IER_TIFREIE |
+            (tx ? SPI_IER_UDRIE : 0U) | (rx ? SPI_IER_OVRIE | SPI_IER_CRCEIE : 0U));
+    LL_SPI_Enable(instance);
+    if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
+        LL_SPI_StartMasterTransfer(instance);
+    }
+    uni_hal_core_irq_resume(mask);
+    return true;
 }
 
+static bool stop_stream(const uni_hal_dma_context_t *dma) {
+    if (!dma) {
+        return true;
+    }
+    DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(dma->config.instance);
+    uint32_t const stream = dma->config.channel;
+    LL_DMA_DisableStream(module, stream);
+    // EN may stay high while the last bus beat finishes. Keep ownership until hardware releases it.
+    return !LL_DMA_IsEnabledStream(module, stream);
+}
+
+// Called with IRQs masked. Until both EN bits clear, a DMA bus beat can still access the buffers.
+static bool quiesce(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance, spi_transfer_t *transfer) {
+    CLEAR_BIT(instance->IER, SPI_IER_EOTIE | SPI_ERROR_IRQS | SPI_IER_TXPIE);
+    LL_SPI_Disable(instance);
+    LL_SPI_DisableDMAReq_RX(instance);
+    LL_SPI_DisableDMAReq_TX(instance);
+    bool const rx_stopped = stop_stream(transfer->rx);
+    bool const tx_stopped = stop_stream(transfer->tx);
+    if (!rx_stopped || !tx_stopped) {
+        // Disabling an in-flight normal stream generates TC after the last bus beat.
+        return false;
+    }
+    _uni_hal_spi_clear_flags(ctx->config.instance);
+    transfer->active = false;
+    return true;
+}
+
+// The SPI stays busy through cache maintenance; higher-priority interrupts can run during it.
+static void return_buffers(uni_hal_spi_context_t *ctx) {
+    if (ctx->status.last_rx_data) {
+        uni_hal_core_cm7_dcache_invalidate(ctx->status.last_rx_data, ctx->status.last_len);
+    }
+    if (!ctx->config.nss_hard) {
+        uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
+    }
+    uint32_t const mask = uni_hal_core_irq_pause();
+    spi_transfer_t *transfer = &transfers[_uni_hal_spi_index_get(ctx->config.instance)];
+    bool const rx_error = transfer->rx && uni_hal_dma_stm32h7_release(transfer->rx);
+    bool const tx_error = transfer->tx && uni_hal_dma_stm32h7_release(transfer->tx);
+    if (rx_error || tx_error) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_DMA;
+    }
+    *transfer = (spi_transfer_t){};
+    ctx->status.last_rx_data = nullptr;
+    ctx->status.last_len = 0U;
+    ctx->status.in_process = false;
+    uni_hal_core_irq_resume(mask);
+}
 
 bool uni_hal_spi_abort(uni_hal_spi_context_t *ctx) {
-    bool result = false;
-
-    if (uni_hal_spi_is_busy(ctx)) {
+    if (!uni_hal_spi_is_inited(ctx)) {
+        return false;
+    }
+    size_t const index = _uni_hal_spi_index_get(ctx->config.instance);
+    if (index == SIZE_MAX) {
+        return false;
+    }
+    uint32_t const mask = uni_hal_core_irq_pause();
+    spi_transfer_t *transfer = &transfers[index];
+    bool stopped = false;
+    if (g_uni_hal_spi_ctx[index] == ctx && transfer->active) {
         SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-        if (instance != NULL) {
-            // no completion interrupt from here on
-            LL_SPI_DisableIT_EOT(instance);
-            LL_SPI_DisableIT_TXP(instance);
-
-            // a stream that did not reach its count is still enabled and would ignore the next set-up
-            if (ctx->config.dma_rx != NULL) {
-                (void)uni_hal_dma_enable(ctx->config.dma_rx, false);
+        bool const first = !transfer->aborting;
+        transfer->aborting = true;
+        transfer->awaiting_suspend = false;
+        if (first && ctx->config.mode == UNI_HAL_SPI_MODE_MASTER && (instance->CR1 & SPI_CR1_CSTART) &&
+            !(instance->SR & (SPI_SR_EOT | SPI_SR_SUSP | SPI_SR_MODF))) {
+            // Stop on a frame boundary. A second abort can force a stalled master to stop.
+            LL_SPI_SuspendMasterTransfer(instance);
+            if ((instance->CR1 & SPI_CR1_CSTART) && !(instance->SR & SPI_SR_SUSP)) {
+                transfer->awaiting_suspend = true;
+                CLEAR_BIT(instance->IER, SPI_ERROR_IRQS);
+                LL_SPI_EnableIT_EOT(instance); // EOTIE also signals SUSP.
             }
-            if (ctx->config.dma_tx != NULL) {
-                (void)uni_hal_dma_enable(ctx->config.dma_tx, false);
+        }
+        if (!transfer->awaiting_suspend) {
+            stopped = quiesce(ctx, instance, transfer);
+        }
+    }
+    uni_hal_core_irq_resume(mask);
+    if (stopped) {
+        return_buffers(ctx);
+    }
+    return stopped;
+}
+
+
+static bool blocking_transfer(uni_hal_spi_context_t *ctx, const uint8_t *tx_data, uint8_t *rx_data, uint32_t len,
+                              bool drive_nss) {
+    if (!uni_hal_spi_is_inited(ctx) || len == 0U || len > UINT16_MAX) {
+        return false;
+    }
+    uint32_t const mask = uni_hal_core_irq_pause();
+    if (!uni_hal_spi_is_inited(ctx) || uni_hal_spi_is_busy(ctx)) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    ctx->status.in_process = true;
+    uni_hal_core_irq_resume(mask);
+    if (drive_nss && !ctx->config.nss_hard) {
+        uni_hal_gpio_pin_set(ctx->config.pin_nss, false);
+    }
+    SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
+    uint8_t data_rx;
+    _uni_hal_spi_clear_flags(ctx->config.instance);
+    LL_SPI_SetTransferDirection(instance, LL_SPI_FULL_DUPLEX);
+
+    LL_SPI_DisableGPIOControl(instance);
+    LL_SPI_DisableMasterRxAutoSuspend(instance);
+    LL_SPI_SetTransferSize(instance, len);
+
+    LL_SPI_Enable(instance);
+    if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
+        LL_SPI_StartMasterTransfer(instance);
+    }
+
+
+    // every byte sent clocks one byte in: keep reading until the last one has arrived,
+    // it shows up only after the last byte has been written to the TX FIFO
+    size_t idx_tx = 0U;
+    size_t idx_rx = 0U;
+    bool const is_master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
+    bool stalled = false;
+    uint32_t activity_ms = uni_hal_systick_get_ms();
+    while (!stalled && (idx_tx < len || idx_rx < len)) {
+        bool progress = false;
+        if (idx_tx < len && LL_SPI_IsActiveFlag_TXP(instance) != 0U) {
+            LL_SPI_TransmitData8(instance, (tx_data != NULL) ? tx_data[idx_tx] : (uint8_t) 0U);
+            idx_tx++;
+            progress = true;
+        }
+        if (idx_rx < len && (LL_SPI_IsActiveFlag_RXP(instance) != 0U)) {
+            data_rx = LL_SPI_ReceiveData8(instance);
+            if (rx_data != NULL) {
+                rx_data[idx_rx] = data_rx;
             }
-            LL_SPI_DisableDMAReq_RX(instance);
-            LL_SPI_DisableDMAReq_TX(instance);
+            idx_rx++;
+            progress = true;
+        }
 
-            LL_SPI_Disable(instance);
-            _uni_hal_spi_clear_flags(ctx->config.instance);
-
-            if (!ctx->config.nss_hard) {
-                uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
-            }
-
-            ctx->status.in_process = false;
-            result = true;
+        if (progress) {
+            activity_ms = uni_hal_systick_get_ms();
+        }
+        else if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+            stalled = true;
         }
     }
 
-    return result;
-}
+    while (!stalled && LL_SPI_IsActiveFlag_EOT(instance) == 0U) {
+        if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
+            stalled = true;
+        }
+    }
+    LL_SPI_Disable(instance);
+    _uni_hal_spi_clear_flags(ctx->config.instance);
 
+    if (drive_nss && !ctx->config.nss_hard) {
+        uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
+    }
+    ctx->status.in_process = false;
+    return !stalled;
+}
 
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len) {
-    bool result = false;
-    if (uni_hal_spi_is_inited(ctx) && data && len > 0U) {
-        ctx->status.in_process = true;
-        if (!ctx->config.nss_hard) {
-            uni_hal_gpio_pin_set(ctx->config.pin_nss, false);
-        }
-
-        result = uni_hal_spi_transmitreceive(ctx, data, NULL, len);
-        if (!ctx->config.nss_hard) {
-            uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
-        }
-        ctx->status.in_process = false;
-    }
-    return result;
+    return data && blocking_transfer(ctx, data, nullptr, len, true);
 }
 
-
 bool uni_hal_spi_transmitreceive(uni_hal_spi_context_t *ctx, const uint8_t *tx_data, uint8_t *rx_data, uint32_t len) {
-    bool result = false;
-    uint8_t data_rx;
-
-    if (uni_hal_spi_is_inited(ctx) != false) {
-        SPI_TypeDef *instance = _uni_hal_spi_handle_get(ctx->config.instance);
-        if (instance != NULL) {
-            _uni_hal_spi_clear_flags(ctx->config.instance);
-
-            LL_SPI_DisableGPIOControl(instance);
-            LL_SPI_DisableMasterRxAutoSuspend(instance);
-            LL_SPI_SetTransferSize(instance, len);
-
-            LL_SPI_Enable(instance);
-            if (ctx->config.mode == UNI_HAL_SPI_MODE_MASTER) {
-                LL_SPI_StartMasterTransfer(instance);
-            }
-
-
-            // every byte sent clocks one byte in: keep reading until the last one has arrived,
-            // it shows up only after the last byte has been written to the TX FIFO
-            size_t idx_tx = 0U;
-            size_t idx_rx = 0U;
-            bool const is_master = ctx->config.mode == UNI_HAL_SPI_MODE_MASTER;
-            bool stalled = false;
-            uint32_t activity_ms = uni_hal_systick_get_ms();
-            while (!stalled && (idx_tx < len || idx_rx < len)) {
-                bool progress = false;
-                if (idx_tx < len && LL_SPI_IsActiveFlag_TXP(instance) != 0U) {
-                    LL_SPI_TransmitData8(instance, (tx_data != NULL) ? tx_data[idx_tx] : (uint8_t) 0U);
-                    idx_tx++;
-                    progress = true;
-                }
-                if (idx_rx < len && (LL_SPI_IsActiveFlag_RXP(instance) != 0U)) {
-                    data_rx = LL_SPI_ReceiveData8(instance);
-                    if (rx_data != NULL) {
-                        rx_data[idx_rx] = data_rx;
-                    }
-                    idx_rx++;
-                    progress = true;
-                }
-
-                if (progress) {
-                    activity_ms = uni_hal_systick_get_ms();
-                }
-                else if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
-                    stalled = true;
-                }
-            }
-
-            while (!stalled && LL_SPI_IsActiveFlag_EOT(instance) == 0U) {
-                if (is_master && (uni_hal_systick_get_ms() - activity_ms) > UNI_HAL_SPI_STALL_TIMEOUT_MS) {
-                    stalled = true;
-                }
-            }
-            LL_SPI_Disable(instance);
-            _uni_hal_spi_clear_flags(ctx->config.instance);
-
-            result = !stalled;
-        }
-    }
-
-    return result;
+    return blocking_transfer(ctx, tx_data, rx_data, len, false);
 }
 
 
 bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler_e prescaler) {
+    uint32_t const mask = uni_hal_core_irq_pause();
     bool result = false;
-    if (uni_hal_spi_is_inited(ctx) && ctx->config.prescaler != prescaler) {
+    if (uni_hal_spi_is_inited(ctx) && !uni_hal_spi_is_busy(ctx) && ctx->config.prescaler != prescaler) {
         ctx->config.prescaler = prescaler;
         LL_SPI_SetBaudRatePrescaler(_uni_hal_spi_handle_get(ctx->config.instance), _uni_hal_spi_prescaler(prescaler));
         result = true;
     }
+    uni_hal_core_irq_resume(mask);
     return result;
 }
 
@@ -844,56 +939,60 @@ bool uni_hal_spi_set_prescaler(uni_hal_spi_context_t *ctx, uni_hal_spi_prescaler
 //
 
 bool SPIx_IRQHandler(uni_hal_spi_context_t *ctx, SPI_TypeDef *instance) {
-    bool high_priority_woken = false;
-
-    if (!ctx->config.nss_hard) {
-        uni_hal_gpio_pin_set(ctx->config.pin_nss, true);
+    uint32_t const mask = uni_hal_core_irq_pause();
+    if (!uni_hal_spi_is_inited(ctx)) {
+        uni_hal_core_irq_resume(mask);
+        return false;
     }
-
-    if(ctx->status.last_rx_data != NULL) {
-        uni_hal_core_cm7_dcache_invalidate(ctx->status.last_rx_data, ctx->status.last_len);
+    size_t const index = _uni_hal_spi_index_get(ctx->config.instance);
+    spi_transfer_t *transfer = &transfers[index];
+    if (!transfer->active) {
+        uni_hal_core_irq_resume(mask);
+        return false;
     }
-
-    // keep the error flags for the callback before they get cleared
-    uint32_t errors = UNI_HAL_SPI_ERROR_NONE;
-    // the CRC check applies to received data: a transfer that only transmits clocks in
-    // whatever is on MISO and has nothing to compare
-    if (ctx->status.last_rx_data != NULL && LL_SPI_IsActiveFlag_CRCERR(instance) != 0U) {
-        errors |= UNI_HAL_SPI_ERROR_CRC;
+    uint32_t const status = instance->SR;
+    if (transfer->awaiting_suspend && (instance->CR1 & SPI_CR1_CSTART) &&
+        !(status & (SPI_SR_EOT | SPI_SR_SUSP | SPI_SR_MODF))) {
+        uni_hal_core_irq_resume(mask);
+        return false;
     }
-    if (LL_SPI_IsActiveFlag_OVR(instance) != 0U) {
-        errors |= UNI_HAL_SPI_ERROR_OVERRUN;
+    if (!transfer->aborting && (status & SPI_SR_SUSP)) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_SUSPENDED;
     }
-    if (LL_SPI_IsActiveFlag_UDR(instance) != 0U) {
-        errors |= UNI_HAL_SPI_ERROR_UNDERRUN;
+    if (transfer->rx && (status & SPI_SR_CRCE)) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_CRC;
     }
-    if (LL_SPI_IsActiveFlag_MODF(instance) != 0U) {
-        errors |= UNI_HAL_SPI_ERROR_MODE_FAULT;
+    if (transfer->rx && (status & SPI_SR_OVR)) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_OVERRUN;
     }
-    ctx->status.last_errors = errors;
-
-    LL_SPI_ClearFlag_EOT(instance);
-    LL_SPI_ClearFlag_TXTF(instance);
-    LL_SPI_ClearFlag_UDR(instance);
-    LL_SPI_ClearFlag_CRCERR(instance);
-    LL_SPI_ClearFlag_OVR(instance);
-    LL_SPI_ClearFlag_MODF(instance);
-
-    LL_SPI_Disable(instance);
-
-    /* ES0392 #2.22.4: mask TXP/TXC while disabled */
-    LL_SPI_DisableIT_TXP(instance);
-    LL_SPI_DisableIT_EOT(instance);
-
-    LL_SPI_DisableDMAReq_RX(instance);
-    LL_SPI_DisableDMAReq_TX(instance);
-
-    ctx->status.in_process = false;
-    if(ctx->status.callback) {
-        high_priority_woken = ctx->status.callback(ctx->status.callback_cookie);
+    if (transfer->tx && (status & SPI_SR_UDR)) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_UNDERRUN;
     }
-
-    return high_priority_woken;
+    if (status & SPI_SR_MODF) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_MODE_FAULT;
+    }
+    if (status & SPI_SR_TIFRE) {
+        ctx->status.last_errors |= UNI_HAL_SPI_ERROR_FRAME;
+    }
+    bool const notify = !transfer->aborting;
+    if (!(ctx->status.last_errors || transfer->aborting || (!transfer->pending && (status & SPI_SR_EOT))) ||
+        !quiesce(ctx, instance, transfer)) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
+    uni_hal_spi_callback_t const callback = notify ? ctx->status.callback : nullptr;
+    if (callback) {
+        callback_level[index] = __get_IPSR() + 1U;
+    }
+    void *cookie = ctx->status.callback_cookie;
+    uni_hal_core_irq_resume(mask);
+    return_buffers(ctx);
+    if (!callback) {
+        return false;
+    }
+    bool const woken = callback(cookie);
+    callback_level[index] = 0U;
+    return woken;
 }
 
 

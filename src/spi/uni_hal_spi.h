@@ -165,6 +165,9 @@ typedef enum {
     UNI_HAL_SPI_ERROR_OVERRUN    = 1 << 1,
     UNI_HAL_SPI_ERROR_UNDERRUN   = 1 << 2,
     UNI_HAL_SPI_ERROR_MODE_FAULT = 1 << 3,
+    UNI_HAL_SPI_ERROR_DMA        = 1 << 4,
+    UNI_HAL_SPI_ERROR_FRAME      = 1 << 5,
+    UNI_HAL_SPI_ERROR_SUSPENDED  = 1 << 6,
 } uni_hal_spi_error_e;
 
 
@@ -186,12 +189,12 @@ typedef struct {
     /**
      * SPI transmission is in progress
      */
-    bool in_process;
+    volatile bool in_process;
 
     uni_hal_spi_callback_t callback;
 
     void *callback_cookie;
-uint8_t *last_rx_data;
+    uint8_t *last_rx_data;
     size_t last_len;
 
     /**
@@ -222,7 +225,8 @@ typedef struct {
 //
 
 /**
- * Initialize SPI
+ * Initialize SPI. On STM32H743 keep the context and its configuration alive while
+ * registered. Another context can take over the same peripheral once it is idle.
  * @param ctx SPI context
  * @return true on success
  */
@@ -277,13 +281,26 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len);
 
 
-bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, const uint8_t *data_rx, const uint8_t *data_tx,
+/**
+ * Start a DMA transfer on STM32H743 SPI1..5. Length is 1..65535 bytes. Supply an RX
+ * buffer, a TX buffer, or both. Each direction needs its own configured DMA stream.
+ * Buffers must be accessible to DMA1/2. Full duplex accepts disjoint ranges or one
+ * shared in-place buffer. After a successful start, keep TX unchanged and leave RX
+ * untouched until the completion callback or until is_busy() returns false.
+ * A rejected call leaves the active transfer intact. Cacheable RX buffers must own
+ * all cache lines touched by the transfer. The callback may start the next transfer.
+ */
+bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, uint8_t *data_rx, const uint8_t *data_tx,
                                   uint32_t len);
 
 
 /**
  * Stop an asynchronous transfer that is still running, for instance a slave transfer whose
- * master never sent its clocks. The completion callback is not called.
+ * master never sent its clocks. The completion callback is suppressed on cancellation.
+ * On STM32H743, false with is_busy() still true can mean a pending cancellation:
+ * keep the buffers until is_busy() becomes false. A master first requests suspension
+ * at a frame boundary. A second abort can truncate the frame if the bus is stalled.
+ * A DMA beat already in progress must finish before buffer ownership returns.
  * @param ctx SPI context
  * @return true when a transfer was in progress and has been stopped
  */

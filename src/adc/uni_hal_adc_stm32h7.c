@@ -22,6 +22,7 @@
 
 // Uni.HAL
 #include "adc/uni_hal_adc.h"
+#include "dma/uni_hal_dma_stm32h7_irq.h"
 #include "adc/uni_hal_adc_stm32_config.h"
 #include "rcc/uni_hal_rcc.h"
 #include "systick/uni_hal_systick.h"
@@ -596,15 +597,14 @@ bool _uni_hal_adc_configure_dma(uni_hal_adc_context_t *ctx){
     LL_DMA_SetDataTransferDirection(module, stream, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
     LL_DMA_SetStreamPriorityLevel(module, stream, LL_DMA_PRIORITY_LOW);
 
-    uni_hal_dma_set_priority(ctx->config.dma, UNI_HAL_DMA_PRIORITY_LOW);
-    uni_hal_dma_set_mode(ctx->config.dma, UNI_HAL_DMA_MODE_CIRCULAR);
+    LL_DMA_SetMode(module, stream, LL_DMA_MODE_CIRCULAR);
 
     LL_DMA_SetPeriphIncMode(module, stream, LL_DMA_PERIPH_NOINCREMENT);
     LL_DMA_SetMemoryIncMode(module, stream, LL_DMA_MEMORY_INCREMENT);
     LL_DMA_SetPeriphSize(module, stream, LL_DMA_PDATAALIGN_HALFWORD);
     LL_DMA_SetMemorySize(module, stream, LL_DMA_MDATAALIGN_HALFWORD);
 
-    uni_hal_dma_set_fifo_mode(ctx->config.dma, false);
+    LL_DMA_DisableFifoMode(module, stream);
 
     LL_DMA_ConfigAddresses(module, stream, LL_ADC_DMA_GetRegAddr(_uni_hal_adc_get_instance(ctx->config.instance), LL_ADC_DMA_REG_REGULAR_DATA),
                            (uint32_t) ctx->config.data, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
@@ -761,8 +761,16 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     if (ctx->state.initialized) {
         return uni_hal_adc_is_inited(ctx);
     }
-    if (config->dma != nullptr && !uni_hal_dma_init(config->dma)) {
-        return false;
+    if (config->dma) {
+        if (!uni_hal_dma_init(config->dma)) {
+            return false;
+        }
+        uint32_t const mask = uni_hal_core_irq_pause();
+        bool const claimed = uni_hal_dma_stm32h7_claim(config->dma, nullptr, ctx);
+        uni_hal_core_irq_resume(mask);
+        if (!claimed) {
+            return false;
+        }
     }
 
     _uni_hal_adc_stm32h7_cache_cal(ctx);
@@ -773,13 +781,13 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
             pin->gpio_type = UNI_HAL_GPIO_TYPE_ANALOG;
             pin->gpio_pull = UNI_HAL_GPIO_PULL_NO;
             if (!uni_hal_gpio_pin_init(pin)) {
-                return false;
+                goto failed;
             }
         }
     }
 
     if (!uni_hal_rcc_clksrc_set(config->instance, clock_source) || !uni_hal_rcc_clk_set(config->instance, true)) {
-        return false;
+        goto failed;
     }
     const uint32_t interrupt = _uni_hal_adc_get_interrupt(config->instance);
     NVIC_SetPriority(interrupt, UNI_HAL_ADC_INT_PRIO);
@@ -787,14 +795,31 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
 
     if (!_uni_hal_adc_configure_common(ctx) || !_uni_hal_adc_configure(ctx) ||
         !_uni_hal_adc_powerup(ctx) || !_uni_hal_adc_enable(ctx)) {
-        return false;
+        goto failed;
     }
-    if (config->dma != nullptr && (!_uni_hal_adc_configure_dma(ctx) || !uni_hal_dma_enable(config->dma, true))) {
-        return false;
+    if (config->dma) {
+        if (!_uni_hal_adc_configure_dma(ctx)) {
+            goto failed;
+        }
+        DMA_TypeDef *module = uni_hal_dma_stm32h7_get_module(config->dma->config.instance);
+        LL_DMA_EnableStream(module, config->dma->config.channel);
     }
+    uint32_t const mask = uni_hal_core_irq_pause();
     ctx->state.initialized = true;
     _uni_hal_adc_trigger(ctx);
+    if (config->dma) {
+        uni_hal_dma_stm32h7_circular_started(config->dma);
+    }
+    uni_hal_core_irq_resume(mask);
     return true;
+
+failed:
+    if (config->dma) {
+        uint32_t const mask = uni_hal_core_irq_pause();
+        uni_hal_dma_stm32h7_release(config->dma);
+        uni_hal_core_irq_resume(mask);
+    }
+    return false;
 }
 
 
