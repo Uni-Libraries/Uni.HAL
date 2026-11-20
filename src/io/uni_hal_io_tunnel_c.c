@@ -4,34 +4,52 @@
 
 #include "uni_hal_io_tunnel.h"
 
+#include "core/uni_hal_core.h"
+
+static bool endpoint_available(const uni_hal_io_context_t *io, const uni_hal_io_tunnel_context_t *ctx) {
+    return !io || !io->handlers.tunnel_ctx || io->handlers.tunnel_ctx == ctx;
+}
+
+
 //
 // Public
 //
 
 bool uni_hal_io_tunnel_init(uni_hal_io_tunnel_context_t *ctx, uni_hal_io_context_t *io_first,
                            uni_hal_io_context_t *io_second, bool transparent) {
-    bool result = false;
+    if (!ctx || ((io_first == NULL) != (io_second == NULL))) {
+        return false;
+    }
 
-    if (ctx != NULL) {
-        if (ctx->io_first != NULL) {
+    // UART receive interrupts must see a complete binding when the tunnel changes.
+#if defined(UNI_HAL_TARGET_MCU_PC)
+    taskENTER_CRITICAL();
+#else
+    uint32_t const mask = uni_hal_core_irq_pause();
+#endif
+    bool const available = endpoint_available(io_first, ctx) && endpoint_available(io_second, ctx);
+    if (available) {
+        if (ctx->io_first && ctx->io_first->handlers.tunnel_ctx == ctx) {
             ctx->io_first->handlers.tunnel_ctx = NULL;
         }
-
-        if (ctx->io_second != NULL) {
+        if (ctx->io_second && ctx->io_second->handlers.tunnel_ctx == ctx) {
             ctx->io_second->handlers.tunnel_ctx = NULL;
         }
 
         ctx->io_first = io_first;
         ctx->io_second = io_second;
         ctx->transparent = transparent;
-
-        ctx->io_first->handlers.tunnel_ctx = ctx;
-        ctx->io_second->handlers.tunnel_ctx = ctx;
-
-        result = true;
+        if (io_first) {
+            io_first->handlers.tunnel_ctx = ctx;
+            io_second->handlers.tunnel_ctx = ctx;
+        }
     }
-
-    return result;
+#if defined(UNI_HAL_TARGET_MCU_PC)
+    taskEXIT_CRITICAL();
+#else
+    uni_hal_core_irq_resume(mask);
+#endif
+    return available;
 }
 
 

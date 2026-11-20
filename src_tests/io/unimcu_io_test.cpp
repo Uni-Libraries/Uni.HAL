@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "io/uni_hal_io.h"
+#include "io/uni_hal_io_tunnel.h"
 
 namespace {
 struct Io {
@@ -106,4 +107,36 @@ TEST_CASE_METHOD(Io, "IO transmit reports accepted bytes and triggers only after
     REQUIRE(trigger.calls == 2);
     REQUIRE(uni_hal_io_buffer_pop_isr(&io_ctx.buf_tx, output, 1, &woken) == 1);
     REQUIRE(output[0] == data[5]);
+}
+
+TEST_CASE("IO tunnel disconnect releases both endpoints and permits reconnection", "[hal_io]") {
+    Io first, second, third;
+    uni_hal_io_tunnel_context_t tunnel{};
+    REQUIRE(uni_hal_io_tunnel_init(&tunnel, &first.io_ctx, &second.io_ctx, false));
+    REQUIRE(uni_hal_io_tunnel_init(&tunnel, nullptr, nullptr, false));
+    REQUIRE_FALSE(uni_hal_io_tunnel_is_inited(&tunnel));
+    REQUIRE(first.io_ctx.handlers.tunnel_ctx == nullptr);
+    REQUIRE(second.io_ctx.handlers.tunnel_ctx == nullptr);
+    uint8_t byte = 0x5A;
+    REQUIRE(uni_hal_io_tunnel_transmit(&tunnel, &first.io_ctx, &byte, 1) == UNI_HAL_IO_TUNNEL_FAIL);
+    REQUIRE(uni_hal_io_tunnel_init(&tunnel, nullptr, nullptr, false));
+
+    REQUIRE(uni_hal_io_tunnel_init(&tunnel, &first.io_ctx, &third.io_ctx, true));
+    REQUIRE_FALSE(uni_hal_io_tunnel_init(&tunnel, &second.io_ctx, nullptr, false));
+    REQUIRE_FALSE(uni_hal_io_tunnel_init(&tunnel, nullptr, &second.io_ctx, false));
+    Io fourth;
+    uni_hal_io_tunnel_context_t other{};
+    REQUIRE(uni_hal_io_tunnel_init(&other, &second.io_ctx, &fourth.io_ctx, false));
+    REQUIRE_FALSE(uni_hal_io_tunnel_init(&other, &first.io_ctx, &fourth.io_ctx, false));
+    REQUIRE_FALSE(uni_hal_io_tunnel_init(&other, &second.io_ctx, &third.io_ctx, false));
+    REQUIRE(other.io_first == &second.io_ctx);
+    REQUIRE(other.io_second == &fourth.io_ctx);
+    REQUIRE(uni_hal_io_tunnel_init(&other, nullptr, nullptr, false));
+    REQUIRE(uni_hal_io_tunnel_is_inited(&tunnel));
+    REQUIRE(first.io_ctx.handlers.tunnel_ctx == &tunnel);
+    REQUIRE(third.io_ctx.handlers.tunnel_ctx == &tunnel);
+    REQUIRE(second.io_ctx.handlers.tunnel_ctx == nullptr);
+    REQUIRE(uni_hal_io_tunnel_transmit(&tunnel, &first.io_ctx, &byte, 1) == UNI_HAL_IO_TUNNEL_TRANSPARENT);
+    REQUIRE(uni_hal_io_buffer_pop_isr(&third.io_ctx.buf_tx, &byte, 1, &third.woken) == 1);
+    REQUIRE(byte == 0x5A);
 }

@@ -55,7 +55,9 @@ typedef enum {
  * @param io_second pointer to the second IO context
  * @param transparent set to true to not drop data from the IO RX buffer
  * @return true on success
- * @note pass NULL to the io_first and io_second do stop the tunnel
+ * @note Pass NULL for both endpoints to stop the tunnel. A single NULL endpoint
+ *       or an endpoint bound to another tunnel is rejected, preserving both bindings.
+ *       Disconnect the tunnel before deinitializing its IO contexts.
  */
 bool uni_hal_io_tunnel_init(uni_hal_io_tunnel_context_t *ctx, uni_hal_io_context_t *io_first,
                            uni_hal_io_context_t *io_second, bool transparent);
