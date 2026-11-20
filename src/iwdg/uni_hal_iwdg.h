@@ -61,7 +61,9 @@ typedef struct {
 bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx);
 
 /**
- * Deinitialize IWDG
+ * Deinitialize IWDG. On STM32L496 and STM32H743 a running IWDG can only
+ * be stopped by a reset. This call returns false on those targets and the
+ * application must continue reloading the watchdog.
  * @param ctx pointer to the IWDG context
  * @return true on success
  */

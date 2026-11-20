@@ -90,12 +90,8 @@ bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx) {
 
 
 bool uni_hal_iwdg_deinit(uni_hal_iwdg_context_t *ctx) {
-    bool result = false;
-    if(ctx!=NULL){
-        ctx->inited = false;
-        result = true;
-    }
-    return result;
+    (void)ctx;
+    return false;
 }
 
 
