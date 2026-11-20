@@ -235,29 +235,32 @@ bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *d
     bool result = false;
 
     if (uni_hal_rtc_is_inited(ctx) && uni_hal_rtc_datetime_is_valid(datetime)) {
-        LL_RTC_DateTypeDef date = {
-            .WeekDay = datetime->weekday,
-            .Month = datetime->month,
-            .Day = datetime->day,
-            .Year = (uint8_t)(datetime->year - UNI_HAL_RTC_YEAR_BASE),
-        };
-        LL_RTC_TimeTypeDef time = {
-            .TimeFormat = LL_RTC_TIME_FORMAT_AM_OR_24,
-            .Hours = datetime->hours,
-            .Minutes = datetime->minutes,
-            .Seconds = datetime->seconds,
-        };
-
+        uint32_t format = LL_RTC_TIME_FORMAT_AM_OR_24;
+        uint8_t hour = datetime->hours;
         if (LL_RTC_GetHourFormat(RTC) == LL_RTC_HOURFORMAT_AMPM) {
-            time.TimeFormat = datetime->hours >= 12U ? LL_RTC_TIME_FORMAT_PM : LL_RTC_TIME_FORMAT_AM_OR_24;
-            time.Hours = datetime->hours % 12U;
-            if (time.Hours == 0U) {
-                time.Hours = 12U;
+            format = hour >= 12U ? LL_RTC_TIME_FORMAT_PM : LL_RTC_TIME_FORMAT_AM_OR_24;
+            hour %= 12U;
+            if (hour == 0U) {
+                hour = 12U;
             }
         }
 
-        result = LL_RTC_DATE_Init(RTC, LL_RTC_FORMAT_BIN, &date) == SUCCESS;
-        result = result && LL_RTC_TIME_Init(RTC, LL_RTC_FORMAT_BIN, &time) == SUCCESS;
+        // Keep the calendar stopped until it holds the complete date and time.
+        LL_RTC_DisableWriteProtection(RTC);
+        result = LL_RTC_EnterInitMode(RTC) == SUCCESS;
+        if (result) {
+            LL_RTC_DATE_Config(RTC, datetime->weekday, __LL_RTC_CONVERT_BIN2BCD(datetime->day),
+                               __LL_RTC_CONVERT_BIN2BCD(datetime->month),
+                               __LL_RTC_CONVERT_BIN2BCD(datetime->year - UNI_HAL_RTC_YEAR_BASE));
+            LL_RTC_TIME_Config(RTC, format, __LL_RTC_CONVERT_BIN2BCD(hour),
+                               __LL_RTC_CONVERT_BIN2BCD(datetime->minutes), __LL_RTC_CONVERT_BIN2BCD(datetime->seconds));
+        }
+        // Also withdraw the INIT request if the acknowledgement timed out.
+        LL_RTC_DisableInitMode(RTC);
+        if (result && !LL_RTC_IsShadowRegBypassEnabled(RTC)) {
+            result = LL_RTC_WaitForSynchro(RTC) == SUCCESS;
+        }
+        LL_RTC_EnableWriteProtection(RTC);
         if (result) {
             ctx->calendar_valid = true;
         }

@@ -4,10 +4,13 @@ else()
     set(rtc_machine mps2-an386)
 endif()
 
-add_executable(rtc_retained_hours_qemu retained_hours.c)
-target_link_libraries(rtc_retained_hours_qemu PRIVATE uni.hal)
-uni_hal_set_linker_file(rtc_retained_hours_qemu "${CMAKE_CURRENT_SOURCE_DIR}/../adc/mps2.ld")
-add_test(NAME rtc_retained_hours COMMAND "${QEMU_SYSTEM_ARM}" -M ${rtc_machine}
-    -nographic -monitor none -serial none -semihosting-config enable=on,target=native
-    -kernel $<TARGET_FILE:rtc_retained_hours_qemu>)
-set_tests_properties(rtc_retained_hours PROPERTIES TIMEOUT 10)
+foreach(scenario IN ITEMS retained_hours calendar_update)
+    set(target rtc_${scenario})
+    add_executable(${target}_qemu ${scenario}.c)
+    target_link_libraries(${target}_qemu PRIVATE uni.hal)
+    uni_hal_set_linker_file(${target}_qemu "${CMAKE_CURRENT_SOURCE_DIR}/../adc/mps2.ld")
+    add_test(NAME ${target} COMMAND "${QEMU_SYSTEM_ARM}" -M ${rtc_machine}
+        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+        -kernel $<TARGET_FILE:${target}_qemu>)
+    set_tests_properties(${target} PROPERTIES TIMEOUT 10)
+endforeach()
