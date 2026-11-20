@@ -133,10 +133,13 @@ uni_hal_rcc_clksrc_e uni_hal_rtc_clock_source_get(void);
 bool uni_hal_rtc_get(const uni_hal_rtc_context_t *ctx, uni_hal_rtc_datetime_t *datetime);
 
 /**
- * Set the calendar
+ * Set the calendar. On STM32, a shadow synchronization timeout returns false after the
+ * hardware calendar has been updated. Once synchronization completes, uni_hal_rtc_get()
+ * can read the new value.
  * @param ctx pointer to the RTC context
  * @param datetime date and time to set
- * @return false when a field is out of range or the RTC did not accept the value
+ * @return false for an uninitialized context, invalid input, or a timeout entering
+ *         initialization mode or synchronizing the STM32 shadow registers. Otherwise true.
  */
 bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *datetime);
 

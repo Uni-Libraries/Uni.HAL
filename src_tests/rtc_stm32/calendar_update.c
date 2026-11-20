@@ -1,8 +1,6 @@
 #if defined(UNI_HAL_TARGET_MCU_STM32H743)
-#include <stm32h7xx_ll_cortex.h>
 #include <stm32h7xx_ll_rtc.h>
 #else
-#include <stm32l4xx_ll_cortex.h>
 #include <stm32l4xx_ll_rtc.h>
 #endif
 #include <stdbool.h>
@@ -16,7 +14,7 @@ static bool shadow_ready;
 static unsigned restarts, sync_reads;
 
 static void resume_calendar(RTC_TypeDef *dev) {
-    LL_RTC_DisableInitMode(dev);
+    CLEAR_BIT(dev->ISR, RTC_ISR_INIT | RTC_ISR_INITF);
     ++restarts;
     if (advance_second) {
         // The calling task is preempted for one second the first time the clock runs again.
@@ -33,16 +31,22 @@ static void resume_calendar(RTC_TypeDef *dev) {
     }
 }
 
-// Use the vendor's actual setter and timeout paths against the simulated calendar.
+static uint32_t model_tick(void) {
+    static uint32_t ms;
+    if (rtc.ISR & RTC_ISR_INIT) {
+        if (grant_init) {
+            rtc.ISR |= RTC_ISR_INITF;
+        }
+    } else if (++sync_reads > 1U && shadow_ready) {
+        rtc.ISR |= RTC_ISR_RSF;
+    }
+    return ++ms;
+}
+
+#define uni_hal_systick_get_ms model_tick
+#define LL_RTC_EnableInitMode(dev) SET_BIT((dev)->ISR, RTC_ISR_INIT)
 #define LL_RTC_DisableInitMode resume_calendar
-#define LL_RTC_IsActiveFlag_INIT(dev) ((void)(dev), (uint32_t)grant_init)
-#define LL_RTC_IsActiveFlag_RS(dev) ((void)(dev), (uint32_t)(++sync_reads > 1U && shadow_ready))
-#define LL_SYSTICK_IsActiveCounterFlag() 1U
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
-#include "../../3rdparty/st_stm32h7/src_hal/stm32h7xx_ll_rtc.c"
-#else
-#include "../../3rdparty/st_stm32l4/src_hal/stm32l4xx_ll_rtc.c"
-#endif
+#define LL_RTC_ClearFlag_RS(dev) CLEAR_BIT((dev)->ISR, RTC_ISR_RSF)
 #include "rtc/uni_hal_rtc_stm32.c"
 #include "../arm/semihost_test.h"
 

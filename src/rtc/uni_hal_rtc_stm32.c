@@ -23,7 +23,7 @@
 // Uni.HAL
 #include "core/uni_hal_core.h"
 #include "rtc/uni_hal_rtc_calendar.h"
-#include "systick/uni_hal_systick.h"
+#include "systick/uni_hal_systick_stm32_wait.h"
 
 
 
@@ -39,6 +39,9 @@ enum {
     /** 1 Hz from the 32 kHz internal oscillator: 32000 / (127 + 1) / (249 + 1) */
     UNI_HAL_RTC_LSI_PREDIV_A = 127U,
     UNI_HAL_RTC_LSI_PREDIV_S = 249U,
+
+    /** initialization and shadow-register acknowledgements, as in the ST LL driver */
+    UNI_HAL_RTC_ACK_TIMEOUT_MS = 1000U,
 
     /** longest wait for LSE to start again after a reset of the backup domain */
     UNI_HAL_RTC_LSE_TIMEOUT_MS = 5000U,
@@ -75,12 +78,19 @@ static void _uni_hal_rtc_backup_reset(void) {
     WRITE_REG(RCC->BDCR, bdcr);
 
     if ((bdcr & RCC_BDCR_LSEON) != 0U) {
-        uint32_t const start_ms = uni_hal_systick_get_ms();
-        while (LL_RCC_LSE_IsReady() == 0U && (uni_hal_systick_get_ms() - start_ms) < UNI_HAL_RTC_LSE_TIMEOUT_MS) {
-        }
+        // The caller verifies readiness of the requested clock, which may be LSI.
+        (void)uni_hal_stm32_wait_bits(&RCC->BDCR, RCC_BDCR_LSERDY, RCC_BDCR_LSERDY, UNI_HAL_RTC_LSE_TIMEOUT_MS);
     }
 }
 
+
+static bool _uni_hal_rtc_enter_init_mode(void) {
+    if (LL_RTC_IsActiveFlag_INIT(RTC)) {
+        return true;
+    }
+    LL_RTC_EnableInitMode(RTC);
+    return uni_hal_stm32_wait_bits(&RTC->ISR, RTC_ISR_INITF, RTC_ISR_INITF, UNI_HAL_RTC_ACK_TIMEOUT_MS);
+}
 
 /**
  * Check whether the RTC has to be moved to the clock source of the context
@@ -173,12 +183,15 @@ bool uni_hal_rtc_init(uni_hal_rtc_context_t *ctx) {
                 // first start: set the prescalers for the clock in use; the calendar starts at
                 // its reset value and INITS stays clear until uni_hal_rtc_set() is called
                 bool const from_lsi = LL_RCC_GetRTCClockSource() == LL_RCC_RTC_CLKSOURCE_LSI;
-                LL_RTC_InitTypeDef init = {
-                    .HourFormat = LL_RTC_HOURFORMAT_24HOUR,
-                    .AsynchPrescaler = from_lsi ? UNI_HAL_RTC_LSI_PREDIV_A : UNI_HAL_RTC_LSE_PREDIV_A,
-                    .SynchPrescaler = from_lsi ? UNI_HAL_RTC_LSI_PREDIV_S : UNI_HAL_RTC_LSE_PREDIV_S,
-                };
-                result = LL_RTC_Init(RTC, &init) == SUCCESS;
+                LL_RTC_DisableWriteProtection(RTC);
+                result = _uni_hal_rtc_enter_init_mode();
+                if (result) {
+                    LL_RTC_SetHourFormat(RTC, LL_RTC_HOURFORMAT_24HOUR);
+                    LL_RTC_SetSynchPrescaler(RTC, from_lsi ? UNI_HAL_RTC_LSI_PREDIV_S : UNI_HAL_RTC_LSE_PREDIV_S);
+                    LL_RTC_SetAsynchPrescaler(RTC, from_lsi ? UNI_HAL_RTC_LSI_PREDIV_A : UNI_HAL_RTC_LSE_PREDIV_A);
+                }
+                LL_RTC_DisableInitMode(RTC);
+                LL_RTC_EnableWriteProtection(RTC);
             }
         }
 
@@ -274,7 +287,7 @@ bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *d
 
         // Keep the calendar stopped until it holds the complete date and time.
         LL_RTC_DisableWriteProtection(RTC);
-        result = LL_RTC_EnterInitMode(RTC) == SUCCESS;
+        result = _uni_hal_rtc_enter_init_mode();
         if (result) {
             LL_RTC_DATE_Config(RTC, datetime->weekday, __LL_RTC_CONVERT_BIN2BCD(datetime->day),
                                __LL_RTC_CONVERT_BIN2BCD(datetime->month),
@@ -285,7 +298,9 @@ bool uni_hal_rtc_set(uni_hal_rtc_context_t *ctx, const uni_hal_rtc_datetime_t *d
         // Also withdraw the INIT request if the acknowledgement timed out.
         LL_RTC_DisableInitMode(RTC);
         if (result && !LL_RTC_IsShadowRegBypassEnabled(RTC)) {
-            result = LL_RTC_WaitForSynchro(RTC) == SUCCESS;
+            LL_RTC_ClearFlag_RS(RTC);
+            result = uni_hal_stm32_wait_bits(&RTC->ISR, RTC_ISR_RSF, 0U, UNI_HAL_RTC_ACK_TIMEOUT_MS) &&
+                     uni_hal_stm32_wait_bits(&RTC->ISR, RTC_ISR_RSF, RTC_ISR_RSF, UNI_HAL_RTC_ACK_TIMEOUT_MS);
         }
         LL_RTC_EnableWriteProtection(RTC);
         if (result) {
