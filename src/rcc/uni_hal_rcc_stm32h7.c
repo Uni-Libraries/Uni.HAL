@@ -1375,9 +1375,9 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
 typedef struct {
     uni_hal_rcc_clksrc_e source;
     uint32_t selector;
-} i2c_clock_source_t;
+} kernel_clock_source_t;
 
-static const i2c_clock_source_t i2c_clock_sources[2][4] = {
+static const kernel_clock_source_t i2c_clock_sources[2][4] = {
     {
         {UNI_HAL_RCC_CLKSRC_PCLK1, LL_RCC_I2C123_CLKSOURCE_PCLK1},
         {UNI_HAL_RCC_CLKSRC_PLL3R, LL_RCC_I2C123_CLKSOURCE_PLL3R},
@@ -1392,10 +1392,50 @@ static const i2c_clock_source_t i2c_clock_sources[2][4] = {
     },
 };
 
+static const kernel_clock_source_t uart_clock_sources[2][6] = {
+    {
+        {UNI_HAL_RCC_CLKSRC_PCLK1, LL_RCC_USART234578_CLKSOURCE_PCLK1},
+        {UNI_HAL_RCC_CLKSRC_PLL2Q, LL_RCC_USART234578_CLKSOURCE_PLL2Q},
+        {UNI_HAL_RCC_CLKSRC_PLL3Q, LL_RCC_USART234578_CLKSOURCE_PLL3Q},
+        {UNI_HAL_RCC_CLKSRC_HSI, LL_RCC_USART234578_CLKSOURCE_HSI},
+        {UNI_HAL_RCC_CLKSRC_CSI, LL_RCC_USART234578_CLKSOURCE_CSI},
+        {UNI_HAL_RCC_CLKSRC_LSE, LL_RCC_USART234578_CLKSOURCE_LSE},
+    },
+    {
+        {UNI_HAL_RCC_CLKSRC_PCLK2, LL_RCC_USART16_CLKSOURCE_PCLK2},
+        {UNI_HAL_RCC_CLKSRC_PLL2Q, LL_RCC_USART16_CLKSOURCE_PLL2Q},
+        {UNI_HAL_RCC_CLKSRC_PLL3Q, LL_RCC_USART16_CLKSOURCE_PLL3Q},
+        {UNI_HAL_RCC_CLKSRC_HSI, LL_RCC_USART16_CLKSOURCE_HSI},
+        {UNI_HAL_RCC_CLKSRC_CSI, LL_RCC_USART16_CLKSOURCE_CSI},
+        {UNI_HAL_RCC_CLKSRC_LSE, LL_RCC_USART16_CLKSOURCE_LSE},
+    },
+};
+
+static bool uart_uses_apb2(uni_hal_core_periph_e target) {
+    return target == UNI_HAL_CORE_PERIPH_UART_1 || target == UNI_HAL_CORE_PERIPH_UART_6;
+}
+
 uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target) {
     uni_hal_rcc_clksrc_e result = UNI_HAL_RCC_CLKSRC_UNKNOWN;
     if (uni_hal_rcc_is_inited()) {
         switch (target) {
+        case UNI_HAL_CORE_PERIPH_UART_1:
+        case UNI_HAL_CORE_PERIPH_UART_2:
+        case UNI_HAL_CORE_PERIPH_UART_3:
+        case UNI_HAL_CORE_PERIPH_UART_4:
+        case UNI_HAL_CORE_PERIPH_UART_5:
+        case UNI_HAL_CORE_PERIPH_UART_6:
+        case UNI_HAL_CORE_PERIPH_UART_7:
+        case UNI_HAL_CORE_PERIPH_UART_8: {
+            bool const apb2 = uart_uses_apb2(target);
+            uint32_t const mux = LL_RCC_GetUSARTClockSource(apb2 ? LL_RCC_USART16_CLKSOURCE : LL_RCC_USART234578_CLKSOURCE);
+            for (unsigned i = 0; i < 6U; ++i) {
+                if (uart_clock_sources[apb2][i].selector == mux) {
+                    return uart_clock_sources[apb2][i].source;
+                }
+            }
+            break;
+        }
         case UNI_HAL_CORE_PERIPH_CAN_1:
         case UNI_HAL_CORE_PERIPH_CAN_2:
             switch (LL_RCC_GetFDCANClockSource(LL_RCC_FDCAN_CLKSOURCE)) {
@@ -1526,7 +1566,7 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
             case UNI_HAL_CORE_PERIPH_I2C_2:
             case UNI_HAL_CORE_PERIPH_I2C_3:
             case UNI_HAL_CORE_PERIPH_I2C_4: {
-                const i2c_clock_source_t *choices = i2c_clock_sources[target == UNI_HAL_CORE_PERIPH_I2C_4];
+                const kernel_clock_source_t *choices = i2c_clock_sources[target == UNI_HAL_CORE_PERIPH_I2C_4];
                 for (unsigned i = 0; i < 4U; ++i) {
                     if (choices[i].source == source) {
                         LL_RCC_SetI2CClockSource(choices[i].selector);
@@ -1695,39 +1735,20 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
                 }
                 break;
             }
+            case UNI_HAL_CORE_PERIPH_UART_1:
+            case UNI_HAL_CORE_PERIPH_UART_6:
             case UNI_HAL_CORE_PERIPH_UART_2:
             case UNI_HAL_CORE_PERIPH_UART_3:
             case UNI_HAL_CORE_PERIPH_UART_4:
             case UNI_HAL_CORE_PERIPH_UART_5:
             case UNI_HAL_CORE_PERIPH_UART_7:
             case UNI_HAL_CORE_PERIPH_UART_8: {
-                uint32_t src = UINT32_MAX;
-                switch (source) {
-                    case UNI_HAL_RCC_CLKSRC_CSI:
-                        src = LL_RCC_USART234578_CLKSOURCE_CSI;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_LSE:
-                        src = LL_RCC_USART234578_CLKSOURCE_LSE;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_HSI:
-                        src = LL_RCC_USART234578_CLKSOURCE_HSI;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_PCLK1:
-                        src = LL_RCC_USART234578_CLKSOURCE_PCLK1;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_PLL2Q:
-                        src = LL_RCC_USART234578_CLKSOURCE_PLL2Q;
-                        break;
-                    case UNI_HAL_RCC_CLKSRC_PLL3Q:
-                        src = LL_RCC_USART234578_CLKSOURCE_PLL3Q;
-                        break;
-                    default:
-                        // unknown clock source
-                        break;
-                }
-                if (src != UINT32_MAX) {
-                    LL_RCC_SetUSARTClockSource(src);
-                    result = true;
+                const kernel_clock_source_t *choices = uart_clock_sources[uart_uses_apb2(target)];
+                for (unsigned i = 0; i < 6U; ++i) {
+                    if (choices[i].source == source) {
+                        LL_RCC_SetUSARTClockSource(choices[i].selector);
+                        return true;
+                    }
                 }
                 break;
             }

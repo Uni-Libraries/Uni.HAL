@@ -420,7 +420,7 @@ bool uni_hal_usart_init(uni_hal_usart_context_t *ctx) {
         ctx->initialized = false;
 
         // clock
-        result = uni_hal_rcc_clksrc_set(ctx->instance, ctx->clksrc);
+        result = ctx->clksrc == UNI_HAL_RCC_CLKSRC_UNKNOWN || uni_hal_rcc_clksrc_set(ctx->instance, ctx->clksrc);
         result = uni_hal_rcc_clk_set(ctx->instance, true) && result;
 
         // pins

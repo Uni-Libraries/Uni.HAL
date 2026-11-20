@@ -63,7 +63,7 @@ typedef struct {
     uint32_t baudrate_div;
 
     /**
-     * Clock source
+     * STM32H743 kernel clock source. UNKNOWN preserves the current RCC selection.
      */
     uni_hal_rcc_clksrc_e clksrc;
 
