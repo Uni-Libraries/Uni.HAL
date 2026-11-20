@@ -20,15 +20,6 @@
 
 
 //
-// Defines
-//
-
-/* COUNTS_PER_SECOND of the BSP expands without parentheses (CPU_HZ/2) */
-#define UNI_HAL_SYSTICK_ZYNQ7000_COUNTS_PER_MS ((uint64_t)(COUNTS_PER_SECOND) / 1000U)
-
-
-
-//
 // Functions
 //
 
@@ -40,7 +31,13 @@ bool uni_hal_systick_init(void) {
 uint32_t uni_hal_systick_get_ms(void) {
     XTime t;
     XTime_GetTime(&t);
-    return (uint32_t)(t / UNI_HAL_SYSTICK_ZYNQ7000_COUNTS_PER_MS);
+    uint64_t const hz = (COUNTS_PER_SECOND);
+    if (hz % 1000U == 0U) {
+        return (uint32_t)(t / (hz / 1000U));
+    }
+    // Split off whole seconds so the fractional result stays exact even near XTime wrap.
+    uint32_t const seconds = (uint32_t)(t / hz);
+    return seconds * 1000U + (uint32_t)((t % hz) * 1000U / hz);
 }
 
 

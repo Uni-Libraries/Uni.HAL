@@ -116,3 +116,8 @@ foreach(hz IN ITEMS 128 1000 4000)
     add_test(NAME ${target} COMMAND ${target})
     set_tests_properties(${target} PROPERTIES TIMEOUT 10)
 endforeach()
+
+add_executable(systick_zynq_time systick/zynq_time.c)
+target_include_directories(systick_zynq_time PRIVATE uart_zynq/fakes)
+target_link_libraries(systick_zynq_time PRIVATE uni.hal)
+add_test(NAME systick_zynq_time COMMAND systick_zynq_time)
