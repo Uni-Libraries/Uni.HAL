@@ -81,6 +81,13 @@ uni_hal_add_test(io PROPERTIES TIMEOUT 10)
 uni_hal_add_test(ads1015 PROPERTIES TIMEOUT 10)
 uni_hal_add_test(dwt)
 uni_hal_add_test(rtc)
+add_test(NAME freertos_pc_minimal_task COMMAND "${CMAKE_CTEST_COMMAND}"
+    --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/freertos_pc" "${CMAKE_CURRENT_BINARY_DIR}/freertos_pc"
+    --build-generator "${CMAKE_GENERATOR}" --build-generator-platform "${CMAKE_GENERATOR_PLATFORM}"
+    --build-generator-toolset "${CMAKE_GENERATOR_TOOLSET}" --build-noclean -C "$<CONFIG>"
+    --build-options "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}" "-DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+        "-DCMAKE_CROSSCOMPILING_EMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}" "-DCMAKE_BUILD_TYPE=$<CONFIG>"
+    --test-command "${CMAKE_CTEST_COMMAND}" -C "$<CONFIG>" --output-on-failure --no-tests=error)
 add_subdirectory(rng)
 uni_hal_add_test(i2c)
 uni_hal_add_test(can)

@@ -50,7 +50,7 @@ All MCU targets and the PC target use the bundled FreeRTOS kernel.
 | `UNI_HAL_LIBC_HEAP_SIZE` | `8192` | STM32 C library heap size in bytes |
 | `UNI_HAL_RTOS_HEAP_APP` | `OFF` | the application defines `ucHeap` itself |
 | `UNI_HAL_RTOS_MAX_PRIORITIES` | `5` | `configMAX_PRIORITIES` |
-| `UNI_HAL_RTOS_MINIMAL_STACK_SIZE` | `512` | `configMINIMAL_STACK_SIZE` of the MCU targets, in words |
+| `UNI_HAL_RTOS_MINIMAL_STACK_SIZE` | `512` | `configMINIMAL_STACK_SIZE` on all targets, in `StackType_t` words |
 | `UNI_HAL_RTOS_CONFIG_EXTRA` | empty | header included at the end of the generated `FreeRTOSConfig.h` |
 
 ## What the application has to get right

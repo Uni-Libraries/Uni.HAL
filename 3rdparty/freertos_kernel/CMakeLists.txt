@@ -17,7 +17,7 @@ if(NOT DEFINED UNI_HAL_RTOS_MAX_PRIORITIES)
     set(UNI_HAL_RTOS_MAX_PRIORITIES 5 CACHE STRING "FreeRTOS configMAX_PRIORITIES")
 endif()
 if(NOT DEFINED UNI_HAL_RTOS_MINIMAL_STACK_SIZE)
-    set(UNI_HAL_RTOS_MINIMAL_STACK_SIZE 512 CACHE STRING "FreeRTOS configMINIMAL_STACK_SIZE of the MCU targets, in words")
+    set(UNI_HAL_RTOS_MINIMAL_STACK_SIZE 512 CACHE STRING "FreeRTOS configMINIMAL_STACK_SIZE in StackType_t words")
 endif()
 if(NOT DEFINED UNI_HAL_RTOS_CONFIG_EXTRA)
     set(UNI_HAL_RTOS_CONFIG_EXTRA "" CACHE FILEPATH "Header included at the end of FreeRTOSConfig.h, to add or to #undef and redefine settings")
@@ -160,6 +160,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "                                                                               \n"
         "#define configNUM_THREAD_LOCAL_STORAGE_POINTERS (4)                            \n"
         "                                                                               \n"
+        "#define configMINIMAL_STACK_SIZE                (${UNI_HAL_RTOS_MINIMAL_STACK_SIZE}U) \n"
         "#define configMAX_PRIORITIES                    (${UNI_HAL_RTOS_MAX_PRIORITIES}) \n"
         "#define configUSE_PREEMPTION                    (1)                            \n"
         "#define configUSE_IDLE_HOOK                     (0)                            \n"
@@ -212,14 +213,12 @@ endif()
 if(UNI_HAL_TARGET_MCU STREQUAL "PC")
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "// port specific: PC                                                           \n"
-        "#define configMINIMAL_STACK_SIZE                (16384U)                       \n"
         "#define configUSE_PORT_OPTIMISED_TASK_SELECTION (0)                            \n"
         "                                                                               \n"
     )
 elseif(UNI_HAL_TARGET_MCU STREQUAL "ZYNQ7000")
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "// port specific: ARM Cortex-A9 (Zynq-7000), GCC/ARM_CA9                       \n"
-        "#define configMINIMAL_STACK_SIZE                (${UNI_HAL_RTOS_MINIMAL_STACK_SIZE}U) \n"
         "#define configUSE_PORT_OPTIMISED_TASK_SELECTION (1)                            \n"
         "// every task has an FPU context: the BSP and newlib are hard-float           \n"
         "#define configUSE_TASK_FPU_SUPPORT              (2)                            \n"
@@ -242,7 +241,6 @@ else()
     #TODO: make configutable
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/freertos_config/FreeRTOSConfig.h"
         "// port specific: ARM Cortex-M                                                 \n"
-        "#define configMINIMAL_STACK_SIZE                (${UNI_HAL_RTOS_MINIMAL_STACK_SIZE}U) \n"
         "#define configUSE_PORT_OPTIMISED_TASK_SELECTION (1)                            \n"
     #    "#include \"SEGGER_SYSVIEW_FreeRTOS.h\"                                         \n"
         "                                                                               \n"
