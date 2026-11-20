@@ -76,8 +76,7 @@ bool uni_hal_rcc_reset(uni_hal_rcc_reset_target_e target);
 bool uni_hal_rcc_clk_get(uni_hal_core_periph_e target);
 
 /**
- * Get peripherial clock frequency
- * @param ctx RCC context
+ * Get peripheral clock frequency. On STM32, SYSCLK is the system clock before AHB division.
  * @param target peripheral target
  * @return frequency in Hertz
  */

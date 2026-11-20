@@ -9,6 +9,7 @@ extern "C" {
 extern bool rcc_test_hsi48_locks;
 bool rcc_test_hsi48_enabled(void);
 void rcc_test_select_msi24(void);
+void rcc_test_divide_ahb_by_four(void);
 bool rcc_test_msi_selected(void);
 extern bool rcc_test_pll_locks, rcc_test_can_switch, rcc_test_fault_on_switch;
 extern bool rcc_test_flash_accepts, rcc_test_flash_can_lower;
@@ -351,4 +352,16 @@ TEST_CASE("L496 disabling an APB1 UART preserves neighboring UART and timer cloc
         CHECK(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_TIM_16));
         CHECK(uni_hal_rcc_clk_get(UNI_HAL_CORE_PERIPH_TIM_17));
     }
+}
+
+TEST_CASE("L496 reports SYSCLK upstream of the AHB divider") {
+    rcc_test_reset();
+    configure();
+    REQUIRE(uni_hal_rcc_init());
+    REQUIRE(uni_hal_rcc_clk_get_freq(UNI_HAL_CORE_PERIPH_SYSCLK) == 80'000'000U);
+
+    rcc_test_divide_ahb_by_four();
+    CHECK(SystemCoreClock == 20'000'000U);
+    CHECK(uni_hal_rcc_clk_get_freq(UNI_HAL_CORE_PERIPH_CAN_1) == 20'000'000U);
+    CHECK(uni_hal_rcc_clk_get_freq(UNI_HAL_CORE_PERIPH_SYSCLK) == 80'000'000U);
 }

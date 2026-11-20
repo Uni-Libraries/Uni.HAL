@@ -92,18 +92,6 @@ static bool _uni_hal_rcc_wait(rcc_read_flag_t read_flag, uint32_t expected, uint
     return true;
 }
 
-/**
- * Get HCLK frequency
- * @return HCLK frequency in hertz
- */
-static uint32_t _uni_hal_rcc_get_hclk_freq(void) {
-    // get HCLK freq
-    LL_RCC_ClocksTypeDef clocks;
-    LL_RCC_GetSystemClocksFreq(&clocks);
-    return clocks.HCLK_Frequency;
-}
-
-
 static uint32_t _uni_hal_rcc_get_pclk1_freq(void) {
     // get HCLK freq
     LL_RCC_ClocksTypeDef clocks;
@@ -1115,9 +1103,12 @@ uint32_t uni_hal_rcc_clk_get_freq(uni_hal_core_periph_e target) {
     uint32_t result = 0U;
     if (uni_hal_rcc_is_inited()) {
         switch (target) {
-            case UNI_HAL_CORE_PERIPH_SYSCLK:
-                result = _uni_hal_rcc_get_hclk_freq();
+            case UNI_HAL_CORE_PERIPH_SYSCLK: {
+                LL_RCC_ClocksTypeDef clocks;
+                LL_RCC_GetSystemClocksFreq(&clocks);
+                result = clocks.SYSCLK_Frequency;
                 break;
+            }
             case UNI_HAL_CORE_PERIPH_CAN_1:
             case UNI_HAL_CORE_PERIPH_CAN_2:
                 result = _uni_hal_rcc_get_pclk1_freq();

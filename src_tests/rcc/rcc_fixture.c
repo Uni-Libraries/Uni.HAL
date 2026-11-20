@@ -207,3 +207,8 @@ void rcc_test_hsi_not_ready(void) {
 void rcc_test_voltage_range2(void) {
     pwr.CR1 = LL_PWR_REGU_VOLTAGE_SCALE2;
 }
+
+void rcc_test_divide_ahb_by_four(void) {
+    LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_4);
+    SystemCoreClockUpdate();
+}
