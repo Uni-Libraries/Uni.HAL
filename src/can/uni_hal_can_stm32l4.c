@@ -625,7 +625,9 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
             CAN_TypeDef *can = _uni_hal_can_get_handle(ctx->config.instance);
             uint32_t const bank_bit = 1UL << slot_idx;
 
-            // the filter registers of both instances are part of CAN1
+            // Both controllers use CAN1's filter registers. Keep FINIT set until
+            // this bank is active, even if another task configures its own bank.
+            uint32_t const primask = uni_hal_core_irq_pause();
             SET_BIT(CAN1->FMR, CAN_FMR_FINIT);
             MODIFY_REG(CAN1->FMR, CAN_FMR_CAN2SB, UNI_HAL_CAN_FILTER_CAN2_START << CAN_FMR_CAN2SB_Pos);
 
@@ -651,6 +653,7 @@ bool uni_hal_can_set_filter(uni_hal_can_context_t *ctx, uint32_t fifo_num, uint3
 
             // frames can arrive in this FIFO from now on
             SET_BIT(can->IER, (fifo_num == 1U) ? CAN_IER_FMPIE1 : CAN_IER_FMPIE0);
+            uni_hal_core_irq_resume(primask);
 
             result = true;
         }
