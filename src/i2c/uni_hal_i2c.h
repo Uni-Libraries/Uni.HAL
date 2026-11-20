@@ -263,7 +263,7 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
  * @param ctx pointer to interface context
  * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param mem_addr target device memory address
- * @param mem_addr_size target device memory address size in bytes (1 or 2)
+ * @param mem_addr_size UNI_HAL_I2C_MEMADD_SIZE_8BIT or UNI_HAL_I2C_MEMADD_SIZE_16BIT
  * @param buf pointer to receive buffer
  * @param buf_len receive buffer length
  * @param timeout total operation timeout in milliseconds; on STM32 zero starts no transfer
@@ -279,7 +279,7 @@ bool uni_hal_i2c_mem_read(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_
  * @param ctx pointer to interface context
  * @param dev_addr 7-bit address of the target device (0x00..0x7F), not shifted; see the note on device addresses
  * @param mem_addr target device memory address
- * @param mem_addr_size target device memory address size in bytes (1 or 2)
+ * @param mem_addr_size UNI_HAL_I2C_MEMADD_SIZE_8BIT or UNI_HAL_I2C_MEMADD_SIZE_16BIT
  * @param buf pointer to transmit buffer
  * @param buf_len transmit buffer length
  * @param timeout total operation timeout in milliseconds; on STM32 zero starts no transfer

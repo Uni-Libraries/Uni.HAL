@@ -231,6 +231,10 @@ bool uni_hal_i2c_master_transmit(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, 
 static bool poll_memory(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t mem_addr,
                         uni_hal_i2c_memadd_size_e mem_addr_size, uint8_t *buf, uint16_t len,
                         bool read, uint32_t timeout) {
+    uint16_t const size = _uni_hal_i2c_memadd_size(mem_addr_size);
+    if (size == 0U) {
+        return false;
+    }
     uint32_t start = uni_hal_systick_get_ms();
     i2c_bus_t *bus = claim_transfer(ctx, start, timeout);
     if (!bus) {
@@ -238,7 +242,6 @@ static bool poll_memory(uni_hal_i2c_context_t *ctx, uint16_t dev_addr, uint16_t 
     }
     I2C_HandleTypeDef *handle = bus->hal;
     uint16_t addr = _uni_hal_i2c_shiftaddr(dev_addr);
-    uint16_t size = _uni_hal_i2c_memadd_size(mem_addr_size);
     bool result = false;
     for (uint32_t remaining = remaining_ms(start, timeout); remaining; remaining = retry_budget(start, timeout)) {
         uint32_t wait = hal_timeout(remaining);
