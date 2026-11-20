@@ -85,7 +85,8 @@ typedef struct {
     uni_hal_spi_mode_e mode;
 
     /**
-     * SPI clock source
+     * SPI clock source. On STM32H743, SPI1/2/3 share one selection and SPI4/5
+     * share another. Initialization fails if a sibling is already using a different source.
      */
     uni_hal_rcc_clksrc_e clock_source;
 

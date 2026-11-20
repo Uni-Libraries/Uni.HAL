@@ -421,9 +421,19 @@ static uint32_t _uni_hal_spi_prescaler_div_get(uint32_t prescaler_ll) {
 // Private/init
 //
 
-static bool _uni_hal_spi_init_rcc(uni_hal_spi_context_t *ctx) {
-    return uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source)
-           && uni_hal_rcc_clk_set(ctx->config.instance, true);
+// Called with interrupts masked, before publishing a new owner or replacing an idle one.
+static bool select_kernel_clock(const uni_hal_spi_context_t *ctx, size_t index) {
+    if (index < 5U) { // SPI1/2/3 and SPI4/5 share muxes. SPI6 has its own.
+        size_t const first = index < 3U ? 0U : 3U;
+        size_t const end = index < 3U ? 3U : 5U;
+        for (size_t peer = first; peer < end; ++peer) {
+            if (peer != index && g_uni_hal_spi_ctx[peer]) {
+                return ctx->config.clock_source != UNI_HAL_RCC_CLKSRC_UNKNOWN &&
+                       uni_hal_rcc_clksrc_get(ctx->config.instance) == ctx->config.clock_source;
+            }
+        }
+    }
+    return uni_hal_rcc_clksrc_set(ctx->config.instance, ctx->config.clock_source);
 }
 
 static bool _uni_hal_spi_init_gpio(uni_hal_spi_context_t *ctx) {
@@ -586,13 +596,17 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx) {
         uni_hal_core_irq_resume(mask);
         return ready;
     }
+    if (!select_kernel_clock(ctx, index)) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
     if (old) {
         old->status.inited = false;
     }
     ctx->status.inited = false;
     g_uni_hal_spi_ctx[index] = ctx;
     uni_hal_core_irq_resume(mask);
-    bool const ready = _uni_hal_spi_init_rcc(ctx) && _uni_hal_spi_init_gpio(ctx) &&
+    bool const ready = uni_hal_rcc_clk_set(ctx->config.instance, true) && _uni_hal_spi_init_gpio(ctx) &&
                        (!rx || uni_hal_dma_init(rx)) && (!tx || uni_hal_dma_init(tx)) &&
                        _uni_hal_spi_init_spi(ctx) && _uni_hal_spi_init_irq(ctx);
     mask = uni_hal_core_irq_pause();
