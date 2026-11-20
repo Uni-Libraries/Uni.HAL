@@ -42,6 +42,8 @@ unsigned adc_peripheral_calls;
 #define uni_hal_gpio_pin_init model_gpio_init
 #define uni_hal_gpio_pin_is_inited model_gpio_is_inited
 #if !defined(UNI_HAL_TEST_ADC_REAL_RCC)
+#define uni_hal_rcc_clk_get model_clock_enabled
+#define uni_hal_rcc_clksrc_get model_get_clock_source
 #define uni_hal_rcc_clk_set model_clock
 #define uni_hal_rcc_clksrc_set model_clock_source
 #endif
@@ -57,11 +59,15 @@ static ADC_Common_TypeDef common3;
 #define ADC12_COMMON (&common)
 #define ADC3_COMMON (&common3)
 #include "dma/uni_hal_dma_stm32h7.c"
+#include <stm32h7xx_ll_adc.h>
 #else
 #undef ADC123_COMMON
 #define ADC123_COMMON (&common)
 #include "dma/uni_hal_dma_stm32l4.c"
 #include <stm32l4xx_ll_adc.h>
+
+#define LL_ADC_ClearFlag_ADRDY(adc) ((adc)->ISR &= ~ADC_ISR_ADRDY) // W1C
+#endif
 
 // Hardware ignores writing zero to ADEN when LL writes the ADSTART command.
 static void model_start_conversion(ADC_TypeDef *adc) {
@@ -70,9 +76,6 @@ static void model_start_conversion(ADC_TypeDef *adc) {
     adc->CR |= enabled;
 }
 #define LL_ADC_REG_StartConversion model_start_conversion
-
-#define LL_ADC_ClearFlag_ADRDY(adc) ((adc)->ISR &= ~ADC_ISR_ADRDY) // W1C
-#endif
 
 static bool model_dma_init(uni_hal_dma_context_t *dma);
 #define uni_hal_dma_init model_dma_init
@@ -94,6 +97,7 @@ bool adc_dma_init_succeeds;
 
 unsigned dma_init_calls;
 static uint32_t tick;
+static uni_hal_rcc_clksrc_e adc_source;
 unsigned adc_calibration_delay, adc_ready_delay;
 uint32_t adc_tick_step;
 
@@ -102,8 +106,12 @@ void reset_adc_model(void) {
     memset(dma_banks, 0, sizeof dma_banks);
     adc_dma_init_succeeds = false;
     memset(&common, 0, sizeof common);
+#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+    memset(&common3, 0, sizeof common3);
+#endif
     adc_peripheral_calls = 0;
     dma_init_calls = 0;
+    adc_source = UNI_HAL_RCC_CLKSRC_UNKNOWN;
     tick = 0;
     adc_tick_step = 1U;
     adc_calibration_delay = adc_ready_delay = 0U;
@@ -168,6 +176,15 @@ bool model_gpio_is_inited(const uni_hal_gpio_pin_context_t *pin) {
     return false;
 }
 
+bool model_clock_enabled(uni_hal_core_periph_e instance) {
+    return instance >= UNI_HAL_CORE_PERIPH_ADC_1 && instance <= UNI_HAL_CORE_PERIPH_ADC_3;
+}
+
+uni_hal_rcc_clksrc_e model_get_clock_source(uni_hal_core_periph_e instance) {
+    (void)instance;
+    return adc_source;
+}
+
 bool model_clock(uni_hal_core_periph_e instance, bool enable) {
     (void)instance;
     (void)enable;
@@ -177,7 +194,7 @@ bool model_clock(uni_hal_core_periph_e instance, bool enable) {
 
 bool model_clock_source(uni_hal_core_periph_e instance, uni_hal_rcc_clksrc_e source) {
     (void)instance;
-    (void)source;
+    adc_source = source;
     ++adc_peripheral_calls;
     return true;
 }

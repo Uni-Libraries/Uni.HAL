@@ -25,6 +25,7 @@
 #include "adc/uni_hal_adc_internal.h"
 #include "dma/uni_hal_dma_stm32h7_irq.h"
 #include "adc/uni_hal_adc_stm32_config.h"
+#include "adc/uni_hal_adc_stm32_clock.h"
 #include "rcc/uni_hal_rcc.h"
 #include "adc/uni_hal_adc_stm32_startup.h"
 
@@ -91,8 +92,6 @@ void ADC3_IRQHandler(void) {
 //
 // PRIVATE
 //
-
-static bool initializing_adc[3];
 
 static void _uni_hal_adc_stm32h7_cache_cal(uni_hal_adc_context_t *ctx) {
     ctx->state.cal.valid = false;
@@ -720,7 +719,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     unsigned const index = config->instance - UNI_HAL_CORE_PERIPH_ADC_1;
     ADC_TypeDef *adc = _uni_hal_adc_get_instance(config->instance);
     uint32_t mask = uni_hal_core_irq_pause();
-    if (ctx->state.initialized || initializing_adc[index]) {
+    if (ctx->state.initialized || starting_adc[index]) {
         bool const ready = uni_hal_adc_is_inited(ctx);
         uni_hal_core_irq_resume(mask);
         return ready;
@@ -729,12 +728,12 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         uni_hal_core_irq_resume(mask);
         return false;
     }
-    initializing_adc[index] = true;
+    starting_adc[index] = reserve_adc_clock(config, clock_source);
+    if (starting_adc[index] == ADC_CLOCK_FREE) {
+        goto failed_locked;
+    }
     uni_hal_core_irq_resume(mask);
 
-    if (!uni_hal_rcc_clk_set(config->instance, true) || LL_ADC_REG_IsConversionOngoing(adc)) {
-        goto failed;
-    }
     _uni_hal_adc_stm32h7_cache_cal(ctx);
 
     for (uint32_t rank = 0; rank < config->channels_count; ++rank) {
@@ -748,9 +747,6 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         }
     }
 
-    if (!uni_hal_rcc_clksrc_set(config->instance, clock_source)) {
-        goto failed;
-    }
     const uint32_t interrupt = _uni_hal_adc_get_interrupt(config->instance);
     NVIC_SetPriority(interrupt, UNI_HAL_ADC_INT_PRIO);
     NVIC_EnableIRQ(interrupt);
@@ -770,16 +766,17 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     }
     LL_ADC_REG_StartConversion(adc);
     ctx->state.initialized = true;
-    initializing_adc[index] = false;
+    starting_adc[index] = ADC_CLOCK_FREE;
     uni_hal_core_irq_resume(mask);
     return true;
 
 failed:
     mask = uni_hal_core_irq_pause();
+failed_locked:
     if (config->dma) {
         uni_hal_dma_stm32h7_release(config->dma);
     }
-    initializing_adc[index] = false;
+    starting_adc[index] = ADC_CLOCK_FREE;
     uni_hal_core_irq_resume(mask);
     return false;
 }

@@ -74,6 +74,7 @@ static void write_reg(volatile uint32_t *addr, uint32_t val) {
 #define SET_BIT(reg, bits) WRITE_REG(reg, (reg) | (bits))
 #define CLEAR_BIT(reg, bits) WRITE_REG(reg, (reg) & ~(bits))
 
+#define uni_hal_rcc_clk_get model_clock_enabled
 #define uni_hal_rcc_clk_set model_clock
 #define uni_hal_rcc_clksrc_set model_source
 #define uni_hal_gpio_pin_set model_nss
@@ -87,6 +88,11 @@ static void write_reg(volatile uint32_t *addr, uint32_t val) {
 
 static bool fail_adc_clock;
 static void (*adc_clock_hook)(void);
+bool model_clock_enabled(uni_hal_core_periph_e instance) {
+    // All three ADC register banks are accessible in this fixture.
+    return instance >= UNI_HAL_CORE_PERIPH_ADC_1 && instance <= UNI_HAL_CORE_PERIPH_ADC_3;
+}
+
 bool model_clock(uni_hal_core_periph_e instance, bool enable) {
     if (instance == UNI_HAL_CORE_PERIPH_ADC_1 && adc_clock_hook) {
         adc_clock_hook();

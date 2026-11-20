@@ -18,6 +18,7 @@
 // Uni.HAL
 #include "adc/uni_hal_adc.h"
 #include "adc/uni_hal_adc_stm32_config.h"
+#include "adc/uni_hal_adc_stm32_clock.h"
 #include "core/uni_hal_core.h"
 #include "dwt/uni_hal_dwt.h"
 #include "gpio/uni_hal_gpio.h"
@@ -571,10 +572,6 @@ static bool _uni_hal_adc_dma_route_valid(const uni_hal_adc_config_t *config) {
     return dma->channel == first_channel + (config->instance - UNI_HAL_CORE_PERIPH_ADC_1);
 }
 
-// An initializer may yield during calibration. Reserve this converter until its
-// configuration is complete, including for scans without DMA.
-static bool initializing_adc[3];
-
 static bool prepare_dma_channel(uni_hal_dma_context_t *dma) {
     if (!uni_hal_dma_init(dma)) {
         return false;
@@ -666,12 +663,9 @@ static bool _uni_hal_adc_trigger(uni_hal_adc_context_t *ctx) {
 // Functions
 //
 
-static bool initialize_converter(uni_hal_adc_context_t *ctx, uni_hal_rcc_clksrc_e clock_source) {
+static bool initialize_converter(uni_hal_adc_context_t *ctx) {
     const uni_hal_adc_config_t *config = &ctx->config;
     ADC_TypeDef *adc = _uni_hal_adc_get_instance(config->instance);
-    if (!uni_hal_rcc_clk_set(config->instance, true) || LL_ADC_REG_IsConversionOngoing(adc)) {
-        return false;
-    }
     for (uint32_t rank = 0; rank < config->channels_count; ++rank) {
         uni_hal_gpio_pin_context_t *pin = config->pins[rank];
         if (pin != nullptr && !uni_hal_gpio_pin_is_inited(pin)) {
@@ -681,9 +675,6 @@ static bool initialize_converter(uni_hal_adc_context_t *ctx, uni_hal_rcc_clksrc_
         }
     }
 
-    if (!uni_hal_rcc_clksrc_set(config->instance, clock_source)) {
-        return false;
-    }
     const uint32_t interrupt = _uni_hal_adc_get_interrupt(config->instance);
     NVIC_SetPriority(interrupt, UNI_HAL_ADC_INT_PRIO);
     NVIC_EnableIRQ(interrupt);
@@ -727,7 +718,7 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
     }
     unsigned const adc = config->instance - UNI_HAL_CORE_PERIPH_ADC_1;
     uint32_t mask = uni_hal_core_irq_pause();
-    if (ctx->state.initialized || initializing_adc[adc]) {
+    if (ctx->state.initialized || starting_adc[adc]) {
         bool const ready = uni_hal_adc_is_inited(ctx);
         uni_hal_core_irq_resume(mask);
         return ready;
@@ -736,12 +727,16 @@ bool uni_hal_adc_init(uni_hal_adc_context_t *ctx) {
         uni_hal_core_irq_resume(mask);
         return false;
     }
-    initializing_adc[adc] = true;
+    starting_adc[adc] = reserve_adc_clock(config, clock_source);
+    if (starting_adc[adc] == ADC_CLOCK_FREE) {
+        uni_hal_core_irq_resume(mask);
+        return false;
+    }
     uni_hal_core_irq_resume(mask);
 
-    bool const ready = initialize_converter(ctx, clock_source);
+    bool const ready = initialize_converter(ctx);
     mask = uni_hal_core_irq_pause();
-    initializing_adc[adc] = false;
+    starting_adc[adc] = ADC_CLOCK_FREE;
     uni_hal_core_irq_resume(mask);
     return ready;
 }

@@ -52,7 +52,10 @@ typedef struct {
     uni_hal_core_periph_e instance;
 
     /**
-     * ADC kernel clock source. On the STM32L4: SYSCLK, also when left at zero, or NONE.
+     * RCC kernel clock shared by all three STM32 ADCs. A converter using the asynchronous
+     * clock must request the same source as an asynchronous acquisition already in progress.
+     * A converter using the synchronous bus clock can start without changing that source.
+     * On STM32L4 the supported values are SYSCLK (also when left at zero) and NONE.
      */
     uni_hal_rcc_clksrc_e clock_source;
 

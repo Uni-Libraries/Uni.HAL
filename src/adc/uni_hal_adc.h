@@ -39,6 +39,8 @@ extern "C" {
  * the active hardware running. If a later setup step fails during first initialization, a DMA
  * context initialized by this call may remain initialized without a running transfer.
  * On STM32, a second context cannot start the same converter during setup or regular conversion.
+ * Converters sharing a common ADC register block must finish setup one at a time. A second
+ * converter may join a running acquisition after that setup completes.
  * On STM32L496, startup fails if the requested DMA channel already serves another transfer.
  * @param ctx pointer to the ADC context
  * @return true on success
