@@ -19,6 +19,7 @@
 #include "gpio/uni_hal_gpio.h"
 #include "pwr/uni_hal_pwr_stm32.h"
 #include "rcc/uni_hal_rcc.h"
+#include "rcc/uni_hal_rcc_rtc_stm32_internal.h"
 #include "rcc/uni_hal_rcc_stm32l4.h"
 #include "systick/uni_hal_systick.h"
 #include "systick/uni_hal_systick_stm32.h"
@@ -1262,24 +1263,8 @@ bool uni_hal_rcc_clksrc_set(uni_hal_core_periph_e target, uni_hal_rcc_clksrc_e s
                     result = true;
                     break;
             }
-            case UNI_HAL_CORE_PERIPH_RTC: {
-                uint32_t src = LL_RCC_RTC_CLKSOURCE_NONE;
-                if (source == UNI_HAL_RCC_CLKSRC_LSE) {
-                    src = LL_RCC_RTC_CLKSOURCE_LSE;
-                } else if (source == UNI_HAL_RCC_CLKSRC_LSI) {
-                    src = LL_RCC_RTC_CLKSOURCE_LSI;
-                } else if (source == UNI_HAL_RCC_CLKSRC_HSE_DIV_32) {
-                    src = LL_RCC_RTC_CLKSOURCE_HSE_DIV32;
-                } else {
-                    src = LL_RCC_RTC_CLKSOURCE_NONE;
-                }
-
-                uni_hal_pwr_stm_set_backup_access(true);
-                LL_RCC_SetRTCClockSource(src);
-                uni_hal_pwr_stm_set_backup_access(false);
-                result = true;
-                break;
-            }
+            case UNI_HAL_CORE_PERIPH_RTC:
+                return select_rtc_source(source);
             case UNI_HAL_CORE_PERIPH_ADC_1:
             case UNI_HAL_CORE_PERIPH_ADC_2:
             case UNI_HAL_CORE_PERIPH_ADC_3:
