@@ -14,6 +14,7 @@ extern "C" {
 #include <stddef.h>
 
 // uni_hal
+#include "uni_hal_target.h"
 #include "core/uni_hal_core.h"
 #include "dma/uni_hal_dma.h"
 #include "gpio/uni_hal_gpio.h"
@@ -85,7 +86,7 @@ typedef struct {
     uni_hal_spi_mode_e mode;
 
     /**
-     * SPI clock source. On STM32H743, SPI1/2/3 share one selection and SPI4/5
+     * SPI clock source. On STM32H743/H753, SPI1/2/3 share one selection and SPI4/5
      * share another. Initialization fails if a sibling is already using a different source.
      */
     uni_hal_rcc_clksrc_e clock_source;
@@ -226,7 +227,7 @@ typedef struct {
 //
 
 /**
- * Initialize SPI. On STM32H743 keep the context and its configuration alive while
+ * Initialize SPI. On STM32H743/H753 keep the context and its configuration alive while
  * registered. Another context can take over the same peripheral once it is idle.
  * @param ctx SPI context
  * @return true on success
@@ -241,7 +242,7 @@ bool uni_hal_spi_init(uni_hal_spi_context_t *ctx);
  */
 bool uni_hal_spi_is_inited(const uni_hal_spi_context_t *ctx);
 
-#if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_PC)
+#if defined(UNI_HAL_TARGET_STM32H7) || defined(UNI_HAL_TARGET_MCU_PC)
 /**
  * Check that SPI is busy
  * @param ctx SPI context
@@ -284,9 +285,9 @@ bool uni_hal_spi_receive(uni_hal_spi_context_t *ctx, uint8_t *data, uint32_t len
 bool uni_hal_spi_transmit(uni_hal_spi_context_t *ctx, const uint8_t *data, uint32_t len);
 
 
-#if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_PC)
+#if defined(UNI_HAL_TARGET_STM32H7) || defined(UNI_HAL_TARGET_MCU_PC)
 /**
- * Start a DMA transfer on STM32H743 SPI1..5. Length is 1..65535 bytes. Supply an RX
+ * Start a DMA transfer on STM32H743/H753 SPI1..5. Length is 1..65535 bytes. Supply an RX
  * buffer, a TX buffer, or both. Each direction needs its own configured DMA stream.
  * Buffers must be accessible to DMA1/2. Full duplex accepts disjoint ranges or one
  * shared in-place buffer. After a successful start, keep TX unchanged and leave RX
@@ -302,7 +303,7 @@ bool uni_hal_spi_transceive_async(uni_hal_spi_context_t *ctx, uint8_t *data_rx, 
 /**
  * Stop an asynchronous transfer that is still running, for instance a slave transfer whose
  * master never sent its clocks. The completion callback is suppressed on cancellation.
- * On STM32H743, false with is_busy() still true can mean a pending cancellation:
+ * On STM32H743/H753, false with is_busy() still true can mean a pending cancellation:
  * keep the buffers until is_busy() becomes false. A master first requests suspension
  * at a frame boundary. A second abort can truncate the frame if the bus is stalled.
  * A DMA beat already in progress must finish before buffer ownership returns.
