@@ -36,7 +36,7 @@ if(IS_DIRECTORY "${STAGED_VENDOR_DIR}/freertos_kernel" OR
     endif()
 endif()
 
-if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743" AND IS_DIRECTORY "${STAGED_VENDOR_DIR}/st_usb_device")
+if(TARGET st_stm32h7 AND IS_DIRECTORY "${STAGED_VENDOR_DIR}/st_usb_device")
     add_vendor_component(st_usb_device)
     # The middleware expects the board to provide usbd_conf.h. Use the
     # configuration shipped with the candidate and select its STM32 header.

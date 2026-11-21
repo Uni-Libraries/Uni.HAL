@@ -106,6 +106,7 @@ function Build-StagedComponents {
         PC = @('FreeRTOS-Kernel')
         ZYNQ7000 = @('FreeRTOS-Kernel')
         STM32H743 = @('CMSIS-Core', 'DFP-STM32H7', 'FreeRTOS-Kernel', 'USB-STM-Device')
+        STM32H753 = @('CMSIS-Core', 'DFP-STM32H7', 'FreeRTOS-Kernel', 'USB-STM-Device')
         STM32L496 = @('CMSIS-Core', 'DFP-STM32L4', 'FreeRTOS-Kernel', 'FreeRTOS-FAT')
     }
     foreach ($target in $targets.Keys) {
