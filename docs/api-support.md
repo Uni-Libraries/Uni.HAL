@@ -19,6 +19,10 @@ for other targets.
   instances and configurations with nonzero `channel_count` fail initialization.
   Channel configuration and input capture measurements
   use the L496 driver.
+- **STM32H753** also exposes `uni_hal_hash_start`, `uni_hal_hash_update` and
+  `uni_hal_hash_finish` for streaming MD5, SHA-1, SHA-224 and SHA-256. Each context
+  saves its own peripheral state so separate tasks can hash interleaved messages.
+  [STM32H743/753 reference manual, HASH context swapping](https://www.st.com/resource/en/reference_manual/dm00314099-stm32h742-stm32h743-753-and-stm32h750-value-line-advanced-arm-based-32bit-mcus-stmicroelectronics.pdf)
 - **STM32L496** provides blocking SPI, classic CAN, DMA channel configuration,
   TIM1 input capture (CH1–4) and update callbacks on TIM1, TIM2 and TIM15–17.
   Initialization rejects input capture outside TIM1 CH1–4.

@@ -13,6 +13,7 @@ extern "C" {
 #include "flash/uni_hal_flash.h"
 #include "gpio/uni_hal_gpio.h"
 #include "i2c/uni_hal_i2c.h"
+#include "hash/uni_hal_hash.h"
 #include "io/uni_hal_io.h"
 #include "io/uni_hal_io_stdio.h"
 #include "iwdg/uni_hal_iwdg.h"
