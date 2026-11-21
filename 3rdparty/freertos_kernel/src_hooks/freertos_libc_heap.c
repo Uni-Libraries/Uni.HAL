@@ -5,7 +5,7 @@
 
 #if defined(UNI_HAL_LIBC_HEAP_SIZE)
 static_assert(UNI_HAL_LIBC_HEAP_SIZE > 0);
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_STM32H753)
 __attribute__((section(".RAM_D1")))
 #endif
 alignas(max_align_t) static unsigned char libc_heap[UNI_HAL_LIBC_HEAP_SIZE];
