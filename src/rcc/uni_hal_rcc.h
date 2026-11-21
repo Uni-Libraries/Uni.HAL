@@ -13,6 +13,7 @@ extern "C" {
 #include <stdint.h>
 
 // uni_hal
+#include "uni_hal_target.h"
 #include "core/uni_hal_core.h"
 #include "rcc/uni_hal_rcc_enum.h"
 
@@ -22,7 +23,7 @@ extern "C" {
 
 #if defined(UNI_HAL_TARGET_MCU_STM32L496)
     #include "rcc/uni_hal_rcc_stm32l4.h"
-#elif defined(UNI_HAL_TARGET_MCU_STM32H743)
+#elif defined(UNI_HAL_TARGET_STM32H7)
     #include "rcc/uni_hal_rcc_stm32h7.h"
 #elif defined(UNI_HAL_TARGET_MCU_PC) || defined(UNI_HAL_TARGET_MCU_ZYNQ7000)
     // ZYNQ7000: clocks are configured by the PS7 initialization (ps7_init/FSBL)
@@ -45,7 +46,7 @@ uint8_t uni_hal_rcc_get_status_reg(void);
 bool uni_hal_rcc_get_status_reg_flag(uint8_t flag);
 
 /**
- * Called from NMI on an HSE clock security fault. On STM32L496 and STM32H743, inspect RCC status for the
+ * Called from NMI on an HSE clock security fault. On STM32L496 and STM32H743/H753, inspect RCC status for the
  * recovery result. A fault during clock initialization is recovered by the interrupted init.
  * The default implementation does nothing. An application defines its own to record the event
  * or to re-initialise what depends on exact clocks. It runs in NMI context: keep it short and
@@ -107,7 +108,7 @@ uni_hal_rcc_clksrc_e uni_hal_rcc_clksrc_get(uni_hal_core_periph_e target);
 
 
 /**
- * Set clock source for the peripheral. On STM32H743, deinitialize I2C1..3 before
+ * Set clock source for the peripheral. On STM32H743/H753, deinitialize I2C1..3 before
  * directly changing their shared clock so their programmed timings stay valid.
  * On STM32, selecting the RTC source returns false if the backup domain rejects the
  * change. This call preserves backup write access and the retained calendar.
