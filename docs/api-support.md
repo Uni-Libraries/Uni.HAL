@@ -9,6 +9,13 @@ for other targets.
 
 ## Driver modes
 
+- **STM32H753 CRYP** provides blocking AES-GCM and AES-CCM through
+  `uni_hal_cryp_encrypt` and `uni_hal_cryp_decrypt`. A concurrent operation
+  returns `UNI_HAL_CRYP_BUSY` before touching the output. Non-96-bit GCM IVs
+  and partial final payload blocks on silicon before revision B return
+  `UNI_HAL_CRYP_UNSUPPORTED`. The `cryp_h753_kat` firmware exercises both
+  algorithms on a board with known tags and unaligned in-place payloads.
+
 - **STM32H743 and STM32H753** provide blocking SPI and asynchronous SPI with DMA, classic CAN
   and optional CAN FD, sector and bank Flash operations, and the CM7 cache API.
   I²C1–4 support 7-bit master and memory transfers by polling. Concurrent calls
