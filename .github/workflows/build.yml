@@ -81,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mcu: [STM32H743, STM32L496]
+        mcu: [STM32H743, STM32H753, STM32L496]
         can_fd: ["OFF"]
         static_allocation: ["ON"]
         tick_hz: [1000]
@@ -140,17 +140,17 @@ jobs:
     - name: Run the STM32 firmware regressions in QEMU
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --output-on-failure --no-tests=error
 
-    - name: Build the documented STM32H743 application
-      if: matrix.mcu == 'STM32H743' && matrix.can_fd == 'OFF'
+    - name: Build the documented STM32H7 application
+      if: startsWith(matrix.mcu, 'STM32H7') && matrix.can_fd == 'OFF'
       shell: bash
       run: |
-        app="$RUNNER_TEMP/h743-application"
+        app="$RUNNER_TEMP/stm32h7-application"
         cp -R src_tests/cmake_consumer "$app"
         ln -s "$PWD" "$app/Uni.HAL"
         cd "$app"
         cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_TOOLCHAIN_FILE=Uni.HAL/cmake/toolchain.cmake \
-          -DUNI_HAL_TARGET_MCU=STM32H743 -DUNI_HAL_HSE_VALUE=8000000
+          -DUNI_HAL_TARGET_MCU=${{ matrix.mcu }} -DUNI_HAL_HSE_VALUE=8000000
         cmake --build build --config Release
         arm-none-eabi-readelf -h build/firmware.elf | grep -E 'Machine:[[:space:]]+ARM'
         test -s build/firmware.bin
@@ -195,7 +195,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mcu: [STM32H743, STM32L496]
+        mcu: [STM32H743, STM32H753, STM32L496]
         build_type: [Release]
 
     steps:
