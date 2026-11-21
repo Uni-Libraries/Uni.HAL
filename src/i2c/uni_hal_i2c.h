@@ -78,7 +78,7 @@ typedef struct uni_hal_i2c_config_t {
 
     /**
      * I2C kernel clock source. On STM32L496, select PCLK1, SYSCLK or HSI.
-     * On STM32H743, I2C1..3 share PCLK1/PLL3R/HSI/CSI and I2C4 uses PCLK4/PLL3R/HSI/CSI.
+     * On STM32H743/H753, I2C1..3 share PCLK1/PLL3R/HSI/CSI and I2C4 uses PCLK4/PLL3R/HSI/CSI.
      * A conflicting source fails initialization while a sibling uses the shared clock.
      * UNKNOWN preserves the existing selection (PCLK1 after L496 RCC initialization).
      */
@@ -199,7 +199,7 @@ bool uni_hal_i2c_is_inited(uni_hal_i2c_context_t *ctx);
 
 /**
  * Deinitialize I2C interface from task or startup context.
- * On STM32L496 and STM32H743 this also resets a valid peripheral before its first initialization.
+ * On STM32L496 and STM32H743/H753 this also resets a valid peripheral before its first initialization.
  * @param ctx pointer to the interface context
  * @return true on success
  */
