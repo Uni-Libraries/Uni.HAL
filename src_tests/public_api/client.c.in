@@ -3,7 +3,7 @@
 #include "io/uni_hal_io_tunnel.h"
 #include "segger/uni_hal_segger_rtt.h"
 #include "segger/uni_hal_segger_rtt_stdio.h"
-#if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_STM32L496)
+#if defined(STM32H7) || defined(UNI_HAL_TARGET_MCU_STM32L496)
 #include "pwr/uni_hal_pwr_stm32.h"
 #endif
 #if defined(UNI_HAL_TARGET_MCU_STM32H753)

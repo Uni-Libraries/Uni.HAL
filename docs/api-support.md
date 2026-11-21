@@ -9,7 +9,7 @@ for other targets.
 
 ## Driver modes
 
-- **STM32H743** provides blocking SPI and asynchronous SPI with DMA, classic CAN
+- **STM32H743 and STM32H753** provide blocking SPI and asynchronous SPI with DMA, classic CAN
   and optional CAN FD, sector and bank Flash operations, and the CM7 cache API.
   I²C1–4 support 7-bit master and memory transfers by polling. Concurrent calls
   on one I²C instance each use a single timeout for waiting for the bus and
@@ -69,7 +69,7 @@ To enable that job on pushes to `main`, set the repository variable
 compiler on its path. Set `UNI_HAL_ZYNQ7000_BSP_DIR` in the runner environment
 to the exported BSP directory.
 
-| Prefix | Function suffixes | STM32H743 | STM32L496 | PC | ZYNQ7000 |
+| Prefix | Function suffixes | STM32H743 / STM32H753 | STM32L496 | PC | ZYNQ7000 |
 |---|---|:---:|:---:|:---:|:---:|
 | `adc` | `get_channel_raw, get_rank_raw, has_channel, is_inited` | + | + | + | + |
 | `adc` | `get_channel_mv, init` | + | + | + | - |
