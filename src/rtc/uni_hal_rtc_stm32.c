@@ -5,13 +5,15 @@
 // stdlib
 #include <stddef.h>
 
+#include "uni_hal_target.h"
+
 // ST
 #if defined(UNI_HAL_TARGET_MCU_STM32L496)
     #include <stm32l4xx_ll_bus.h>
     #include <stm32l4xx_ll_pwr.h>
     #include <stm32l4xx_ll_rcc.h>
     #include <stm32l4xx_ll_rtc.h>
-#elif defined(UNI_HAL_TARGET_MCU_STM32H743)
+#elif defined(UNI_HAL_TARGET_STM32H7)
     #include <stm32h7xx_ll_bus.h>
     #include <stm32h7xx_ll_pwr.h>
     #include <stm32h7xx_ll_rcc.h>
@@ -225,7 +227,7 @@ static bool read_consistent_snapshot(rtc_snapshot_t *sample) {
         return false;
     }
     // In bypass mode registers can change independently. A shadow lock can also be
-    // missed at an update (STM32H743 ES0392). Compare two complete calendar reads.
+    // missed at an update (STM32H743/H753 ES0392). Compare two complete calendar reads.
     rtc_snapshot_t previous = read_snapshot();
     for (unsigned retry = 0U; retry < 3U; ++retry) {
         *sample = read_snapshot();
