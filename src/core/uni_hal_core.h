@@ -13,8 +13,9 @@ extern "C" {
 #include <stdint.h>
 
 // uni_hal
+#include "uni_hal_target.h"
 #include "core/uni_hal_core_enum.h"
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_STM32H7)
     #include "core/uni_hal_core_cm7.h"
     #include "core/uni_hal_core_stm32h7.h"
 #endif
