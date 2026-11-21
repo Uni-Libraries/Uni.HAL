@@ -70,7 +70,10 @@ static bool transfer(uni_hal_hash_context_t *ctx, uint8_t *digest) {
     // Limit the masked interval to a single FIFO transfer. No task or interrupt
     // can preempt between programming the peripheral and saving this context.
     uint32_t irq_mask = uni_hal_core_irq_pause();
-    __HAL_RCC_HASH_CLK_ENABLE();
+    bool clock_was_enabled = __HAL_RCC_HASH_IS_CLK_ENABLED();
+    if (!clock_was_enabled) {
+        __HAL_RCC_HASH_CLK_ENABLE();
+    }
     HASH->IMR = 0;
     HASH->STR = 0;
     HASH->CR = ctx->control;
@@ -108,7 +111,9 @@ static bool transfer(uni_hal_hash_context_t *ctx, uint8_t *digest) {
     // Reset also clears intermediate key-derived data and recovers a timed-out unit.
     __HAL_RCC_HASH_FORCE_RESET();
     __HAL_RCC_HASH_RELEASE_RESET();
-    __HAL_RCC_HASH_CLK_DISABLE();
+    if (!clock_was_enabled) {
+        __HAL_RCC_HASH_CLK_DISABLE();
+    }
     uni_hal_core_irq_resume(irq_mask);
     ctx->pending_len = 0;
     if (!ready || digest != nullptr) {
