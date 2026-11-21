@@ -5,10 +5,12 @@
 // stdlib
 #include <stddef.h>
 
+#include "uni_hal_target.h"
+
 // ST
 #if defined(UNI_HAL_TARGET_MCU_STM32L496)
     #include <stm32l4xx_ll_pwr.h>
-#elif defined(UNI_HAL_TARGET_MCU_STM32H743  )
+#elif defined(UNI_HAL_TARGET_STM32H7)
     #include <stm32h7xx_ll_pwr.h>
 #else
     #error "unknown MCU"
