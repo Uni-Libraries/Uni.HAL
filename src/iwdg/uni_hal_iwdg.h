@@ -26,7 +26,7 @@ extern "C" {
  */
 typedef struct {
     /**
-     * Watchdog instance. STM32L496 and STM32H743 support UNI_HAL_CORE_PERIPH_IWDG_1.
+     * Watchdog instance. STM32L496 and STM32H743/H753 support UNI_HAL_CORE_PERIPH_IWDG_1.
      */
     uni_hal_core_periph_e instance;
     
@@ -62,7 +62,7 @@ typedef struct {
 bool uni_hal_iwdg_init(uni_hal_iwdg_context_t *ctx);
 
 /**
- * Deinitialize IWDG. On STM32L496 and STM32H743 a running IWDG can only
+ * Deinitialize IWDG. On STM32L496 and STM32H743/H753 a running IWDG can only
  * be stopped by a reset. This call returns false on those targets and the
  * application must continue reloading the watchdog.
  * @param ctx pointer to the IWDG context

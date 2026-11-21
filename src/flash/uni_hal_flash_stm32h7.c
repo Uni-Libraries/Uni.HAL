@@ -134,7 +134,7 @@ void FLASH_IRQHandler(void) {
 
 static uint32_t _uni_hal_flash_vos_to_index(uint32_t vos_value) {
     if (vos_value == LL_PWR_REGU_VOLTAGE_SCALE0) {
-        // H743 encodes VOS0 as VOS1 plus the SYSCFG overdrive enable bit.
+        // H743/H753 encodes VOS0 as VOS1 plus the SYSCFG overdrive enable bit.
         return (SYSCFG->PWRCR & SYSCFG_PWRCR_ODEN) != 0U ? 0U : 1U;
     }
     if (vos_value == LL_PWR_REGU_VOLTAGE_SCALE2) {

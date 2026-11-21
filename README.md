@@ -5,6 +5,7 @@ A hardware abstraction layer in C23 for STM32 microcontrollers, with a PC target
 | Target | `UNI_HAL_TARGET_MCU` | Notes |
 |---|---|---|
 | STM32H743 | `STM32H743` | Cortex-M7 |
+| STM32H753 | `STM32H753` | Cortex-M7, ST HAL CRYP and HASH drivers |
 | STM32L496 | `STM32L496` | Cortex-M4F |
 | Zynq-7000 | `ZYNQ7000` | Cortex-A9 #0 of the PS, on the Vitis standalone BSP of the board (`UNI_HAL_ZYNQ7000_BSP_DIR`) |
 | Host | `PC` | stand-ins for the drivers, used by the unit tests |
@@ -34,6 +35,11 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   -DUNI_HAL_TARGET_MCU=STM32H743 -DUNI_HAL_HSE_VALUE=8000000
 cmake --build build --config Release
 ```
+
+For STM32H753, use `-DUNI_HAL_TARGET_MCU=STM32H753` and set
+`UNI_HAL_HSE_VALUE` to the board's external clock frequency in Hz. The default
+linker script is shared with the STM32H743ZI because the flash banks and SRAM
+regions have the same layout. [STM32H753xI datasheet, Table 2](https://www.st.com/resource/en/datasheet/stm32h753zi.pdf)
 
 The build produces `firmware.elf` and `firmware.bin`. The dependencies Uni.Common
 and nanoprintf are downloaded by CPM during the configuration.
@@ -80,7 +86,7 @@ library and are released with `free`. FreeRTOS allocations use `pvPortMalloc` an
 `vPortFree`. When upgrading firmware that mixed these APIs, update each deallocation to
 match the allocator that supplied the block. Call these APIs at startup or from task context.
 On STM32, size the C library pool with `UNI_HAL_LIBC_HEAP_SIZE` independently of the RTOS heap. The pool
-uses ordinary RAM on L496 and section `.RAM_D1` on H743. An application supplying
+uses ordinary RAM on L496 and section `.RAM_D1` on H743 and H753. An application supplying
 its own `_sbrk` (or picolibc `sbrk`) controls its own pool. On Zynq, the BSP uses
 the linker script's `_HEAP_SIZE` (64 KiB by default).
 
@@ -144,7 +150,7 @@ on the registers; neither uses the ST HAL. Set `bitrate` in the configuration: t
 computed from the CAN clock and the initialisation fails when the clock cannot give the rate
 exactly. Acceptance filters are written in the bxCAN register layout on both families.
 The receive interrupt delivers accepted frames to a FreeRTOS queue.
-On STM32H743, stopping and restarting FDCAN preserves pending TX requests.
+On STM32H743 and STM32H753, stopping and restarting FDCAN preserves pending TX requests.
 Use `uni_hal_can_transmit_abort()` to request cancellation.
 
 CAN FD exists on the STM32H7 only. Build with `-DUNI_HAL_CAN_USE_FD=ON`, set `fd` in the
@@ -168,7 +174,7 @@ unavailable data, and `uni_hal_dma_stm32l4_has_transfer_error(dma)` reports the 
 Discard the old buffer contents, correct the transfer setup and reload its length before
 enabling the channel again. Starting the new transfer clears the fault indication.
 
-On STM32H743 a transfer or direct-mode error stops the ADC DMA stream. The ADC readiness query
+On STM32H743 and STM32H753 a transfer or direct-mode error stops the ADC DMA stream. The ADC readiness query
 then returns false and its getters report unavailable data. Call `uni_hal_dma_enable(dma, false)`
 with the original descriptor to release the stream. Explicitly stopping the capture also makes
 the old ADC buffer unavailable, including after another peripheral takes over the stream.

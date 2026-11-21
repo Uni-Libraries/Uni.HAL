@@ -343,7 +343,7 @@ typedef struct {
 
     /**
      * Last error since the previous snapshot, UNI_HAL_CAN_BUS_ERROR_NONE when there was none.
-     * On STM32H743 this includes the switched CAN FD data phase. When one register read
+     * On STM32H743/H753 this includes the switched CAN FD data phase. When one register read
      * reports new errors in both phases, the nominal-rate code takes precedence.
      */
     uni_hal_can_bus_error_e last_error;

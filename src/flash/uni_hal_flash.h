@@ -38,14 +38,14 @@ typedef enum {
 // Functions
 //
 
-/** Initialize the STM32H743 sector-erase IRQ. Repeated calls are safe.
+/** Initialize the STM32H743/H753 sector-erase IRQ. Repeated calls are safe.
  * Set an NVIC priority grouping compatible with FreeRTOS before calling this function.
  * Before FreeRTOS starts, initialization and erase polling use no kernel objects.
  * Task-mode erases allocate their completion semaphore on first use if necessary.
  */
 void uni_hal_flash_init(void);
 
-/** Configure STM32H743 Flash timing for the supplied AXI clock in Hz.
+/** Configure STM32H743/H753 Flash timing for the supplied AXI clock in Hz.
  * Pass zero to derive it from the active system clock, D1 core divider and AHB divider.
  */
 bool uni_hal_flash_configure_latency_auto(uint32_t axi_clock_hz);
@@ -55,7 +55,7 @@ size_t uni_hal_flash_get_size(void);
 size_t uni_hal_flash_read(size_t addr, size_t size, uint8_t *dst);
 
 /**
- * On STM32H743, call mutation APIs from thread mode with interrupts enabled.
+ * On STM32H743/H753, call mutation APIs from thread mode with interrupts enabled.
  * Writes accept byte-aligned source buffers. The Flash address and size must be multiples of 32 bytes.
  * A competing write, erase or bank swap fails immediately (zero bytes or false).
  */
@@ -63,11 +63,11 @@ size_t uni_hal_flash_write(size_t addr, size_t size, uint8_t *src);
 
 bool uni_hal_flash_erase(size_t addr, size_t size);
 
-/** On H743 the whole bank is reserved until completion or the first failing sector. */
+/** On H743/H753 the whole bank is reserved until completion or the first failing sector. */
 bool uni_hal_flash_erase_bank(uni_hal_flash_bank_e);
 
 /**
- * On H743 initialize Flash before erasing a sector or bank. Keep the Flash IRQ
+ * On H743/H753 initialize Flash before erasing a sector or bank. Keep the Flash IRQ
  * and millisecond tick running. A sector time-out returns false. The controller
  * may still be erasing: other mutations are rejected until its final IRQ, which
  * also invalidates the affected cache entries. No other call is needed for cleanup.
