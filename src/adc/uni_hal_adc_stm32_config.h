@@ -1,9 +1,10 @@
 #pragma once
 
+#include "uni_hal_target.h"
 #include "adc/uni_hal_adc.h"
 
 static inline bool uni_hal_adc_stm32_channel_valid(uni_hal_core_periph_e instance, uint32_t channel) {
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_STM32H7)
     return channel < UNI_HAL_ADC_STM32H7_CHANNEL_REFINT ||
            (instance == UNI_HAL_CORE_PERIPH_ADC_3 && channel <= UNI_HAL_ADC_STM32H7_CHANNEL_VBAT);
 #elif defined(UNI_HAL_TARGET_MCU_STM32L496)

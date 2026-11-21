@@ -14,11 +14,12 @@ extern "C" {
 #include <stdint.h>
 
 // uni_hal
+#include "uni_hal_target.h"
 #include "adc/uni_hal_adc_typedef.h"
 #include "core/uni_hal_core_enum.h"
 #include "dma/uni_hal_dma.h"
 #include "gpio/uni_hal_gpio.h"
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_STM32H7)
     #include "adc/uni_hal_adc_stm32h7.h"
 #elif defined(UNI_HAL_TARGET_MCU_STM32L496)
     #include "adc/uni_hal_adc_stm32l4.h"

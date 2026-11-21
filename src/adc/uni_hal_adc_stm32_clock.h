@@ -1,8 +1,9 @@
 #pragma once
 
+#include "uni_hal_target.h"
 #include "adc/uni_hal_adc.h"
 #include "rcc/uni_hal_rcc.h"
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_STM32H7)
 #include <stm32h7xx_ll_adc.h>
 #else
 #include <stm32l4xx_ll_adc.h>
@@ -18,7 +19,7 @@ typedef enum {
 // the converter's start bits and its common clock register identify active kernel users.
 static adc_clock_use_t starting_adc[3];
 
-// Called with interrupts masked. Each family has one RCC ADCSEL, including H743 ADC3
+// Called with interrupts masked. Each family has one RCC ADCSEL, including H743/H753 ADC3
 // which has a separate bus gate and a separate common ADC clock divider.
 static adc_clock_use_t reserve_adc_clock(const uni_hal_adc_config_t *config, uni_hal_rcc_clksrc_e source) {
     ADC_TypeDef *const converters[] = {ADC1, ADC2, ADC3};

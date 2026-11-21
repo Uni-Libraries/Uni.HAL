@@ -6,9 +6,10 @@
 #include <uni_common.h>
 
 // Uni.HAL
+#include "uni_hal_target.h"
 #include "adc/uni_hal_adc.h"
 #include "adc/uni_hal_adc_internal.h"
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_STM32H7)
 #include "dma/uni_hal_dma_stm32h7_irq.h"
 #endif
 
@@ -26,7 +27,7 @@ bool uni_hal_adc_is_inited(const uni_hal_adc_context_t *ctx) {
     if (ctx->config.dma && uni_hal_dma_stm32l4_has_transfer_error(ctx->config.dma)) {
         return false;
     }
-#elif defined(UNI_HAL_TARGET_MCU_STM32H743)
+#elif defined(UNI_HAL_TARGET_STM32H7)
     if (ctx->config.dma) {
         return uni_hal_dma_stm32h7_circular_active(ctx->config.dma, ctx);
     }
