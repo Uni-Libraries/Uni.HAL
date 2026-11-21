@@ -8,6 +8,7 @@
 #include <uni_common.h>
 
 // uni_hal
+#include "uni_hal_target.h"
 #include "tim/uni_hal_tim.h"
 
 
@@ -16,7 +17,7 @@
 // IRQ Handlers
 //
 
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_STM32H7)
 UNI_COMMON_COMPILER_WEAK void TIM2_IRQHandler(void){
     UNI_HAL_OS_ISR_EXIT(uni_hal_tim_period_elapsed(UNI_HAL_CORE_PERIPH_TIM_2));
 }
