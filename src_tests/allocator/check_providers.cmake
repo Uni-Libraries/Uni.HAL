@@ -1,7 +1,7 @@
 if(MCU MATCHES "^STM32")
     file(SIZE "${BIN_FILE}" image_size)
     if((MCU STREQUAL "STM32L496" AND image_size GREATER 1048576) OR
-       (MCU STREQUAL "STM32H743" AND image_size GREATER 2097152))
+       (MCU MATCHES "^STM32H7" AND image_size GREATER 2097152))
         message(FATAL_ERROR "${BIN_FILE} (${image_size} bytes) exceeds the target flash")
     endif()
 endif()
