@@ -41,6 +41,7 @@ target_sources(st_stm32h7 PRIVATE
 
 if(UNI_HAL_TARGET_MCU STREQUAL "STM32H753")
     target_sources(st_stm32h7 PRIVATE
+        src_hal/stm32h7xx_hal_dma.c
         src_hal/stm32h7xx_hal_cryp.c
         src_hal/stm32h7xx_hal_cryp_ex.c
         src_hal/stm32h7xx_hal_hash.c

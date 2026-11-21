@@ -6,6 +6,9 @@
 #if defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_STM32L496)
 #include "pwr/uni_hal_pwr_stm32.h"
 #endif
+#if defined(UNI_HAL_TARGET_MCU_STM32H753)
+#include "stm32h7xx_hal.h"
+#endif
 #if defined(UNI_HAL_TARGET_MCU_STM32L496)
 #include "pwr/uni_hal_pwr_stm32l4.h"
 #endif
@@ -26,5 +29,10 @@ static api_function_t volatile reference;
 #define LINK_API(fn) reference = (api_function_t)(fn)
 
 int main(void) {
-@references@    return reference == NULL;
+@references@
+#if defined(UNI_HAL_TARGET_MCU_STM32H753)
+    LINK_API(HAL_CRYP_Encrypt_DMA);
+    LINK_API(HAL_HASHEx_SHA256_Start_DMA);
+#endif
+    return reference == NULL;
 }
