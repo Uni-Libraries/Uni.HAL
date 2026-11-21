@@ -1,6 +1,7 @@
+#include "uni_hal_target.h"
 #include "systick/uni_hal_systick.h"
 
-#if defined(UNI_HAL_TARGET_MCU_STM32L496) || defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_MCU_STM32L496) || defined(UNI_HAL_TARGET_STM32H7)
 
 #include <cmsis_gcc.h>
 

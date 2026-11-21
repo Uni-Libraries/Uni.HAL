@@ -1,7 +1,7 @@
 #pragma once
 
 #include "systick/uni_hal_systick.h"
-#if defined(STM32H743xx)
+#if defined(STM32H743xx) || defined(STM32H753xx)
 #include <stm32h7xx.h>
 #else
 #include <stm32l4xx.h>
