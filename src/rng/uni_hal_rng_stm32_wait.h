@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(STM32H743xx)
+#if defined(STM32H743xx) || defined(STM32H753xx)
 #include <stm32h7xx_ll_rcc.h>
 #include <stm32h7xx_ll_rng.h>
 #else
