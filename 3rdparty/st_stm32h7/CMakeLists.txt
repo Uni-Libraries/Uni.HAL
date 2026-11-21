@@ -48,8 +48,9 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32H753")
     )
 endif()
 
+string(TOLOWER "${UNI_HAL_TARGET_MCU}" device)
 target_sources(st_stm32h7 INTERFACE
-    "src_device/startup_stm32h743xx.s"
+    "src_device/startup_${device}xx.s"
 )
 
 
@@ -147,4 +148,5 @@ endif()
 # Linker
 #
 
+# STM32H743ZI and STM32H753xI share this 2 MiB flash and SRAM layout.
 set_property(GLOBAL PROPERTY UNI_HAL_LINKER_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src_linker/stm32_h743_zit.ld")

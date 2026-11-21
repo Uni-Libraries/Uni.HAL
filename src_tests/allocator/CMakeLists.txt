@@ -117,7 +117,17 @@ if(UNI_HAL_TARGET_MCU STREQUAL "STM32H743")
     target_sources(i2c_h7_recovery_link PRIVATE ../i2c_h7/link_recover.c)
 endif()
 
-if(UNI_HAL_TEST_STM32_QEMU)
+if(UNI_HAL_TEST_STM32_QEMU AND UNI_HAL_TARGET_MCU STREQUAL "STM32H753")
+    add_executable(h753_vectors_qemu ../arm/h753_vectors.c)
+    target_compile_features(h753_vectors_qemu PRIVATE c_std_23)
+    target_link_libraries(h753_vectors_qemu PRIVATE st_stm32h7)
+    uni_hal_set_linker_file(h753_vectors_qemu "${CMAKE_CURRENT_SOURCE_DIR}/../adc/mps2.ld")
+    target_link_options(h753_vectors_qemu PRIVATE "LINKER:--defsym,_estack=_stack_top")
+    add_test(NAME stm32h753_irq_vectors COMMAND "${QEMU_SYSTEM_ARM}" -M mps2-an500
+        -nographic -monitor none -serial none -semihosting-config enable=on,target=native
+        -kernel $<TARGET_FILE:h753_vectors_qemu>)
+    set_tests_properties(stm32h753_irq_vectors PROPERTIES TIMEOUT 10)
+elseif(UNI_HAL_TEST_STM32_QEMU)
     add_subdirectory(../mco mco)
     add_subdirectory(../gpio gpio)
     add_subdirectory(../dwt_stm32 dwt_stm32)
