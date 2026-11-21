@@ -13,6 +13,7 @@ extern "C" {
 #include <stdint.h>
 
 // uni_hal
+#include "uni_hal_target.h"
 #include "core/uni_hal_core.h"
 
 
@@ -88,7 +89,7 @@ typedef struct uni_hal_crc_context_t {
 #else
     } pc;
 #endif
-#elif defined(UNI_HAL_TARGET_MCU_STM32H743) || defined(UNI_HAL_TARGET_MCU_STM32L496)
+#elif defined(UNI_HAL_TARGET_STM32H7) || defined(UNI_HAL_TARGET_MCU_STM32L496)
     /** Private configuration and remainder saved between hardware transactions. */
     struct {
         uint32_t length;

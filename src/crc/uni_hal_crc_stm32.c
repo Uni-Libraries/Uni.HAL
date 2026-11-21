@@ -1,7 +1,9 @@
+#include "uni_hal_target.h"
+
 #include <string.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#if defined(UNI_HAL_TARGET_MCU_STM32H743)
+#if defined(UNI_HAL_TARGET_STM32H7)
 #include <stm32h7xx_ll_crc.h>
 #else
 #include <stm32l4xx_ll_crc.h>
