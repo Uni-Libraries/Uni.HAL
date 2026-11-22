@@ -72,14 +72,7 @@ function(uni_hal_add_test test_path)
         target_compile_definitions(uni_hal_test_${test_name} PRIVATE _CRT_SECURE_NO_WARNINGS)
     endif()
 
-    #language standard
-    if(MSVC)
-        set_target_properties(uni_hal_test_${test_name} PROPERTIES C_STANDARD 17)
-    else()
-        set_target_properties(uni_hal_test_${test_name} PROPERTIES C_STANDARD 23)
-    endif()
-    set_target_properties(uni_hal_test_${test_name} PROPERTIES C_STANDARD_REQUIRED ON)
-
+    # The C23 requirement is inherited from uni.hal.
     set_target_properties(uni_hal_test_${test_name} PROPERTIES CXX_STANDARD 23)
     set_target_properties(uni_hal_test_${test_name} PROPERTIES CXX_STANDARD_REQUIRED ON)
 

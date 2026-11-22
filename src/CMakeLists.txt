@@ -29,12 +29,8 @@ target_sources(uni.hal INTERFACE ${src_interface})
 # Properties
 #
 
-#language standard)
-if(MSVC)
-    target_compile_features(uni.hal PUBLIC c_std_17)
-else()
-    target_compile_features(uni.hal PUBLIC c_std_23)
-endif()
+# language standard
+target_compile_features(uni.hal PUBLIC c_std_23)
 
 
 #

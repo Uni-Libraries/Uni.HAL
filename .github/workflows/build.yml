@@ -15,6 +15,9 @@ jobs:
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
+          - os: windows-latest
+            c_compiler: clang-cl
+            cpp_compiler: clang-cl
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
@@ -51,6 +54,18 @@ jobs:
         Invoke-WebRequest -Uri 'https://npcap.com/dist/npcap-sdk-1.15.zip' -OutFile 'npcap-sdk.zip'
         Expand-Archive -Path '.\npcap-sdk.zip' -DestinationPath 'C:\npcap-sdk'
 
+    - name: Set up the MSVC tools and Windows SDK
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+    - name: Use the clang-cl bundled with Visual Studio
+      if: matrix.c_compiler == 'clang-cl'
+      shell: pwsh
+      run: |
+        # Match the MSVC standard library rather than using the standalone LLVM on PATH.
+        $clangBin = Join-Path $env:VCINSTALLDIR 'Tools\Llvm\x64\bin'
+        & (Join-Path $clangBin 'clang-cl.exe') --version
+        $clangBin >> $env:GITHUB_PATH
 
     - name: Set reusable strings
       id: strings
@@ -61,6 +76,7 @@ jobs:
     - name: Configure CMake
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        ${{ runner.os == 'Windows' && '-G Ninja' || '' }}
         -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/cmake/toolchain.cmake
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
